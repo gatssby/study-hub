@@ -1,0 +1,27 @@
+# /etc/systemd/system/anki-vnext-api.service
+# Anki GPT API v2. Single process, single worker: it is the only long-lived owner
+# of the Service Collection. Listens on loopback only (see anki_api_v2/__main__.py).
+
+[Unit]
+Description=Anki GPT API v2 (owner of the Service Collection)
+After=network-online.target anki-vnext-sync.service
+Wants=network-online.target anki-vnext-sync.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/anki-vnext/api/src
+EnvironmentFile=/home/ubuntu/anki-vnext/api/api.env
+ExecStart=/home/ubuntu/anki-vnext/api/.venv/bin/python -m anki_api_v2
+# Exit 2 = configuration error. Restarting cannot fix it, so do not loop.
+RestartPreventExitStatus=2
+Restart=on-failure
+RestartSec=3
+# Lets the collection owner thread close the collection on SIGTERM.
+TimeoutStopSec=45
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
