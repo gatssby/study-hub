@@ -24,7 +24,7 @@ ChatGPT Plugin -> HTTPS MCP server -> Anki GPT API v2
 
 That architecture conflicts with the explicit Stage 7 decisions not to publish MCP and not to build `Plugin -> MCP -> API`.
 
-The older direct HTTP mechanism, Custom GPT Actions with an OpenAPI schema, still exists during the retirement window, but Custom GPTs are scheduled to retire on 2026-12-11. OpenAI states that custom actions do not transfer through the migration workflow and that rebuilding them may require a custom MCP server. Building the requested direct Action now would therefore create a short-lived integration that must be replaced before or at retirement.
+The older direct HTTP mechanism, Custom GPT Actions with an OpenAPI schema, still exists during the retirement window, but OpenAI documents a standard Custom GPT retirement date of 2026-12-11 across ChatGPT plans, subject to the account/workspace notice that applies to the GPT's creator. Only affected Enterprise workspaces with a qualified approved deferral are documented with the later 2027-02-11 date. OpenAI states that custom actions do not transfer through the migration workflow and that rebuilding them may require a custom MCP server. Building the requested direct Action now would therefore create a short-lived integration that must be replaced before or at retirement.
 
 Stage 7 must stop for an architectural decision before implementation, DNS, nginx, TLS, authentication changes, or the authorized production write.
 
@@ -331,8 +331,8 @@ It supports direct HTTPS API calls and could technically call Anki GPT API v2 wi
 
 OpenAI currently states:
 
-- Custom GPTs are scheduled to retire on 2026-12-11;
-- affected Enterprise workspaces with an approved deferral may retire on 2027-02-11;
+- the standard scheduled retirement across ChatGPT plans is 2026-12-11, subject to the account/workspace notice that applies to the GPT's creator;
+- only affected Enterprise workspaces with a qualified approved deferral may retire on 2027-02-11;
 - Custom GPT instructions can migrate to a Plugin skill;
 - connected apps can migrate as apps;
 - custom actions do not transfer automatically;
