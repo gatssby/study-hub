@@ -37,3 +37,22 @@ def test_deploy_script_uses_localhost_mcp_smoke_check_without_printing_token():
     assert "127.0.0.1:8771/mcp" in script
     assert "streamable_http" in smoke
     assert "ANKI_API_TOKEN=" not in script
+
+
+def test_remote_listener_check_uses_ss_port_selector_without_nested_python_quotes():
+    script = DEPLOY_PATH.read_text(encoding="utf-8")
+
+    assert "ss -ltn 'sport = :8771'" in script
+    assert "python3 -c 'import sys; assert any" not in script
+    assert "read -r _listener" in script
+    assert 'test -n "$_listener"' in script
+    assert "for _ in $(seq 1 30)" in script
+    assert "sleep 1" in script
+
+
+def test_deploy_uses_a_stdin_remote_script_to_avoid_nested_ssh_shell_quoting():
+    script = DEPLOY_PATH.read_text(encoding="utf-8")
+
+    assert 'ssh "$REMOTE" bash -s -- "$REMOTE_ROOT" "$UNIT" <<\'REMOTE_SCRIPT\'' in script
+    assert "REMOTE_ROOT=$1" in script
+    assert "UNIT=$2" in script
