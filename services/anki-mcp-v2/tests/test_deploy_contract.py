@@ -26,6 +26,7 @@ def test_deploy_script_is_isolated_from_legacy_network_and_collection_data():
 
     assert "/home/ubuntu/anki-vnext/mcp" in script
     assert "anki-vnext-mcp.service" in script
+    assert "anki_mcp_v2_remote_root" not in script
     for forbidden in ("8767", "nginx", "certbot", "dns", "collection.anki2", "/v2/sync"):
         assert forbidden not in script
 
@@ -46,6 +47,8 @@ def test_remote_listener_check_uses_ss_port_selector_without_nested_python_quote
     assert "python3 -c 'import sys; assert any" not in script
     assert "read -r _listener" in script
     assert 'test -n "$_listener"' in script
+    assert 'case "$_listener" in' in script
+    assert "*127.0.0.1:8771*" in script
     assert "for _ in $(seq 1 30)" in script
     assert "sleep 1" in script
 

@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REMOTE="${REMOTE_HOST:-oracle-vps}"
-REMOTE_ROOT="${ANKI_MCP_V2_REMOTE_ROOT:-/home/ubuntu/anki-vnext/mcp}"
+REMOTE_ROOT="/home/ubuntu/anki-vnext/mcp"
 UNIT="anki-vnext-mcp.service"
 LOCAL_PYTHON="$ROOT/.venv/bin/python"
 
@@ -35,7 +35,15 @@ systemctl is-active --quiet anki-vnext-api.service
 systemctl is-active --quiet anki-vnext-sync.service
 
 listener_ready() {
-  ss -ltn 'sport = :8771' | { read -r _header; read -r _listener; test -n "$_listener"; }
+  ss -ltn 'sport = :8771' | {
+    read -r _header
+    read -r _listener
+    test -n "$_listener"
+    case "$_listener" in
+      *127.0.0.1:8771*) ;;
+      *) return 1 ;;
+    esac
+  }
 }
 
 for _ in $(seq 1 30); do
