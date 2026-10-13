@@ -165,3 +165,63 @@ def test_update_uses_write_timeout_and_exact_json_body(monkeypatch):
         },
         "timeout": 45.0,
     }
+
+
+def test_write_posts_use_the_write_timeout_and_reads_keep_the_read_timeout(monkeypatch):
+    seen: list[tuple[str, float]] = []
+
+    def fake_urlopen(request, *, timeout):
+        seen.append((request.full_url.rsplit("/v2", 1)[1], timeout))
+        return JsonResponse({"ok": True})
+
+    monkeypatch.setattr("anki_mcp_v2.client.urlopen", fake_urlopen)
+    client = ApiV2Client(PRODUCTION_API_BASE_URL, "fixture-token")
+    client.post_json("/v2/search", {"query": "x", "kind": "notes"})
+    client.post_json("/v2/notes", {"deck": "d"}, write=True)
+    assert seen == [("/search", 10.0), ("/notes", 45.0)]
+
+
+def test_delete_json_sends_delete_with_encoded_query_and_write_timeout(monkeypatch):
+    observed: dict[str, object] = {}
+
+    def fake_urlopen(request, *, timeout):
+        observed.update(method=request.method, url=request.full_url, timeout=timeout, body=request.data)
+        return JsonResponse({"deleted": True})
+
+    monkeypatch.setattr("anki_mcp_v2.client.urlopen", fake_urlopen)
+    ApiV2Client(PRODUCTION_API_BASE_URL, "fixture-token").delete_json(
+        "/v2/decks/12", {"expected_name": "A B::C"}
+    )
+    assert observed == {
+        "method": "DELETE",
+        "url": "http://127.0.0.1:8770/v2/decks/12?expected_name=A+B%3A%3AC",
+        "timeout": 45.0,
+        "body": None,
+    }
+
+
+@pytest.mark.parametrize("path", ["/v2/sync", "/health", "/v2/x?y=1", "/v2/x#f", "v2/x"])
+def test_client_still_refuses_sync_and_non_v2_paths(path):
+    client = ApiV2Client(PRODUCTION_API_BASE_URL, "fixture-token")
+    for call in (client.get_json, client.delete_json, lambda p: client.post_json(p, {})):
+        with pytest.raises(ValueError):
+            call(path)
+
+
+def test_binary_response_over_the_limit_is_refused(monkeypatch):
+    class Big(JsonResponse):
+        def __init__(self):
+            self._data = b"x" * 50
+            self.headers = type(
+                "H",
+                (),
+                {
+                    "get": lambda _s, key: "50" if key == "Content-Length" else None,
+                    "get_content_type": lambda _s: "image/png",
+                },
+            )()
+
+    monkeypatch.setattr("anki_mcp_v2.client.urlopen", lambda r, *, timeout: Big())
+    with pytest.raises(McpApiError) as raised:
+        ApiV2Client(PRODUCTION_API_BASE_URL, "fixture-token").get_binary("/v2/media/a.png", max_bytes=10)
+    assert raised.value.code == "anki_api_response_too_large"

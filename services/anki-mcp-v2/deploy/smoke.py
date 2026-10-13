@@ -22,6 +22,17 @@ async def run(url: str) -> None:
             "anki_get_card",
             "anki_update_note",
             "anki_get_media",
+            "anki_list_note_types",
+            "anki_get_note_type",
+            "anki_create_note",
+            "anki_delete_notes",
+            "anki_list_tags",
+            "anki_rename_tag",
+            "anki_delete_tag",
+            "anki_create_deck",
+            "anki_rename_deck",
+            "anki_delete_deck",
+            "anki_move_cards",
         }
         if names != required:
             raise RuntimeError(f"unexpected MCP tools: {sorted(names)}")

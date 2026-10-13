@@ -14,7 +14,8 @@ PRODUCTION_API_BASE_URL = "http://127.0.0.1:8770"
 DEFAULT_READ_TIMEOUT_SECONDS = 10.0
 DEFAULT_WRITE_TIMEOUT_SECONDS = 45.0
 MAX_JSON_BYTES = 8 * 1024 * 1024
-MAX_MEDIA_BYTES = 20 * 1024 * 1024
+# Images are handed to the model inline (base64), so the cap is deliberately small.
+MAX_MEDIA_BYTES = 8 * 1024 * 1024
 
 _DEFAULT_CODES = {
     401: "unauthorized",
@@ -57,9 +58,17 @@ class ApiV2Client:
     def get_json(self, path: str, query: dict[str, str | int] | None = None) -> dict[str, Any]:
         return self._json_request("GET", path, query=query, timeout=self._read_timeout_seconds)
 
-    def post_json(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def post_json(
+        self, path: str, payload: dict[str, Any], *, write: bool = False
+    ) -> dict[str, Any]:
+        timeout = self._write_timeout_seconds if write else self._read_timeout_seconds
+        return self._json_request("POST", path, payload=payload, timeout=timeout)
+
+    def delete_json(
+        self, path: str, query: dict[str, str | int] | None = None
+    ) -> dict[str, Any]:
         return self._json_request(
-            "POST", path, payload=payload, timeout=self._read_timeout_seconds
+            "DELETE", path, query=query, timeout=self._write_timeout_seconds
         )
 
     def patch_json(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:

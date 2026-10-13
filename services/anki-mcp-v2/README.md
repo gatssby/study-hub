@@ -17,7 +17,17 @@ The service is intentionally thin. It never imports Anki, opens the collection, 
 - `anki_get_note`
 - `anki_get_card`
 - `anki_update_note`
-- `anki_get_media` (image media only)
+- `anki_get_media` (returns a real MCP `ImageContent`: png, jpeg, webp, gif, max 8 MiB, bytes
+  verified against the MIME; svg/audio/other -> `unsupported_media_type`)
+- `anki_list_note_types`, `anki_get_note_type` (read-only)
+- `anki_create_note`
+- `anki_delete_notes` (max 10; needs note_id + expected_card_ids + expected_revision)
+- `anki_list_tags`, `anki_rename_tag`, `anki_delete_tag` (removes the tag only; `dry_run` first)
+- `anki_create_deck`, `anki_rename_deck`, `anki_delete_deck` (empty decks only)
+- `anki_move_cards` (max 200)
+
+`anki_get_note` returns `revision` and a structured `media` list; the model calls
+`anki_get_media` only for the images it needs. Tools carry read-only/destructive annotations.
 
 All note/card/deck IDs remain strings.
 
