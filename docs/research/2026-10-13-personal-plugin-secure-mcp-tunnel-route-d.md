@@ -5,17 +5,17 @@
 
 ## Crisp conclusion
 
-**The route is documented as technically supported, but it is not a confirmed Plus-account entitlement.** The official plugin docs explicitly document `Plugins → + → Add custom MCP server`, creation of a plugin, and selecting **Tunnel** / entering a `tunnel_id` as the connection method.[1][2] The quickstart explicitly calls the result a **personal plugin**.[1]
+**The route is documented as technically supported.** The official “Add custom MCP server” guide says that ChatGPT connects an MCP server **as a plugin** and supports both read and write tools. It documents `Plugins → + → Add custom MCP server`, creation of a plugin, and selecting **Tunnel** / entering a `tunnel_id` as the connection method.[1][2][6] The quickstart explicitly calls the result a **personal plugin**.[1]
 
 The docs do **not** say that the custom-plugin form is read-only: an MCP server exposes whatever tools it advertises, and the plugin test guidance explicitly includes “write actions that require authorization or confirmation.”[2] Therefore, the custom MCP plugin path supports read and write tools **where the account/workspace rollout and permissions allow them**; the server’s advertised tools and ChatGPT’s confirmation/security policy still govern actual use.[2]
 
-For the account in scope (personal ChatGPT Plus), the evidence is mixed and must not be overstated.[4][5]
+For the account in scope (personal ChatGPT Plus), entitlement remains UI-gated and must not be overstated.[4][5]
 
-- The Platform **ChatGPT Developer mode** page says developer mode is available to **Pro, Plus, Business, Enterprise, and Education** accounts on the web and describes full MCP client support for read and write tools.[5]
-- The Help Center page says full MCP, including modify/write actions, is rolling out in beta to **Business, Enterprise, and Edu**, and later says Pro users can connect MCPs with read/fetch permissions while full MCP is only available to Business and Enterprise/Edu “currently.”[4]
+- The Platform **ChatGPT Developer mode** page and the Help Center Developer Mode article have plan statements for the separate Developer Mode / MCP Apps surface.[4][5]
+- Those Developer Mode statements must not be used to negate the separate Plugins connection guide, which says a custom MCP server connected as a Plugin supports read and write tools.[6]
 - The Secure MCP Tunnel page explicitly provides a personal-account association path (“use the personal Platform organization that belongs to that account”), so the tunnel mechanism itself is not described as Enterprise-only.[3]
 
-**Practical answer:** if the Plus account actually exposes the documented Developer mode / Plugins UI and the tunnel is associated with the relevant personal Platform organization and ChatGPT workspace, the documented route is: create tunnel → run `tunnel-client` → select **Tunnel** in Add custom MCP server → create the personal plugin. However, official pages do not establish that every Plus account currently receives the tunnel/custom-plugin UI or write-capable rollout. If the UI does not show Tunnel or Add custom MCP server, this route is unavailable for that account at that time; do not substitute Developer Mode MCP Apps assumptions.
+**Practical answer:** if the Plus account exposes **ChatGPT Plugins → + → Add custom MCP server**, it can create a personal Plugin from an MCP server with read and write tools according to the direct Plugin guide.[6] If that form also exposes **Tunnel**, the documented route is: create tunnel → run `tunnel-client` → select **Tunnel** → create the personal Plugin. Official pages still do not establish that every Plus account currently receives the Plugins/custom-MCP/Tunnel UI. If the UI does not show Add custom MCP server or Tunnel, this route is unavailable for that account at that time; do not substitute Developer Mode MCP Apps assumptions.
 
 ## What `Add custom MCP server` creates
 
@@ -66,7 +66,7 @@ The tunnel guide says personal accounts should use “the personal Platform orga
 
 It also says a tunnel can be associated with ChatGPT workspaces and Platform organizations, and that a tunnel associated only with a personal Platform organization does not automatically appear in an Enterprise/Edu workspace.[3]
 
-The unresolved point is **ChatGPT Plus entitlement/rollout**. The Platform Developer mode page lists Plus as eligible and says full MCP support includes read/write tools.[5] The Help Center page describes full MCP/write support as a beta rollout to Business, Enterprise, and Edu and says Pro has read/fetch access while full MCP is currently Business and Enterprise/Edu.[4] Because these official pages conflict or describe different rollout states/surfaces, this report does not claim universal Plus availability. Verify the actual account UI and workspace policy.
+The unresolved point is **ChatGPT Plus entitlement/rollout for this UI**. The direct Plugin guide documents the custom-MCP Plugin flow and write tools but does not publish a Plus-specific entitlement matrix.[6] The Platform Developer Mode page and the Help Center article describe a separate Developer Mode / MCP Apps surface with plan-specific policy.[4][5] This report therefore does not claim universal Plus availability. Verify the actual account UI and workspace policy; the presence of the Plugin form and Tunnel choice is the concrete eligibility signal.
 
 ### Required permissions and associations
 
@@ -149,3 +149,4 @@ If Tunnel is absent, the tunnel is not listed, or creation fails, check workspac
 [3] Secure MCP Tunnel — <https://developers.openai.com/api/docs/guides/secure-mcp-tunnels>
 [4] Developer mode and MCP apps in ChatGPT — <https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt>
 [5] ChatGPT Developer mode — <https://platform.openai.com/docs/guides/developer-mode>
+[6] Add custom MCP server — <https://developers.openai.com/api/docs/guides/custom-mcp-server>
