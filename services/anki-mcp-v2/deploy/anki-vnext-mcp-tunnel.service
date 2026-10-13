@@ -1,0 +1,31 @@
+# /etc/systemd/system/anki-vnext-mcp-tunnel.service
+# Private outbound Secure MCP Tunnel for the local Anki MCP v2 server.
+
+[Unit]
+Description=Anki GPT MCP v2 Secure MCP Tunnel
+After=network-online.target anki-vnext-mcp.service
+Wants=network-online.target anki-vnext-mcp.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+EnvironmentFile=/etc/anki-vnext-mcp-tunnel.env
+Environment=HOME=/var/lib/anki-vnext-mcp-tunnel
+Environment=XDG_CONFIG_HOME=/var/lib/anki-vnext-mcp-tunnel
+WorkingDirectory=/var/lib/anki-vnext-mcp-tunnel
+StateDirectory=anki-vnext-mcp-tunnel
+ExecStart=/usr/local/bin/tunnel-client run --profile anki-vnext
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/anki-vnext-mcp-tunnel
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

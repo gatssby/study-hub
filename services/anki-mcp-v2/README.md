@@ -39,4 +39,16 @@ services/anki-mcp-v2/deploy/deploy.sh
 
 Deployment is restricted to `/home/ubuntu/anki-vnext/mcp/` and `anki-vnext-mcp.service`. It loads the existing API token through the API service environment file without copying or logging it.
 
+## Private ChatGPT Plugin tunnel
+
+`deploy/deploy_tunnel.sh` installs the current official Linux ARM64 OpenAI
+`tunnel-client` release only after checking `SHA256SUMS.txt`, initializes the
+`anki-vnext` profile against `http://127.0.0.1:8771/mcp`, runs its doctor, and
+installs `anki-vnext-mcp-tunnel.service`.
+
+The VPS-only `/etc/anki-vnext-mcp-tunnel.env` must already be `root:root` mode
+`0600` and contain the control-plane credential plus tunnel ID. Neither secret
+is stored in the repository, printed, or passed as a CLI argument. The tunnel
+is outbound-only; it never exposes API v2 or MCP v2 publicly.
+
 No public endpoint, nginx configuration, DNS, OAuth, mTLS, ChatGPT configuration, or Plugin implementation is included.
