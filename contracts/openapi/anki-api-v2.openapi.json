@@ -200,6 +200,60 @@
             }
           }
         }
+      },
+      "post": {
+        "summary": "Create Deck",
+        "operationId": "create_deck_v2_decks_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDeckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateDeckResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v2/notes/{note_id}": {
@@ -431,6 +485,604 @@
         }
       }
     },
+    "/v2/note-types": {
+      "get": {
+        "summary": "List Note Types",
+        "operationId": "list_note_types_v2_note_types_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteTypePage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/note-types/{note_type_id}": {
+      "get": {
+        "summary": "Get Note Type",
+        "operationId": "get_note_type_v2_note_types__note_type_id__get",
+        "parameters": [
+          {
+            "name": "note_type_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Note Type Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteTypeDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/notes": {
+      "post": {
+        "summary": "Create Note",
+        "operationId": "create_note_v2_notes_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateNoteResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/notes/delete": {
+      "post": {
+        "summary": "Delete Notes",
+        "operationId": "delete_notes_v2_notes_delete_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteNotesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteNotesResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/tags": {
+      "get": {
+        "summary": "List Tags",
+        "operationId": "list_tags_v2_tags_get",
+        "parameters": [
+          {
+            "name": "prefix",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Prefix"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/tags/rename": {
+      "post": {
+        "summary": "Rename Tag",
+        "operationId": "rename_tag_v2_tags_rename_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagRenameRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagRenameResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/tags/delete": {
+      "post": {
+        "summary": "Delete Tag",
+        "operationId": "delete_tag_v2_tags_delete_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagDeleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagDeleteResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/decks/{deck_id}": {
+      "patch": {
+        "summary": "Rename Deck",
+        "operationId": "rename_deck_v2_decks__deck_id__patch",
+        "parameters": [
+          {
+            "name": "deck_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deck Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameDeckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenameDeckResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Deck",
+        "operationId": "delete_deck_v2_decks__deck_id__delete",
+        "parameters": [
+          {
+            "name": "deck_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deck Id"
+            }
+          },
+          {
+            "name": "expected_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "Expected Name"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteDeckResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/cards/move": {
+      "post": {
+        "summary": "Move Cards",
+        "operationId": "move_cards_v2_cards_move_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveCardsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoveCardsResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v2/media/{filename}": {
       "get": {
         "summary": "Get Media",
@@ -541,6 +1193,147 @@
         ],
         "title": "CardOut"
       },
+      "CreateDeckRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CreateDeckRequest"
+      },
+      "CreateDeckResult": {
+        "properties": {
+          "deck_id": {
+            "type": "string",
+            "title": "Deck Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "created": {
+            "type": "boolean",
+            "title": "Created"
+          },
+          "sync": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PatchSyncState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "deck_id",
+          "name",
+          "created"
+        ],
+        "title": "CreateDeckResult"
+      },
+      "CreateNoteRequest": {
+        "properties": {
+          "deck": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Deck",
+            "description": "Name or id."
+          },
+          "note_type": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Note Type",
+            "description": "Name or id."
+          },
+          "fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "maxProperties": 50,
+            "title": "Fields"
+          },
+          "tags": {
+            "items": {
+              "type": "string",
+              "pattern": "^[^\\s\\x00-\\x1f]{1,100}$"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Tags"
+          },
+          "allow_duplicate": {
+            "type": "boolean",
+            "title": "Allow Duplicate",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "deck",
+          "note_type",
+          "fields"
+        ],
+        "title": "CreateNoteRequest"
+      },
+      "CreateNoteResult": {
+        "properties": {
+          "note_id": {
+            "type": "string",
+            "title": "Note Id"
+          },
+          "card_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Card Ids"
+          },
+          "deck_id": {
+            "type": "string",
+            "title": "Deck Id"
+          },
+          "deck_name": {
+            "type": "string",
+            "title": "Deck Name"
+          },
+          "note_type": {
+            "$ref": "#/components/schemas/NoteTypeOut"
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          },
+          "sync": {
+            "$ref": "#/components/schemas/PatchSyncState"
+          }
+        },
+        "type": "object",
+        "required": [
+          "note_id",
+          "card_ids",
+          "deck_id",
+          "deck_name",
+          "note_type",
+          "revision",
+          "sync"
+        ],
+        "title": "CreateNoteResult"
+      },
       "DeckOut": {
         "properties": {
           "deck_id": {
@@ -604,6 +1397,146 @@
           "items"
         ],
         "title": "DeckPage"
+      },
+      "DeckRef": {
+        "properties": {
+          "deck_id": {
+            "type": "string",
+            "title": "Deck Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deck_id",
+          "name"
+        ],
+        "title": "DeckRef"
+      },
+      "DeleteDeckResult": {
+        "properties": {
+          "deck_id": {
+            "type": "string",
+            "title": "Deck Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "deleted": {
+            "type": "boolean",
+            "title": "Deleted"
+          },
+          "card_count": {
+            "type": "integer",
+            "title": "Card Count"
+          },
+          "sync": {
+            "$ref": "#/components/schemas/PatchSyncState"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deck_id",
+          "name",
+          "deleted",
+          "card_count",
+          "sync"
+        ],
+        "title": "DeleteDeckResult"
+      },
+      "DeleteNoteItem": {
+        "properties": {
+          "note_id": {
+            "type": "string",
+            "title": "Note Id"
+          },
+          "expected_card_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Expected Card Ids"
+          },
+          "expected_revision": {
+            "type": "string",
+            "pattern": "^r1-[0-9a-f]{32}$",
+            "title": "Expected Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "note_id",
+          "expected_card_ids",
+          "expected_revision"
+        ],
+        "title": "DeleteNoteItem"
+      },
+      "DeleteNotesRequest": {
+        "properties": {
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/DeleteNoteItem"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Notes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "notes"
+        ],
+        "title": "DeleteNotesRequest"
+      },
+      "DeleteNotesResult": {
+        "properties": {
+          "deleted": {
+            "items": {
+              "$ref": "#/components/schemas/DeletedNote"
+            },
+            "type": "array",
+            "title": "Deleted"
+          },
+          "sync": {
+            "$ref": "#/components/schemas/PatchSyncState"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deleted",
+          "sync"
+        ],
+        "title": "DeleteNotesResult"
+      },
+      "DeletedNote": {
+        "properties": {
+          "note_id": {
+            "type": "string",
+            "title": "Note Id"
+          },
+          "card_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Card Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "note_id",
+          "card_ids"
+        ],
+        "title": "DeletedNote"
       },
       "FieldOut": {
         "properties": {
@@ -717,6 +1650,68 @@
         ],
         "title": "HealthOut"
       },
+      "MediaRefOut": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "image",
+              "sound"
+            ],
+            "title": "Kind"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type"
+          },
+          "exists": {
+            "type": "boolean",
+            "title": "Exists"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "viewable": {
+            "type": "boolean",
+            "title": "Viewable",
+            "description": "True when anki_get_media can return it as an image."
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "field",
+          "kind",
+          "mime_type",
+          "exists",
+          "size_bytes",
+          "viewable"
+        ],
+        "title": "MediaRefOut"
+      },
       "MediaSyncOut": {
         "properties": {
           "state": {
@@ -740,6 +1735,111 @@
           "state"
         ],
         "title": "MediaSyncOut"
+      },
+      "MoveCardsRequest": {
+        "properties": {
+          "card_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Card Ids"
+          },
+          "target_deck": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Target Deck",
+            "description": "Name or id."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "card_ids",
+          "target_deck"
+        ],
+        "title": "MoveCardsRequest"
+      },
+      "MoveCardsResult": {
+        "properties": {
+          "target_deck": {
+            "$ref": "#/components/schemas/DeckRef"
+          },
+          "moved": {
+            "type": "integer",
+            "title": "Moved"
+          },
+          "unchanged": {
+            "type": "integer",
+            "title": "Unchanged"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MovedCard"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "sync": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PatchSyncState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_deck",
+          "moved",
+          "unchanged",
+          "items",
+          "sync"
+        ],
+        "title": "MoveCardsResult"
+      },
+      "MovedCard": {
+        "properties": {
+          "card_id": {
+            "type": "string",
+            "title": "Card Id"
+          },
+          "old_deck_id": {
+            "type": "string",
+            "title": "Old Deck Id"
+          },
+          "old_deck_name": {
+            "type": "string",
+            "title": "Old Deck Name"
+          },
+          "new_deck_id": {
+            "type": "string",
+            "title": "New Deck Id"
+          },
+          "new_deck_name": {
+            "type": "string",
+            "title": "New Deck Name"
+          },
+          "moved": {
+            "type": "boolean",
+            "title": "Moved"
+          }
+        },
+        "type": "object",
+        "required": [
+          "card_id",
+          "old_deck_id",
+          "old_deck_name",
+          "new_deck_id",
+          "new_deck_name",
+          "moved"
+        ],
+        "title": "MovedCard"
       },
       "NoteOut": {
         "properties": {
@@ -777,6 +1877,33 @@
             },
             "type": "array",
             "title": "Deck Ids"
+          },
+          "deck_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Deck Names"
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision",
+            "description": "Pass back as expected_revision to detect lost updates."
+          },
+          "mod": {
+            "type": "integer",
+            "title": "Mod"
+          },
+          "usn": {
+            "type": "integer",
+            "title": "Usn"
+          },
+          "media": {
+            "items": {
+              "$ref": "#/components/schemas/MediaRefOut"
+            },
+            "type": "array",
+            "title": "Media"
           }
         },
         "type": "object",
@@ -786,9 +1913,106 @@
           "fields",
           "tags",
           "card_ids",
-          "deck_ids"
+          "deck_ids",
+          "deck_names",
+          "revision",
+          "mod",
+          "usn",
+          "media"
         ],
         "title": "NoteOut"
+      },
+      "NoteTypeDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "cloze"
+            ],
+            "title": "Kind"
+          },
+          "field_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Field Names"
+          },
+          "template_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Template Names"
+          },
+          "note_count": {
+            "type": "integer",
+            "title": "Note Count"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/NoteTypeFieldOut"
+            },
+            "type": "array",
+            "title": "Fields"
+          },
+          "templates": {
+            "items": {
+              "$ref": "#/components/schemas/NoteTypeTemplateOut"
+            },
+            "type": "array",
+            "title": "Templates"
+          },
+          "sort_field": {
+            "type": "string",
+            "title": "Sort Field"
+          },
+          "duplicate_check_field": {
+            "type": "string",
+            "title": "Duplicate Check Field"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "field_names",
+          "template_names",
+          "note_count",
+          "fields",
+          "templates",
+          "sort_field",
+          "duplicate_check_field"
+        ],
+        "title": "NoteTypeDetail"
+      },
+      "NoteTypeFieldOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "ord": {
+            "type": "integer",
+            "title": "Ord"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "ord"
+        ],
+        "title": "NoteTypeFieldOut"
       },
       "NoteTypeOut": {
         "properties": {
@@ -807,6 +2031,103 @@
           "name"
         ],
         "title": "NoteTypeOut"
+      },
+      "NoteTypePage": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NoteTypeSummary"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "items"
+        ],
+        "title": "NoteTypePage"
+      },
+      "NoteTypeSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "cloze"
+            ],
+            "title": "Kind"
+          },
+          "field_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Field Names"
+          },
+          "template_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Template Names"
+          },
+          "note_count": {
+            "type": "integer",
+            "title": "Note Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "field_names",
+          "template_names",
+          "note_count"
+        ],
+        "title": "NoteTypeSummary"
+      },
+      "NoteTypeTemplateOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "ord": {
+            "type": "integer",
+            "title": "Ord"
+          },
+          "question_format": {
+            "type": "string",
+            "title": "Question Format"
+          },
+          "answer_format": {
+            "type": "string",
+            "title": "Answer Format"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "ord",
+          "question_format",
+          "answer_format"
+        ],
+        "title": "NoteTypeTemplateOut"
       },
       "PatchNoteRequest": {
         "properties": {
@@ -835,6 +2156,18 @@
             "type": "array",
             "maxItems": 50,
             "title": "Remove Tags"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^r1-[0-9a-f]{32}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
           }
         },
         "additionalProperties": false,
@@ -868,6 +2201,10 @@
             "type": "array",
             "title": "Removed Tags"
           },
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          },
           "sync": {
             "$ref": "#/components/schemas/PatchSyncState"
           }
@@ -878,6 +2215,7 @@
           "updated_fields",
           "added_tags",
           "removed_tags",
+          "revision",
           "sync"
         ],
         "title": "PatchNoteResult"
@@ -899,6 +2237,61 @@
           "after"
         ],
         "title": "PatchSyncState"
+      },
+      "RenameDeckRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "expected_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "RenameDeckRequest"
+      },
+      "RenameDeckResult": {
+        "properties": {
+          "deck_id": {
+            "type": "string",
+            "title": "Deck Id"
+          },
+          "old_name": {
+            "type": "string",
+            "title": "Old Name"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "sync": {
+            "$ref": "#/components/schemas/PatchSyncState"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deck_id",
+          "old_name",
+          "name",
+          "sync"
+        ],
+        "title": "RenameDeckResult"
       },
       "SearchPage": {
         "properties": {
@@ -1038,6 +2431,183 @@
           "collection"
         ],
         "title": "SyncResult"
+      },
+      "TagDeleteRequest": {
+        "properties": {
+          "tag": {
+            "type": "string",
+            "pattern": "^[^\\s\\x00-\\x1f*]{1,100}$",
+            "title": "Tag"
+          },
+          "expected_note_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Note Count"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tag"
+        ],
+        "title": "TagDeleteRequest"
+      },
+      "TagDeleteResult": {
+        "properties": {
+          "affected_note_count": {
+            "type": "integer",
+            "title": "Affected Note Count"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run"
+          },
+          "sync": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PatchSyncState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tag": {
+            "type": "string",
+            "title": "Tag"
+          }
+        },
+        "type": "object",
+        "required": [
+          "affected_note_count",
+          "dry_run",
+          "tag"
+        ],
+        "title": "TagDeleteResult"
+      },
+      "TagPage": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          },
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "limit",
+          "offset",
+          "has_more",
+          "items"
+        ],
+        "title": "TagPage"
+      },
+      "TagRenameRequest": {
+        "properties": {
+          "old": {
+            "type": "string",
+            "pattern": "^[^\\s\\x00-\\x1f*]{1,100}$",
+            "title": "Old"
+          },
+          "new": {
+            "type": "string",
+            "pattern": "^[^\\s\\x00-\\x1f*]{1,100}$",
+            "title": "New"
+          },
+          "expected_note_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Note Count"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "old",
+          "new"
+        ],
+        "title": "TagRenameRequest"
+      },
+      "TagRenameResult": {
+        "properties": {
+          "affected_note_count": {
+            "type": "integer",
+            "title": "Affected Note Count"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run"
+          },
+          "sync": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PatchSyncState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "old": {
+            "type": "string",
+            "title": "Old"
+          },
+          "new": {
+            "type": "string",
+            "title": "New"
+          }
+        },
+        "type": "object",
+        "required": [
+          "affected_note_count",
+          "dry_run",
+          "old",
+          "new"
+        ],
+        "title": "TagRenameResult"
       },
       "ValidationError": {
         "properties": {

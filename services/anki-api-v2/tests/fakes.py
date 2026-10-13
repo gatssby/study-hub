@@ -25,7 +25,8 @@ FULL_UPLOAD = 4
 def _acknowledge_pending(col: Collection) -> None:
     # What the real client does once the server accepts: pending notes (usn == -1)
     # receive a positive usn. Test double only; production code never writes this.
-    col.db.execute("update notes set usn = 1 where usn = -1")
+    for table in ("notes", "cards", "decks", "tags", "graves"):
+        col.db.execute(f"update {table} set usn = 1 where usn = -1")
 
 
 class FakeClock:
@@ -66,6 +67,9 @@ class FakeSyncBackend:
         self.fail_on_calls: set[int] = set()
         self.drop_changes = False
         self.sync_calls = 0
+        # Callbacks run at the START of the next sync calls (one per call), simulating
+        # changes that another client pushed to the server in the meantime.
+        self.on_sync: list[Any] = []
         self.media_starts = 0
         self.media_active = False
         self.media_error: str | None = None
@@ -77,6 +81,8 @@ class FakeSyncBackend:
 
     def sync_collection(self, col: Collection) -> int:
         self.sync_calls += 1
+        if self.on_sync:
+            self.on_sync.pop(0)(col)
         local = self._local(col)
         second = int(self._clock.wallclock().timestamp())
         self.events.append(("sync", local, second))
@@ -97,6 +103,15 @@ class FakeSyncBackend:
         self.server_fields = dict(local)
         _acknowledge_pending(col)
         return NORMAL_SYNC if changed else NO_CHANGES
+
+    def local_changes_pending(self, col: Collection) -> bool:
+        return any(
+            col.db.scalar(f"select count() from {t} where usn = -1")
+            for t in ("notes", "cards", "decks", "tags", "graves")
+        )
+
+    def fully_synced(self, col: Collection) -> bool:
+        return not self.local_changes_pending(col)
 
     def start_media(self, col: Collection) -> None:
         self.media_starts += 1

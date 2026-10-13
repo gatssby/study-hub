@@ -217,3 +217,146 @@ def test_e2e_patch_is_confirmed_on_server_by_sync_after(sync_server, tmp_path):
         assert third.get_note(nid)["Back"] == "confirmado pelo servidor"
     finally:
         third.close()
+
+
+# ---- Stage 9: editorial writes, confirmed by an independent third client ------------------
+
+
+def _third_client_download(tmp_path: Path, endpoint: str, name: str = "third2.anki2") -> Collection:
+    third = Collection(str(tmp_path / name))
+    auth = _login(third, endpoint)
+    assert (
+        third.sync_collection(auth, sync_media=False).required
+        == SyncCollectionResponse.FULL_DOWNLOAD
+    )
+    third.close_for_full_sync()
+    third.full_upload_or_download(auth=auth, server_usn=None, upload=False)  # download only
+    third.reopen(after_full_sync=True)
+    return third
+
+
+def _e2e_env(sync_server, tmp_path):
+    seed_path = tmp_path / "seed.anki2"
+    api_path = tmp_path / "api" / "collection.anki2"
+    api_path.parent.mkdir()
+    nid = _seed_server_with_one_note(seed_path, sync_server)
+    _bootstrap_api_collection(api_path, sync_server)
+    return api_path, nid
+
+
+def test_e2e_create_note_deck_tag_move_delete_all_reach_the_server(sync_server, tmp_path):
+    api_path, seed_nid = _e2e_env(sync_server, tmp_path)
+    with _client(api_path, sync_server) as client:
+        r = client.post("/v2/decks", json={"name": "Novo::Sub"}, headers=AUTH)
+        assert r.status_code == 201, r.text
+        r = client.post(
+            "/v2/notes",
+            json={
+                "deck": "Novo::Sub",
+                "note_type": "Basic (and reversed card)",
+                "fields": {"Front": "criada pela API", "Back": "ok"},
+                "tags": ["e2e", "velha"],
+            },
+            headers=AUTH,
+        )
+        assert r.status_code == 201, r.text
+        nid, cards = r.json()["note_id"], r.json()["card_ids"]
+        assert len(cards) == 2
+        r = client.post(
+            "/v2/tags/rename",
+            json={"old": "velha", "new": "nova", "expected_note_count": 1},
+            headers=AUTH,
+        )
+        assert r.status_code == 200, r.text
+        r = client.post("/v2/decks", json={"name": "Destino"}, headers=AUTH)
+        r = client.post(
+            "/v2/cards/move", json={"card_ids": cards[:1], "target_deck": "Destino"}, headers=AUTH
+        )
+        assert r.status_code == 200 and r.json()["moved"] == 1, r.text
+
+    third = _third_client_download(tmp_path, sync_server)
+    try:
+        note = third.get_note(int(nid))
+        assert note["Front"] == "criada pela API" and sorted(note.tags) == ["e2e", "nova"]
+        decks = sorted(third.decks.name(third.get_card(c).did) for c in note.card_ids())
+        assert decks == ["Destino", "Novo::Sub"]
+    finally:
+        third.close()
+
+    with _client(api_path, sync_server) as client:
+        got = client.get(f"/v2/notes/{nid}", headers=AUTH).json()
+        r = client.post(
+            "/v2/notes/delete",
+            json={
+                "notes": [
+                    {
+                        "note_id": nid,
+                        "expected_card_ids": got["card_ids"],
+                        "expected_revision": got["revision"],
+                    }
+                ]
+            },
+            headers=AUTH,
+        )
+        assert r.status_code == 200, r.text
+        r = client.post("/v2/tags/delete", json={"tag": "nova", "dry_run": True}, headers=AUTH)
+        # Anki keeps a tag registered after its last note is deleted: 0 notes, not "missing".
+        assert r.status_code == 200 and r.json()["affected_note_count"] == 0
+        for name in ("Destino", "Novo::Sub"):
+            decks = client.get("/v2/decks", params={"limit": 200}, headers=AUTH).json()["items"]
+            deck = next(d for d in decks if d["name"] == name)
+            r = client.delete(f"/v2/decks/{deck['deck_id']}?expected_name={name}", headers=AUTH)
+            assert r.status_code == 200, r.text
+
+    third = _third_client_download(tmp_path, sync_server, "third3.anki2")
+    try:
+        assert int(third.note_count()) == 1  # only the seed note is left
+        names = {d.name for d in third.decks.all_names_and_ids()}
+        assert "Destino" not in names and "Novo::Sub" not in names
+        assert third.get_note(seed_nid)["Front"] == "seed"
+    finally:
+        third.close()
+
+
+def test_e2e_stale_revision_against_a_real_second_client_is_409_and_writes_nothing(
+    sync_server, tmp_path
+):
+    api_path, nid = _e2e_env(sync_server, tmp_path)
+    with _client(api_path, sync_server) as client:
+        stale = client.get(f"/v2/notes/{nid}", headers=AUTH).json()["revision"]
+
+        other_path = tmp_path / "other.anki2"
+        other = Collection(str(other_path))
+        try:
+            auth = _login(other, sync_server)
+            assert (
+                other.sync_collection(auth, sync_media=False).required
+                == SyncCollectionResponse.FULL_DOWNLOAD
+            )
+            other.close_for_full_sync()
+            other.full_upload_or_download(auth=auth, server_usn=None, upload=False)
+            other.reopen(after_full_sync=True)
+            _pace_past_last_sync(other)
+            note = other.get_note(nid)
+            note["Back"] = "alterado por outro cliente"
+            other.update_note(note)
+            other.sync_collection(auth, sync_media=False)
+        finally:
+            other.close()
+
+        r = client.patch(
+            f"/v2/notes/{nid}",
+            json={"fields": {"Back": "minha versao A"}, "expected_revision": stale},
+            headers=AUTH,
+        )
+        assert r.status_code == 409, r.text
+        assert r.json()["error"]["code"] == "stale_revision"
+        current = client.get(f"/v2/notes/{nid}", headers=AUTH).json()
+        assert {"name": "Back", "value": "alterado por outro cliente"} in current["fields"]
+
+        r = client.patch(
+            f"/v2/notes/{nid}",
+            json={"fields": {"Back": "agora sim"}, "expected_revision": current["revision"]},
+            headers=AUTH,
+        )
+        assert r.status_code == 200, r.text

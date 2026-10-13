@@ -9,7 +9,7 @@ from anki.collection import Collection
 
 TEST_TOKEN = "t" * 40
 SYNTHETIC_MEDIA_NAME = "imagem 1.jpg"
-SYNTHETIC_MEDIA_BYTES = b"\xff\xd8synthetic-jpeg"
+SYNTHETIC_MEDIA_BYTES = b"\xff\xd8\xff\xe0synthetic-jpeg"
 
 
 @dataclass(frozen=True)

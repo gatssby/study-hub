@@ -19,12 +19,13 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from collections.abc import Callable
 from typing import Any, Protocol
 
 from anki.collection import Collection
 from anki.errors import AnkiException, SyncErrorKind
 from anki.notes import NoteId
-from anki.sync_pb2 import SyncCollectionResponse
+from anki.sync_pb2 import SyncAuth, SyncCollectionResponse
 
 from anki_api_v2.errors import ApiError
 
@@ -61,6 +62,8 @@ class MediaStatus:
 
 class SyncTransport(Protocol):
     def sync_collection(self, col: Collection) -> int: ...
+
+    def local_changes_pending(self, col: Collection) -> bool: ...
 
     def start_media(self, col: Collection) -> None: ...
 
@@ -122,6 +125,15 @@ class AnkiSyncTransport:
             raise
         return int(out.required)
 
+    def local_changes_pending(self, col: Collection) -> bool:
+        """True while the collection holds any change the server has not taken yet.
+
+        `sync_status` with an empty key is Anki's own offline check ("collection modified
+        since the last sync"); it covers notes, cards, decks, tags and deletions and
+        performs no network I/O.
+        """
+        return int(col.sync_status(SyncAuth(hkey="")).required) != NO_CHANGES
+
     def start_media(self, col: Collection) -> None:
         col.sync_media(self._ensure_auth(col))
 
@@ -142,9 +154,9 @@ class SyncManager:
         self._ttl = freshness_ttl_seconds
         self._last_ok_mono: float | None = None
         self._last_ok_second: int | None = None
-        # Note whose local change the sync server has not confirmed yet. Only a sync that
-        # shows that note's usn as accepted clears it; NO_CHANGES alone never does.
-        self._pending_note_id: int | None = None
+        # Confirmation check of the local change the sync server has not confirmed yet.
+        # Only a sync after which it returns True clears it; NO_CHANGES alone never does.
+        self._pending_confirm: Callable[[Collection], bool] | None = None
         self.collection_state = STATE_UNKNOWN
         self.last_collection_sync_at: datetime | None = None
         self.media_state = MEDIA_IDLE
@@ -154,7 +166,7 @@ class SyncManager:
 
     def ensure_fresh(self, col: Collection) -> None:
         """Read path: sync only if stale or not in a known-good state."""
-        if self._pending_note_id is None and self.collection_state == STATE_OK:
+        if self._pending_confirm is None and self.collection_state == STATE_OK:
             fresh = self._last_ok_mono is not None
             if fresh and self._clock.monotonic() - self._last_ok_mono < self._ttl:
                 return
@@ -162,12 +174,12 @@ class SyncManager:
 
     @property
     def sync_state(self) -> str:
-        if self._pending_note_id is not None:
+        if self._pending_confirm is not None:
             return STATE_PENDING
         return self.collection_state
 
     def sync_collection(self, col: Collection) -> str:
-        if self._pending_note_id is not None:
+        if self._pending_confirm is not None:
             # Retrying an unconfirmed change: it must not share a second with the last sync.
             self.pace_for_write()
         try:
@@ -211,8 +223,8 @@ class SyncManager:
         self._last_ok_mono = self._clock.monotonic()
         self.last_collection_sync_at = now
         self._last_ok_second = int(now.timestamp())
-        if self._pending_note_id is not None and confirm_note_synced(col, self._pending_note_id):
-            self._pending_note_id = None
+        if self._pending_confirm is not None and self._pending_confirm(col):
+            self._pending_confirm = None
         self.collection_state = STATE_OK
         return name
 
@@ -223,7 +235,7 @@ class SyncManager:
         most one unconfirmed change is ever tracked.
         """
         self.sync_collection(col)
-        if self._pending_note_id is not None:
+        if self._pending_confirm is not None:
             raise ApiError(
                 502,
                 "sync_failed",
@@ -271,7 +283,30 @@ class SyncManager:
 
     def mark_pending(self, note_id: int) -> None:
         """A local change to note_id exists that the sync server has not confirmed."""
-        self._pending_note_id = note_id
+        self._pending_confirm = lambda col: confirm_note_synced(col, note_id)
+
+    def _all_synced(self, col: Collection) -> bool:
+        return not self._transport.local_changes_pending(col)
+
+    def sync_after_change(self, col: Collection, *, expect_change: bool = True) -> None:
+        """Write path, step 3 for changes that are not a single note (delete, deck, tag, move).
+
+        Same contract as sync_after_write(), but the confirmation is Anki's own "nothing
+        left to send" check instead of one note's usn.
+        """
+        try:
+            self.sync_collection(col)
+        except ApiError:
+            self._pending_confirm = self._all_synced
+            raise
+        if expect_change and not self._all_synced(col):
+            self._pending_confirm = self._all_synced
+            raise ApiError(
+                502,
+                "sync_failed",
+                "the sync server did not confirm the change",
+                details={"scope": "collection", "reason": "change_not_detected"},
+            )
 
     # ---- media ---------------------------------------------------------
 

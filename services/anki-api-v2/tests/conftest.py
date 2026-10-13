@@ -33,6 +33,26 @@ class Api:
     def patch(self, path: str, json: Any):
         return self.client.patch(path, json=json, headers=AUTH)
 
+    def delete(self, path: str):
+        return self.client.delete(path, headers=AUTH)
+
+    def add_note(self, front, back="b", tags=(), deck="Default", model="Basic") -> str:
+        """Create a note directly on the collection (test setup only)."""
+
+        def job(col):
+            note = col.new_note(col.models.by_name(model))
+            note["Front"] = front
+            note["Back"] = back
+            note.tags = list(tags)
+            col.add_note(note, col.decks.id(deck))
+            return str(note.id)
+
+        return self.run(job)
+
+    def run(self, fn):
+        """Run a job on the collection owner thread (test setup/inspection only)."""
+        return self.client.app.state.actor.submit(fn)
+
 
 def make_settings(fx: Fixture, **overrides: Any) -> Settings:
     base = dict(

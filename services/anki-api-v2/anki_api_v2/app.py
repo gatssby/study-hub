@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import hmac
 import logging
-import mimetypes
 import time
 from collections.abc import Callable
 from contextlib import asynccontextmanager
@@ -30,21 +29,41 @@ from anki_api_v2.errors import ApiError, error_body
 from anki_api_v2.media import (
     InvalidMediaPath,
     MediaNotFound,
+    MediaTooLarge,
+    describe_media_file,
     media_dir_for,
     resolve_media_file,
     validate_media_filename,
 )
 from anki_api_v2.schemas import (
     CardOut,
+    CreateDeckRequest,
+    CreateDeckResult,
+    CreateNoteRequest,
+    CreateNoteResult,
     DeckPage,
+    DeleteDeckResult,
+    DeleteNotesRequest,
+    DeleteNotesResult,
     HealthOut,
+    MoveCardsRequest,
+    MoveCardsResult,
     NoteOut,
+    NoteTypeDetail,
+    NoteTypePage,
     PatchNoteRequest,
     PatchNoteResult,
+    RenameDeckRequest,
+    RenameDeckResult,
     SearchPage,
     SearchRequest,
     SyncRequest,
     SyncResult,
+    TagDeleteRequest,
+    TagDeleteResult,
+    TagPage,
+    TagRenameRequest,
+    TagRenameResult,
 )
 from anki_api_v2.service import MAX_DECK_LIMIT, CollectionService
 from anki_api_v2.sync import AnkiSyncTransport, Clock, SyncManager, SyncTransport, SystemClock
@@ -176,24 +195,80 @@ def create_app(
     def patch_note(note_id: str, body: PatchNoteRequest):
         return write(lambda col: service.patch_note(col, note_id, body))
 
+    # ---- editorial: note types, create/delete notes ----------------------------------
+
+    @router.get("/note-types", response_model=NoteTypePage)
+    def list_note_types():
+        return read(lambda col: service.list_note_types(col))
+
+    @router.get("/note-types/{note_type_id}", response_model=NoteTypeDetail)
+    def get_note_type(note_type_id: str):
+        return read(lambda col: service.get_note_type(col, note_type_id))
+
+    @router.post("/notes", response_model=CreateNoteResult, status_code=201)
+    def create_note(body: CreateNoteRequest):
+        return write(lambda col: service.create_note(col, body))
+
+    @router.post("/notes/delete", response_model=DeleteNotesResult)
+    def delete_notes(body: DeleteNotesRequest):
+        return write(lambda col: service.delete_notes(col, body))
+
+    # ---- tags ---------------------------------------------------------------------------
+
+    @router.get("/tags", response_model=TagPage)
+    def list_tags(
+        prefix: str | None = Query(default=None, min_length=1, max_length=100),
+        limit: int = Query(default=100, ge=1, le=500),
+        offset: int = Query(default=0, ge=0, le=MAX_OFFSET),
+    ):
+        return read(lambda col: service.list_tags(col, prefix, limit, offset))
+
+    @router.post("/tags/rename", response_model=TagRenameResult)
+    def rename_tag(body: TagRenameRequest):
+        return write(lambda col: service.rename_tag(col, body))
+
+    @router.post("/tags/delete", response_model=TagDeleteResult)
+    def delete_tag(body: TagDeleteRequest):
+        return write(lambda col: service.delete_tag(col, body))
+
+    # ---- decks (writes) -----------------------------------------------------------------
+
+    @router.post("/decks", response_model=CreateDeckResult)
+    def create_deck(body: CreateDeckRequest):
+        result, created = write(lambda col: service.create_deck(col, body.name))
+        return JSONResponse(result, status_code=201 if created else 200)
+
+    @router.patch("/decks/{deck_id}", response_model=RenameDeckResult)
+    def rename_deck(deck_id: str, body: RenameDeckRequest):
+        return write(lambda col: service.rename_deck(col, deck_id, body))
+
+    @router.delete("/decks/{deck_id}", response_model=DeleteDeckResult)
+    def delete_deck(deck_id: str, expected_name: str = Query(min_length=1, max_length=200)):
+        return write(lambda col: service.delete_deck(col, deck_id, expected_name))
+
+    # ---- cards ----------------------------------------------------------------------------
+
+    @router.post("/cards/move", response_model=MoveCardsResult)
+    def move_cards(body: MoveCardsRequest):
+        return write(lambda col: service.move_cards(col, body))
+
     @router.get("/media/{filename}")
     def get_media(filename: str):
         try:
             name = validate_media_filename(filename)
             path = resolve_media_file(media_dir, name)
+            media_type, _size = describe_media_file(path, name)
         except InvalidMediaPath as exc:
             raise ApiError(
                 400, "invalid_media_path", "media name must be a plain filename"
             ) from exc
         except MediaNotFound as exc:
             raise ApiError(404, "media_not_found", "media file does not exist") from exc
-        guessed, _ = mimetypes.guess_type(name)
-        media_type = (
-            guessed if guessed and guessed.split("/")[0] in {"image", "audio", "video"} else None
-        )
+        except MediaTooLarge as exc:
+            raise ApiError(413, "media_too_large", "media file is too large to serve") from exc
         return FileResponse(
             path,
-            media_type=media_type or "application/octet-stream",
+            media_type=media_type,
             headers={
                 "X-Content-Type-Options": "nosniff",
                 "Content-Security-Policy": "default-src 'none'",
