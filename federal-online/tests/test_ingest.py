@@ -58,3 +58,17 @@ def test_remote_fallback_is_superseded_when_catalog_source_becomes_known(tmp_pat
     c=FOStore(db).conn
     assert c.execute("select count(*) from lesson_video_sources where available=1").fetchone()[0]==1
     assert c.execute("select count(*) from transcription_jobs where state='queued'").fetchone()[0]==1
+
+
+def test_pdf_index_ignores_staging_manifest_until_publication(tmp_path):
+    from fo_hub.ingest import ingest
+    from fo_hub.store import FOStore
+    state=tmp_path/'s';stage=state/'materials/.build_course';stage.mkdir(parents=True)
+    (stage/'a.pdf').write_bytes(b'%PDF-fixture')
+    (stage/'manifest.json').write_text(json.dumps({'items':[{'status':'ok','relative_path':'a.pdf','file_name':'a.pdf'}]}))
+    db=tmp_path/'hub.db';ingest(state,db,index_pdfs=False)
+    c=FOStore(db).conn
+    assert c.execute('select count(*) from materials').fetchone()[0]==0
+    stage.rename(state/'materials/course')
+    ingest(state,db,index_pdfs=False)
+    assert c.execute('select count(*) from materials').fetchone()[0]==1

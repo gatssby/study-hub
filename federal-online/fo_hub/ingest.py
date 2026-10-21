@@ -99,7 +99,8 @@ def ingest(state,db_path,index_pdfs=True):
             with c:c.execute('INSERT OR REPLACE INTO lesson_video_sources VALUES(?,?,?,?,0,?)',(lid,None,str(lesson['version']),None,str(time.time())))
         queued+=queue.enqueue(lid,lesson['version'])
     page_count=0;pdf_errors=0
-    manifest_paths=[state/'materials/manifest.json']+list((state/'materials').glob('*/manifest.json'))
+    manifest_paths=[state/'materials/manifest.json']+[
+        p for p in (state/'materials').glob('*/manifest.json') if not p.parent.name.startswith('.build_')]
     seen_hashes=set()
     for manifest in manifest_paths:
         for item in read_json(manifest,{}).get('items',[]):
