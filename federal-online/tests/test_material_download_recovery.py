@@ -119,6 +119,18 @@ class ModalPage:
         raise AssertionError("must not click through the modal")
 
 
+@pytest.fixture(autouse=True)
+def synthetic_page_pdf_transport(monkeypatch):
+    actual=m.stream_document_pdf
+    def stream(page,url,destination,**kwargs):
+        if not isinstance(page,ModalPage):return actual(page,url,destination,**kwargs)
+        body=page.request.get(url).body()
+        if not body.startswith(b'%PDF-'):return False
+        destination.write_bytes(body)
+        return True
+    monkeypatch.setattr(m,'stream_document_pdf',stream)
+
+
 def test_view_only_row_recovers_pdf_via_document_key_and_dismisses_modal(tmp_path, monkeypatch):
     def native(*a, **k):
         raise m.PlaywrightTimeoutError('Timeout 45000ms exceeded while waiting for event "download"')
@@ -162,3 +174,17 @@ def test_view_only_row_never_opens_memory_heavy_pdf_canvas(tmp_path,monkeypatch)
     m.download_material_row(page,SimpleNamespace(download_timeout_ms=1000),Log(),'Medicine',view,dest)
     assert calls==[]
     assert dest.read_bytes().startswith(b'%PDF-')
+
+
+def test_pdf_stream_is_bounded_and_preserves_existing_file_on_rejection(tmp_path):
+    from types import SimpleNamespace
+    import httpx
+    page=SimpleNamespace(url='https://portal.example/materials',context=SimpleNamespace(cookies=lambda urls:[]))
+    transport=httpx.MockTransport(lambda request:httpx.Response(200,content=b'%PDF-small'))
+    factory=lambda **kwargs:httpx.Client(transport=transport,**kwargs)
+    dest=tmp_path/'x.pdf'
+    assert m.stream_document_pdf(page,'https://cdn.example/x',dest,client_factory=factory,max_bytes=100)
+    assert dest.read_bytes()==b'%PDF-small'
+    with pytest.raises(RuntimeError,match='limit'):
+        m.stream_document_pdf(page,'https://cdn.example/x',dest,client_factory=factory,max_bytes=3)
+    assert dest.read_bytes()==b'%PDF-small'

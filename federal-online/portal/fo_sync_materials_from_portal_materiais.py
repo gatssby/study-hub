@@ -1556,6 +1556,47 @@ def dismiss_material_modal(page: Any, logger: Logger) -> None:
         logger.log(f"[modal] falha ao fechar visualizador detalhe={summarize_exception(exc)}")
 
 
+def stream_document_pdf(page: Any, url: str, destination: Path, *, client_factory=None,
+                        max_bytes: int = 256*1024*1024) -> bool:
+    """Stream outside Playwright's retained response cache; bound memory and disk."""
+    import httpx
+    import tempfile
+    import time
+    from http.cookiejar import Cookie
+
+    cookies=httpx.Cookies()
+    for item in page.context.cookies([url]):
+        domain=item.get('domain','')
+        cookies.jar.set_cookie(Cookie(version=0,name=item['name'],value=item['value'],
+            port=None,port_specified=False,domain=domain,domain_specified=bool(domain),
+            domain_initial_dot=domain.startswith('.'),path=item.get('path','/'),path_specified=True,
+            secure=item.get('secure',False),expires=None,discard=True,comment=None,comment_url=None,rest={}))
+    temporary=None
+    deadline=time.monotonic()+120
+    try:
+        with (client_factory or httpx.Client)(cookies=cookies,headers={'Referer':page.url},
+                follow_redirects=True,timeout=30) as client:
+            with client.stream('GET',url) as response:
+                response.raise_for_status()
+                if int(response.headers.get('content-length','0'))>max_bytes:
+                    raise RuntimeError('PDF exceeds safe byte limit')
+                total=0;prefix=b''
+                with tempfile.NamedTemporaryFile(dir=destination.parent,suffix='.partial',delete=False) as handle:
+                    temporary=Path(handle.name)
+                    for chunk in response.iter_bytes(chunk_size=64*1024):
+                        total+=len(chunk)
+                        if total>max_bytes or time.monotonic()>deadline:
+                            raise RuntimeError('PDF exceeds safe transfer limit')
+                        if len(prefix)<5:prefix=(prefix+chunk)[:5]
+                        if len(prefix)==5 and not prefix.startswith(b'%PDF-'):return False
+                        handle.write(chunk)
+                if not prefix.startswith(b'%PDF-'):return False
+        temporary.replace(destination)
+        return True
+    finally:
+        if temporary is not None:temporary.unlink(missing_ok=True)
+
+
 def download_via_document_key(page: Any, row: PortalRow, logger: Logger, destination: Path) -> str | None:
     """View-only rows (btnMaterialView, hidden download button) render via pdf.js from the
     URL returned by /portal/documento-online-key; fetch it with the session cookies."""
@@ -1572,12 +1613,9 @@ def download_via_document_key(page: Any, row: PortalRow, logger: Logger, destina
             logger.log(f"[document_key] resposta sem url status={(payload or {}).get('status')}")
             return None
         pdf_url = urljoin(page.url, pdf_url)
-        pdf_resp = page.request.get(pdf_url, timeout=60_000)
-        body = pdf_resp.body()
-        if not body.startswith(b"%PDF-"):
-            logger.log(f"[document_key] conteudo nao-PDF http={getattr(pdf_resp, 'status', '?')} bytes={len(body)}")
+        if not stream_document_pdf(page,pdf_url,destination):
+            logger.log('[document_key] conteudo nao-PDF rejeitado')
             return None
-        destination.write_bytes(body)
         return pdf_url
     except Exception as exc:
         logger.log(f"[document_key] falhou tipo={type(exc).__name__}")
