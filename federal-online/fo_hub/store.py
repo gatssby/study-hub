@@ -240,7 +240,8 @@ class FOStore:
             "LEFT JOIN pdf_page_quality q ON q.material_id=p.material_id AND q.page=p.page "
             "WHERE p.material_id=? AND p.page BETWEEN ? AND ? "
             "ORDER BY p.page", (material_id, page_start, end))
-        pages = [{"page": p, "text": t, "quality": quality, "exposure": exposure,
+        pages = [{"page": p, "text": "" if exposure == "blocked" else t,
+                  "quality": quality, "exposure": exposure,
                   "citation": f"{m['title']}, p. {p} [{material_id}#p{p}]"}
                  for p, t, quality, exposure in rows]
         return {"material_id": material_id, "title": m["title"], "page_count": total,

@@ -61,6 +61,18 @@ def test_ingest_reindexes_legacy_pages_and_records_quality(tmp_path):
     assert result["pages"][0]["exposure"] == "blocked"
 
 
+def test_legacy_unreviewed_pdf_text_is_not_exposed(tmp_path):
+    from fo_hub.store import FOStore
+
+    store = FOStore(tmp_path / "legacy.db")
+    store.upsert_material({"material_id": "m", "title": "legacy"})
+    store.set_pdf_pages("m", ["private watermark text"])
+    result = store.get_pdf_text("m")
+    assert result is not None
+    assert result["pages"][0]["text"] == ""
+    assert result["pages"][0]["exposure"] == "blocked"
+
+
 def test_video_recovery_removes_only_matching_unvalidated_partials(tmp_path):
     import video_runtime
 
