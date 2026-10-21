@@ -31,6 +31,21 @@ The service is intentionally thin. It never imports Anki, opens the collection, 
 
 All note/card/deck IDs remain strings.
 
+### Optional Study Hub tools
+
+With `STUDY_HUB_FO_TOOLS=true` at MCP startup, the same `/mcp` endpoint also
+advertises seven read-only FO tools, preserving all 19 Anki tools:
+
+- `fo_list_lessons`, `fo_get_lesson`
+- `fo_search_materials`, `fo_get_pdf_text`
+- `fo_search_transcripts`, `fo_get_transcript`
+- `fo_get_sync_status`
+
+The combined toolset contains 26 tools (nine write, 17 read). FO calls use the
+separate loopback FO API; they do not modify the Anki collection, trigger sync,
+download/index materials, or start ASR. PDF exposure remains governed by the FO
+API's privacy guards. Existing transcripts may be unavailable while ASR is disabled.
+
 ## Local development
 
 ```bash
@@ -61,4 +76,41 @@ The VPS-only `/etc/anki-vnext-mcp-tunnel.env` must already be `root:root` mode
 is stored in the repository, printed, or passed as a CLI argument. The tunnel
 is outbound-only; it never exposes API v2 or MCP v2 publicly.
 
-No public endpoint, nginx configuration, DNS, OAuth, mTLS, ChatGPT configuration, or Plugin implementation is included.
+No public endpoint, nginx configuration, DNS, OAuth, mTLS, or packaged Plugin
+implementation is included. The private ChatGPT connection is managed in ChatGPT,
+separately from this service's deployment.
+
+### Refresh the installed custom Plugin after tool changes
+
+MCP `tools/list` and the tool metadata stored in a ChatGPT custom connection are
+different checkpoints. A healthy `anki_health` does not prove that ChatGPT has
+rescanned newly registered `fo_*` tools. Changing an OpenAPI file or restarting a
+healthy tunnel is not the remedy for stale ChatGPT tool discovery.
+
+1. Verify the actual MCP endpoint with `STUDY_HUB_FO_TOOLS=true .venv/bin/python
+   deploy/smoke.py` from the deployed MCP directory. It must accept exactly the
+   combined toolset and pass both read-only health/status calls.
+2. Inspect the live tunnel's loopback `/api/status` (normally port 8080), selecting
+   only `mcp_server_url`, the `main` channel address, and tunnel identity. Confirm
+   that this is the endpoint just tested. Do not print credentials or raw profiles.
+   `/readyz` checks readiness; `/health/mcp` can report `not_observed` for HTTP
+   transport and is not evidence that the server exposes zero tools.
+3. In ChatGPT desktop: Settings -> Plugins -> Anki GPT vNext -> Refresh tools.
+   The same custom-connection refresh is available through ChatGPT Plugins.
+   Preserve the installed app, tunnel and authentication; do not uninstall or
+   recreate a working connection just to rediscover tools.
+4. Read back View details -> Apps -> Anki GPT vNext. Confirm **26 tools (9 write,
+   17 read)**, rather than the old **19 tools (9 write, 10 read)**.
+5. Start a new conversation, select `@Anki GPT vNext`, and request
+   `fo_get_sync_status`, then `fo_list_lessons` with `limit=1`. These are read-only;
+   do not test integration with an Anki write or by starting transcription.
+
+The installed connection inspected on 2026-10-21 was a private development app:
+Refresh tools was sufficient, with no reconnection or server restart. A managed
+workspace may instead require an administrator's action refresh/approval; follow
+the actual workspace UI rather than treating it as this private app.
+
+Official references (checked 2026-10-21):
+
+- https://developers.openai.com/plugins/deploy/connect-chatgpt
+- https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt
