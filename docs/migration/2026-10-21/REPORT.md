@@ -127,3 +127,17 @@ Não se repetiram migrações nem exclusões. A branch continua `feat/study-hub-
 Não executar comandos de ativação antes de nova autorização explícita. O marco 22/10/2026 não é autorização nem há agendamento automático.
 
 Procedimento exato em `federal-online/transcription/ACTIVATION.md`. Exige executar somente na VPS, validar versões/fontes/disco/modelo, nova decisão do usuário, configurar variável true e criar `/etc/study-hub/fo-transcription.authorized` com a frase `I AUTHORIZE FO TRANSCRIPTION ON VPS`. Só então preflight deve mostrar gate permitido e o serviço pode ser iniciado manualmente. Nenhum desses passos de ativação foi executado. Benchmark real deve preceder promoção de um modelo como vencedor. Não há timer nem data de ativação automática.
+
+## Continuidade operacional — auditoria posterior, 21/10/2026 21:08 UTC
+
+- Branch local e remota continuam `feat/study-hub-migration`; o commit publicado mais recente é `1715c45604083efdd631fd8f110e79f16c263a7e`. Os arquivos Anki e demais alterações dirty preexistentes continuam fora dos commits FO.
+- Auditoria VPS: API FO ativa; Anki vNext sync/API/MCP/túnel ativos; materiais, vídeos e OneDrive concluíram suas últimas execuções com `Result=success`; catálogo está em execução/retry persistente; indexação está em execução contínua sob systemd, com `TimeoutStartSec=12h`, independente da sessão Hermes.
+- Contagem observada durante a reconciliação: 3.037 aulas, 652 materiais, 30.111 páginas, zero transcrições publicadas, 3.020 jobs queued e seis superseded. A contagem anterior não é tratada como final enquanto catálogo/indexação continuam.
+- A primeira política de privacidade experimental foi rejeitada após auditoria de falso positivo (rótulos genéricos marcavam quase todas as páginas). A política publicada `v2` limita a remoção automática a CPF válido e nome explicitamente associado ao marcador; páginas ambíguas são bloqueadas, não expostas. A reindexação completa está em andamento sob o serviço `study-hub-fo-index`; não declarar a cobertura final antes da conclusão.
+- O serviço indexador já registrou páginas com a política v2 enquanto continua trabalhando. A API foi reiniciada após o deploy para carregar o código novo. O resultado final, inclusive páginas `ocr_pending` e `privacy_review`, será verificado após o término.
+- Mesmo durante a reindexação, a API agora retorna texto vazio para toda página `blocked` ou `legacy_unreviewed`; a verificação real encontrou dez páginas bloqueadas consultadas e zero com texto exposto.
+- Vídeos: o manifesto observado durante a coleta tinha 235 `existing_remote_verified`, três `verified` e um `error`; havia dois temporários `.partial.mp4`. O código agora remove apenas parciais não validados do job correspondente antes de nova tentativa e preserva parciais de outros jobs.
+- Espaço observado: 7,5 GiB livres de 46 GiB; RAM disponível aproximada de 19 GiB, sem swap. A reserva de armazenamento dos vídeos permanece ativa.
+- O Notion continua sem conexão (`connected=false`); não foi autorizado login nem criado conteúdo remoto. Não há roadmap local identificável além dos documentos de migração/research existentes.
+- O gate ASR permanece fechado: `TRANSCRIPTION_ENABLED=false`, arquivo de autorização ausente, unit desabilitada/inativa, nenhum timer ASR e nenhum processo de inferência. Nenhuma fila foi consumida.
+
