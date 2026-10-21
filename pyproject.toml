@@ -1,11 +1,11 @@
 [project]
-name = "anki-study-platform"
+name = "study-hub"
 version = "0.1.0"
-description = "Private modular monorepo for Anki GPT and Cronograma FO"
+description = "Independent Anki vNext and Federal Online study infrastructure"
 requires-python = ">=3.10"
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "apps/anki-gpt/tests", "apps/cronograma-fo/tests"]
+testpaths = ["tests", "apps/anki-gpt/tests"]
 addopts = "-ra"
 
 [tool.ruff]

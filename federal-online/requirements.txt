@@ -1,0 +1,8 @@
+# Versions exercised on the VPS; Anki maintains its own environment.
+fastapi==0.156.4
+uvicorn==0.54.0
+httpx==0.28.1
+pypdf==6.21.1
+playwright==1.64.0
+# Optional stdio/in-process MCP adapter (same SDK as Anki vNext).
+mcp==2.2.0

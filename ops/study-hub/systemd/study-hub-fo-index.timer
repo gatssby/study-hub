@@ -1,0 +1,9 @@
+[Unit]
+Description=Study Hub FO index periodic check
+[Timer]
+OnCalendar=*:0/10
+RandomizedDelaySec=120
+Persistent=true
+Unit=study-hub-fo-index.service
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,97 @@
+[
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/01_principios_gerais.md",
+    "bytes": 5353,
+    "sha256": "fca9adaa267a7adf3f0908356a51d63a185f34e444bf77e2d9c7e7ecb37b82fd"
+  },
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/02_criterios_de_analise.md",
+    "bytes": 13461,
+    "sha256": "6f74f8b472f85b5da61cbbda1eee5c8a9740ef9cce5b5636ae298133b5f8b800"
+  },
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/03_padrao_de_reescrita.md",
+    "bytes": 17137,
+    "sha256": "036bfd0b4d8d9880584277a4c1dd30bda5967b7565625b72fe5f06fc13c06bb0"
+  },
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/04_estetica_e_exatas.md",
+    "bytes": 5021,
+    "sha256": "e88278d858505ca7e64cd13ef0d5d684c9d121b7e731ca0ad320d0306751b8ee"
+  },
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/05_fluxo_decks_grandes.md",
+    "bytes": 5096,
+    "sha256": "33c5632ed0d13179ed0c8793362e0cfd0b182dc60e1bf21cfcaf4fc7163de25c"
+  },
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/06_fluxo_fo_materiais_transcricoes.md",
+    "bytes": 9189,
+    "sha256": "fe7ec602fef28cc56142228934164f579f52a29b43ada64b6898e31bf3139bfc"
+  },
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/07_conversao_basic_para_cloze.md",
+    "bytes": 9397,
+    "sha256": "9ed7c32599ce40e0fdc60307e00ed820dbcf9b18d8c26f52c696d9a3e1e4b16a"
+  },
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/INSTRUCTIONS_CURTAS_GPT_BUILDER.md",
+    "bytes": 4705,
+    "sha256": "df25a82c6868b632bb3794e73ec998e77ed81dc9be46884b38967b57a17dae72"
+  },
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/MANUTENCAO_GPT_KNOWLEDGE.md",
+    "bytes": 7754,
+    "sha256": "a3e7e7c5d53d519125cc58aad34a3c90d34c09290100e32f24f749869a284c66"
+  },
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/Recorrência /biologia.md",
+    "bytes": 1886,
+    "sha256": "3d01ea797717364f86c7ed78a44ce0d38db7ff8d6292711033d28e9658372259"
+  },
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/Recorrência /biologia_segunda_fase.md",
+    "bytes": 1464,
+    "sha256": "fae3876d8bd26c5c0a65aed41889fe2734cb7f5d1a917ec69954296627cc3095"
+  },
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/Recorrência /fisica.md",
+    "bytes": 1393,
+    "sha256": "8b4c6a9164eec8028a3d2d4f2aef1b5a48c3329074ae943aea62c595afc19054"
+  },
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/Recorrência /geografia.md",
+    "bytes": 2652,
+    "sha256": "bdf8738cc1060d2f950256c7c831e86ffc7655f387e778fdcb0866f36504a1b7"
+  },
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/Recorrência /historia.md",
+    "bytes": 1636,
+    "sha256": "628e78a84e04ebde892003cf8a14a3606e9f5eb3a33abd1d11b2e95a681d37d1"
+  },
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/Recorrência /matematica.md",
+    "bytes": 1869,
+    "sha256": "1c7586410c2ce4c8c8d616e0f4dfa3bd92bae2f591f98bf294d20402c3f97b34"
+  },
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/Recorrência /portugues.md",
+    "bytes": 695,
+    "sha256": "cdc5c46abd923cce7813571c2ed756133877b192c6a2a5f4fc6f370b34f1cd4e"
+  },
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/Recorrência /quimica.md",
+    "bytes": 1986,
+    "sha256": "c42f89fce7537c5e348ccefb4a10ab63d8661b4645191907f9b2fd47115f4e65"
+  },
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/Recorrência /quimica_segunda_fase.md",
+    "bytes": 1841,
+    "sha256": "80259be587f7d0040e1354406cbe75b529e180210f6385b22b9777ba6f4cf98e"
+  },
+  {
+    "path": "apps/anki-gpt/gpt-knowledge/schema gpt.json",
+    "bytes": 58019,
+    "sha256": "278e90016382aed04212ed9bc262a56ee80acab0efeb43d495bd8d7b5f51af2b"
+  }
+]

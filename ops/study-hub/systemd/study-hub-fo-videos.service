@@ -1,0 +1,24 @@
+[Unit]
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/study-hub/federal-online
+EnvironmentFile=/home/ubuntu/.config/study-hub/runtime.env
+Environment=TRANSCRIPTION_ENABLED=false
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+Environment=TMPDIR=/home/ubuntu/study-hub-state/federal-online/tmp
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/ubuntu/study-hub-state/federal-online /home/ubuntu/.config/study-hub /home/ubuntu/.config/rclone
+CPUQuota=100%
+MemoryMax=2G
+TasksMax=512
+Type=oneshot
+ExecStart=/usr/bin/flock -n /home/ubuntu/study-hub-state/federal-online/locks/videos.lock /home/ubuntu/study-hub-venv/bin/python portal/video_runtime.py
+TimeoutStartSec=12h

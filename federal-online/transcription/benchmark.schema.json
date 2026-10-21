@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FO ASR benchmark result (one row per model x config x segment)",
+  "type": "object",
+  "required": ["run_id", "model", "config", "segment", "metrics", "resources"],
+  "properties": {
+    "run_id": {"type": "string"},
+    "executed_at": {"type": "string", "format": "date-time"},
+    "authorization_ref": {"type": "string", "description": "Referência da autorização explícita para executar"},
+    "model": {
+      "type": "object",
+      "required": ["name", "weights_sha256", "runtime", "runtime_version"],
+      "properties": {
+        "name": {"type": "string"},
+        "quantization": {"type": "string"},
+        "weights_sha256": {"type": "string"},
+        "runtime": {"enum": ["whisper.cpp", "transformers", "qwen-asr", "nemo", "other"]},
+        "runtime_version": {"type": "string"}
+      }
+    },
+    "config": {
+      "type": "object",
+      "required": ["language", "threads"],
+      "properties": {
+        "language": {"const": "pt"},
+        "threads": {"type": "integer"},
+        "beam_size": {"type": "integer"},
+        "temperature": {"type": "number"},
+        "vad": {"type": "boolean"},
+        "chunking": {"type": "string"},
+        "max_new_tokens": {"type": "integer"},
+        "forced_aligner": {"type": ["string", "null"]}
+      }
+    },
+    "segment": {
+      "type": "object",
+      "required": ["id", "audio_sha256", "stratum", "duration_s"],
+      "properties": {
+        "id": {"type": "string"},
+        "lecture_id": {"type": "string"},
+        "audio_sha256": {"type": "string"},
+        "stratum": {"enum": ["inicio", "meio_tecnico", "ruido_interacao", "sem_fala", "aula_inteira"]},
+        "duration_s": {"type": "number"},
+        "has_gold": {"type": "boolean"},
+        "gold_words": {"type": "integer"}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "wer": {"type": ["number", "null"]},
+        "cer": {"type": ["number", "null"]},
+        "term_recall": {"type": ["number", "null"]},
+        "term_wer": {"type": ["number", "null"]},
+        "nonspeech_chars_per_min": {"type": ["number", "null"]},
+        "repeated_4gram_loops": {"type": ["integer", "null"]},
+        "long_insertions": {"type": ["integer", "null"]},
+        "ts_abs_err_median_s": {"type": ["number", "null"]},
+        "ts_abs_err_p90_s": {"type": ["number", "null"]},
+        "ts_drift_end_s": {"type": ["number", "null"]}
+      }
+    },
+    "resources": {
+      "type": "object",
+      "required": ["rtf", "peak_rss_mb"],
+      "properties": {
+        "rtf": {"type": "number"},
+        "wall_s": {"type": "number"},
+        "peak_rss_mb": {"type": "number"},
+        "disk_weights_mb": {"type": "number"},
+        "failure": {"type": ["string", "null"]}
+      }
+    },
+    "hypothesis_path": {"type": "string"}
+  }
+}

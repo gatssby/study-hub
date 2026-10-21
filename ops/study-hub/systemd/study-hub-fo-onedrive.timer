@@ -1,0 +1,9 @@
+[Unit]
+Description=Study Hub FO onedrive periodic check
+[Timer]
+OnCalendar=*-*-* *:25:00
+RandomizedDelaySec=120
+Persistent=true
+Unit=study-hub-fo-onedrive.service
+[Install]
+WantedBy=timers.target

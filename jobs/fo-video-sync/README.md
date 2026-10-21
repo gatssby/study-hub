@@ -1,6 +1,6 @@
 # FO video sync
 
-Entrypoints preservados em `apps/cronograma-fo/scripts`:
-`fo_download_upload_videos.py` e `run_fo_video_upload_weekly.sh`.
+Entrypoint atual: `federal-online/portal/fo_download_upload_videos.py`
+(extração FO em andamento; o wrapper semanal do antigo Cronograma foi removido).
 Dependências de sistema: FFmpeg e rclone. A configuração rclone permanece fora
 do repositório.

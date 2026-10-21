@@ -7,7 +7,7 @@ on:
       - "contracts/**"
       - "packages/fo-contracts/**"
       - "jobs/fo-portal-sync/**"
-      - "apps/cronograma-fo/scripts/fo_collect_aulas_index.py"
+      - "federal-online/**"
       - "services/anki-api/query_api.py"
       - ".github/workflows/contracts-ci.yml"
   pull_request:
@@ -15,7 +15,7 @@ on:
       - "contracts/**"
       - "packages/fo-contracts/**"
       - "jobs/fo-portal-sync/**"
-      - "apps/cronograma-fo/scripts/fo_collect_aulas_index.py"
+      - "federal-online/**"
       - "services/anki-api/query_api.py"
 
 jobs:

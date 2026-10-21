@@ -330,6 +330,9 @@ def main() -> None:
         raise SystemExit("ANKI_MCP_V2_PORT must be between 1 and 65535")
     if not os.environ.get("ANKI_API_TOKEN", "").strip():
         raise SystemExit("ANKI_API_TOKEN is required")
+    if os.environ.get('STUDY_HUB_FO_TOOLS', 'false').lower() == 'true':
+        from fo_hub.mcp import register_tools
+        register_tools(mcp)
     mcp.run(
         transport="streamable-http",
         host=host,

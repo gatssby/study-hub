@@ -34,11 +34,6 @@ case "$COMPONENT" in
       "$ROOT/contracts/openapi/gpt-action-compact.openapi.json" \
       "$OUTPUT_DIR/scripts/gpt-action-compact.openapi.json"
     ;;
-  cronograma-fo)
-    rsync -aL "${COMMON_EXCLUDES[@]}" \
-      --exclude=cronograma_deploy_reset_db \
-      "$ROOT/apps/cronograma-fo/" "$OUTPUT_DIR/"
-    ;;
   addon)
     mkdir -p "$OUTPUT_DIR/addon-local" "$OUTPUT_DIR/local-tools"
     rsync -aL "${COMMON_EXCLUDES[@]}" "$ROOT/apps/anki-gpt/addon-local/" "$OUTPUT_DIR/addon-local/"

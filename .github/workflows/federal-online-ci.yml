@@ -1,0 +1,24 @@
+name: Federal Online
+on:
+  push:
+    paths: ["federal-online/**", "ops/study-hub/**", "services/anki-mcp-v2/**", ".github/workflows/federal-online-ci.yml"]
+  pull_request:
+    paths: ["federal-online/**", "ops/study-hub/**", "services/anki-mcp-v2/**", ".github/workflows/federal-online-ci.yml"]
+permissions:
+  contents: read
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    env:
+      TRANSCRIPTION_ENABLED: "false"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r federal-online/requirements.txt pytest
+      - name: FO fixtures and mocks only; never run ASR
+        run: python -m pytest federal-online/tests -q
+      - name: Preserve nineteen Anki tool contracts
+        run: python -m pytest services/anki-mcp-v2/tests -q

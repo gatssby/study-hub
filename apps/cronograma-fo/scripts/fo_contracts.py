@@ -1,1 +1,0 @@
-../../../packages/fo-contracts/fo_contracts.py

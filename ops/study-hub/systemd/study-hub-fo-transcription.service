@@ -1,0 +1,26 @@
+[Unit]
+Description=Study Hub transcription - explicit manual authorization required
+After=network-online.target
+ConditionPathExists=/etc/study-hub/fo-transcription.authorized
+ConditionPathExists=/etc/study-hub/fo-vps.marker
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/study-hub/federal-online
+EnvironmentFile=/home/ubuntu/.config/study-hub/transcription.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/ubuntu/study-hub-venv/bin/python -m fo_hub.worker --run --loop
+Restart=on-failure
+RestartPreventExitStatus=3
+RestartSec=60
+CPUQuota=300%
+MemoryMax=12G
+TasksMax=128
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/ubuntu/study-hub-state/federal-online /home/ubuntu/.config/rclone
+UMask=0077
+# No timer. Install target is optional, NEVER enable without new approval.
+[Install]
+WantedBy=multi-user.target

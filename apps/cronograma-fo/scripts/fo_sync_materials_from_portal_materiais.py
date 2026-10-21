@@ -1,1 +1,0 @@
-../../../jobs/fo-portal-sync/fo_sync_materials_from_portal_materiais.py
