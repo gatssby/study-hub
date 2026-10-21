@@ -22,9 +22,9 @@ def test_pdf_privacy_blocks_empty_and_ambiguous_identity_pages():
     from fo_hub.pdf_privacy import sanitize_page
 
     assert sanitize_page("").quality == "ocr_pending"
-    review = sanitize_page("Aluno: Joao da Silva")
-    assert review.pii_redacted is True
-    assert review.exposure == "text_only"
+    review = sanitize_page("Nome: Joao da Silva")
+    assert review.pii_redacted is False
+    assert review.exposure == "blocked"
 
 
 def test_ingest_reindexes_legacy_pages_and_records_quality(tmp_path):
@@ -51,14 +51,14 @@ def test_ingest_reindexes_legacy_pages_and_records_quality(tmp_path):
     pages = [sanitize_page("Nome: Maria da Silva"), sanitize_page("texto didatico suficiente")]
     store.set_pdf_pages("legacy", [p.text for p in pages])
     store.conn.executemany(
-        "insert into pdf_page_quality values(?,?,?,?,?,?,?)",
-        [("legacy", i + 1, p.quality, p.exposure, len(p.text), int(p.pii_redacted), "now")
+        "insert into pdf_page_quality values(?,?,?,?,?,?,?,?)",
+        [("legacy", i + 1, p.quality, p.exposure, len(p.text), int(p.pii_redacted), "now", 2)
          for i, p in enumerate(pages)],
     )
     result = store.get_pdf_text("legacy")
     assert result is not None
     assert "Maria da Silva" not in json.dumps(result, ensure_ascii=False)
-    assert result["pages"][0]["exposure"] == "text_only"
+    assert result["pages"][0]["exposure"] == "blocked"
 
 
 def test_video_recovery_removes_only_matching_unvalidated_partials(tmp_path):

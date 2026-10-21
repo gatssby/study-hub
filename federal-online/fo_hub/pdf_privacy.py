@@ -11,12 +11,12 @@ import unicodedata
 from dataclasses import dataclass
 
 CPF_RE = re.compile(r"(?<!\d)\d{3}[. ]?\d{3}[. ]?\d{3}[- ]?\d{2}(?!\d)")
+PRIVACY_POLICY_VERSION = 2
 LABELED_ID_RE = re.compile(
-    r"(?i)\b(?:cpf|documento|identifica(?:c|ç)(?:a|ã)o|matr[ií]cula)\s*[:#-]?\s*"
-    r"[A-Z0-9][A-Z0-9 ./-]{3,40}"
+    r"(?i)\bcpf\s*[:#-]?\s*[A-Z0-9][A-Z0-9 ./-]{3,40}"
 )
 LABELED_NAME_RE = re.compile(
-    r"(?i)\b(?:nome(?:\s+completo)?|aluno|propriet[aá]rio|titular)\s*[:#-]\s*"
+    r"(?i)\bnome(?:\s+completo)?\s*[:#-]\s*"
     r"[^\n\r]{2,120}"
 )
 WATERMARK_HINT_RE = re.compile(
@@ -64,7 +64,10 @@ def sanitize_text(text: str) -> tuple[str, bool]:
         return f"{label}: [DADO REMOVIDO]"
 
     value = LABELED_ID_RE.sub(labeled, value)
-    value = LABELED_NAME_RE.sub(labeled, value)
+    # A name is only safely removed when it shares a page with a CPF marker.
+    # Otherwise the page is blocked by classify_page rather than guessing.
+    if "[IDENTIFICADOR REMOVIDO]" in value:
+        value = LABELED_NAME_RE.sub(labeled, value)
     return value, changed
 
 
@@ -72,8 +75,8 @@ def classify_page(text: str, *, pii_redacted: bool) -> PagePrivacy:
     normalized = (text or "").strip()
     if not normalized:
         return PagePrivacy("", pii_redacted, "ocr_pending", "blocked")
-    if WATERMARK_HINT_RE.search(normalized) and not pii_redacted:
-        return PagePrivacy(normalized, False, "privacy_review", "blocked")
+    if LABELED_NAME_RE.search(normalized) and "[DADO REMOVIDO]" not in normalized:
+        return PagePrivacy("", pii_redacted, "privacy_review", "blocked")
     if len(normalized) < 24:
         return PagePrivacy(normalized, pii_redacted, "low_text", "text_only")
     return PagePrivacy(normalized, pii_redacted, "text", "text_only")

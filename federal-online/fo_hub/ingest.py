@@ -7,7 +7,7 @@ import os
 import time
 from .store import FOStore, lesson_id_for
 from .transcription import TranscriptionQueue
-from .pdf_privacy import sanitize_page
+from .pdf_privacy import PRIVACY_POLICY_VERSION, sanitize_page
 
 
 def canonical(url):
@@ -38,6 +38,10 @@ def ingest(state,db_path,index_pdfs=True):
         exposure TEXT NOT NULL, extracted_chars INTEGER NOT NULL DEFAULT 0,
         pii_redacted INTEGER NOT NULL DEFAULT 0, updated_at TEXT,
         PRIMARY KEY(material_id, page));''')
+    try:
+        c.execute('ALTER TABLE pdf_page_quality ADD COLUMN policy_version INTEGER NOT NULL DEFAULT 1')
+    except Exception:
+        pass
     candidates={}
     paths=sorted((state/'catalog').rglob('aulas_index*.json'))
     paths+=sorted((state/'catalogs').rglob('aulas_index*.json'))
@@ -122,7 +126,7 @@ def ingest(state,db_path,index_pdfs=True):
                 mid='pdf_'+digest[:24]
                 store.upsert_material({'material_id':mid,'subject':item.get('output_subject') or item.get('portal_subject'),'front':item.get('portal_subject'),'module':item.get('group'),'title':Path(item.get('file_name') or path.name).stem,'material_type':item.get('material_type'),'relative_path':str(path.relative_to(state)),'sha256':digest})
                 count=c.execute('SELECT count(*) FROM pdf_pages WHERE material_id=?',(mid,)).fetchone()[0]
-                reviewed=c.execute('SELECT count(*) FROM pdf_page_quality WHERE material_id=?',(mid,)).fetchone()[0]
+                reviewed=c.execute('SELECT count(*) FROM pdf_page_quality WHERE material_id=? AND policy_version=?',(mid,PRIVACY_POLICY_VERSION)).fetchone()[0]
                 if index_pdfs and (count==0 or reviewed==0):
                     from pypdf import PdfReader
                     privacy_pages=[sanitize_page(page.extract_text() or '') for page in PdfReader(path).pages]
@@ -130,8 +134,8 @@ def ingest(state,db_path,index_pdfs=True):
                     with c:
                         c.execute('DELETE FROM pdf_page_quality WHERE material_id=?',(mid,))
                         c.executemany(
-                            'INSERT INTO pdf_page_quality VALUES(?,?,?,?,?,?,?)',
-                            [(mid,i+1,p.quality,p.exposure,len(p.text),int(p.pii_redacted),time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()))
+                            'INSERT INTO pdf_page_quality VALUES(?,?,?,?,?,?,?,?)',
+                            [(mid,i+1,p.quality,p.exposure,len(p.text),int(p.pii_redacted),time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),PRIVACY_POLICY_VERSION)
                              for i,p in enumerate(privacy_pages)])
                     page_count+=len(privacy_pages)
             except Exception as exc:

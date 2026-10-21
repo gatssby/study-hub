@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS pdf_page_quality(
   material_id TEXT NOT NULL, page INTEGER NOT NULL, quality TEXT NOT NULL,
   exposure TEXT NOT NULL, extracted_chars INTEGER NOT NULL DEFAULT 0,
   pii_redacted INTEGER NOT NULL DEFAULT 0, updated_at TEXT,
+  policy_version INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY(material_id, page));
 CREATE TABLE IF NOT EXISTS transcripts(
   lesson_id TEXT NOT NULL, version INTEGER NOT NULL, model TEXT, corpus TEXT NOT NULL,
