@@ -1,6 +1,6 @@
 # Study Hub — relatório da migração de 21/10/2026
 
-Estado verificado em 21/10/2026; snapshot das contagens às 05:22:59 UTC (02:22:59 -03). Coletas iniciais longas continuam por systemd. Nenhuma data substitui a autorização explícita exigida para transcrições.
+Relatório histórico da migração, com atualização operacional de 21/10/2026 abaixo. O snapshot inicial das contagens é das 05:22:59 UTC (02:22:59 -03); a seção de continuidade prevalece para o estado posterior. Nenhuma data substitui a autorização explícita exigida para transcrições.
 
 ## Regras e decisões
 
@@ -90,6 +90,37 @@ Commit de desenho/plano: `941b1eb`. Implementação e retirada classificada: `01
 - Notion: conector consultado, `connected=false`; não atualizado e não bloqueia produção.
 - Delegações falharam por HTTP 429 do provedor. O coordenador assumiu integração e implementação do worker; não se considera a mensagem de falha como evidência de código concluído.
 - Revisão independente também bloqueada por HTTP 429. Realizada auto-revisão de segurança pelo autor, mais fraca que revisão independente. Corrigidas recuperação de temporários marcados, limite explícito rclone por tamanho, checkpoint de materiais e permissões mínimas de refresh de token rclone. Configurações compartilhadas de outros projetos não foram editadas.
+
+## Continuidade operacional — 21/10/2026, após auditoria externa
+
+Não se repetiram migrações nem exclusões. A branch continua `feat/study-hub-migration`, sem merge na principal. Os 16 arquivos fonte modificados preexistentes foram conferidos por SHA-256 e permaneceram idênticos; as 85 entradas anteriores não foram incluídas nos commits desta correção.
+
+### Causas e correções
+
+- **OneDrive:** o serviço estava failed após `rclone check`; a implementação descartava stderr e gravava `pdf_sync=absent` mesmo diante de falha. A causa exata daquele erro remoto não pode ser recuperada com certeza dos logs antigos. Foram reproduzidas duas falhas locais reais: inclusão de PDFs em `.build_*` ainda não publicados e ausência de exclusão mútua entre promoção e copy/check. Corrigidos os filtros e adotado lock compartilhado durante copy/check, exclusivo na promoção. Downloads continuam em staging enquanto a promoção aguarda. Status passa a registrar fase/código da falha atomicamente; diagnóstico privado tem URLs/tokens redigidos. Nenhuma divergência foi ignorada nem foi usado delete/sync/purge remoto.
+- **Filtros:** a busca por substring classificava `Sociologia - Federal` como disciplina estrangeira dentro de `Sociologia - Federal - Intensivo`. A validação agora usa a célula exata da disciplina e continua recusando linhas realmente estrangeiras.
+- **PDFs de Medicina:** o portal oferece `btnMaterialView`, não download, e deixa o modal aberto. Usa-se o endpoint de metadados `documento-online-key` e sua URL, sem abrir o viewer. O primeiro ensaio após o reparo revelou OOM; esses PDFs têm **228.728.330 e 126.305.935 bytes**. Abrir canvases ou reter o corpo no driver Playwright não é seguro no limite de 2 GiB. O transporte passou a streaming HTTPX com cookies por domínio, limite de 256 MiB/120 segundos, validação `%PDF-` e publicação atômica do temporário. Não se aumentou o limite de memória para ocultar o problema.
+- **Indexação:** o glob também podia aceitar manifesto `.build_*`. Acrescentado teste e exclusão dessas entradas; só material publicado deve ser indexado.
+
+### Evidência em produção
+
+- OneDrive corrigido concluiu em **17:19:24 UTC**; nova passagem após publicação dos PDFs concluiu em **17:36:49 UTC**, ambas `Result=success`, `ExecMainStatus=0`. Byte check real e leitura de volta do alvo remoto `metadata/sync-status.json` iguais ao estado local; `pdf_sync=verified`. O campo `updated_at` identifica o início da passagem (17:30:48 UTC), não seu horário de conclusão.
+- Materiais concluíram em **17:29:52 UTC**, `Result=success`, `ExecMainStatus=0`, `NRestarts=0` desde o reinício controlado. Checkpoint `in_progress=false`, `done=[]`, sem loop de retry pendente. Journal confirmou ambos os PDFs de Medicina via document key e download de Sociologia sem erro incoerente. Pico observado após streaming: **732.798.976 bytes**; journal registrou 698,8 MiB no encerramento.
+- Catálogo: os oito cursos já possuem passagem concluída OK: Base 424, Ciências Básica 27, Extensivo 1.070, Matemática 25, Medicina 49, Redação 24, Semiextensivo 839 e Simulados 422. Nova reconciliação do Extensivo está avançando por checkpoint; não se confunde isso com catálogo parado ou remoção de aulas.
+- Vídeos: estado incremental passou a **219 existing_remote_verified + 1 verified**, sem item error nessa leitura. A tentativa antes incompleta foi validada pelo worker persistente, não por download manual do coordenador.
+- Reindexação após os PDFs concluiu em **17:31:37 UTC**, `Result=success`, `ExecMainStatus=0`. Banco observado às **17:32:20 UTC**: **3.033 aulas, 652 materiais, 30.111 páginas**, 3.017 jobs queued e seis superseded. Tabelas `transcripts` e `transcript_segments` continuam com zero linhas; queued não significa execução de inferência.
+- Anki sync/API/MCP/túnel e API FO permaneceram ativos. Gate ASR continua false, autorização ausente, unit disabled/inactive, preflight `inference_executed=false`.
+
+### Testes e commits desta continuidade
+
+- **106 testes FO locais passaram**. Regressões RED→GREEN para filtros exatos, recuperação do PDF, segredo fora do log, transporte sem viewer, limites de streaming, exclusão de staging/lock real rclone, fases de falha e manifesto de indexação ainda não publicado. O teste rclone local não usa rede nem áudio; a validação remota real é separada.
+- `c558b97`: recuperação de PDFs/filtros, publicação coordenada e diagnóstico OneDrive.
+- `00c8dc5`: streaming dos PDFs grandes, sem canvases/retention no driver.
+- `58fe728`: indexação somente de manifestos publicados.
+- Commits publicados e alvo GitHub consultado. CI do `58fe728` concluído com sucesso em **Federal Online, Contracts e Repository Safety**; mesmas três verificações verdes em `c558b97` e `00c8dc5`. Hashes locais/deploy iguais nos quatro fontes alterados (`onedrive.py`, `ingest.py`, runtime e extrator de materiais).
+- Revisão independente de `c558b97`/`00c8dc5` não encontrou defeitos importantes e executou 105 testes. O pequeno ajuste posterior `58fe728` teve teste RED→GREEN próprio, suíte local de 106 testes e CI verde; não se atribui esse ajuste à revisão anterior.
+- Limites conhecidos, não bloqueantes no ensaio real: transferência do PDF falha explicitamente acima de 256 MiB ou 120 segundos; documentos maiores/conexão lenta podem exigir revisão desses limites. A promoção aguarda o lock do OneDrive, cujos dois subprocessos têm timeout de 7.200 segundos cada. Não se encobre essa espera como download travado.
+- Alterações de terceiros continuam locais. A checagem global de whitespace ainda acusa avisos preexistentes nos arquivos Anki; eles não foram corrigidos incidentalmente. Nenhum merge foi executado, nenhum backup criado e nenhum dado compartilhado apagado nesta continuidade.
 
 ## ATIVAÇÃO DAS TRANSCRIÇÕES — AGUARDANDO AUTORIZAÇÃO DO USUÁRIO
 
