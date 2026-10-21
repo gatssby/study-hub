@@ -218,6 +218,20 @@ def test_material_checkpoint_never_marks_download_done_before_manifest_commit(tm
     assert cp['in_progress'] and cp['done']==[]
 
 
+def test_material_promotion_takes_exclusive_lock_shared_with_onedrive(tmp_path):
+    held=[]
+    def write_manifest(*args):
+        lock=tmp_path/'locks/materials-publication.lock'
+        with lock.open('a+') as handle:
+            try:fcntl.flock(handle,fcntl.LOCK_SH|fcntl.LOCK_NB)
+            except BlockingIOError:held.append(True)
+            else:held.append(False)
+    assert runtime.materials(ns(tmp_path,'materials'),discover_options=lambda:OPTIONS,
+                             process=fake_process(),write_manifest=write_manifest,
+                             log=lambda m:None)==0
+    assert held==[True,True]
+
+
 def test_clean_select_options_and_area_fallback():
     import fo_sync_materials_from_portal_materiais as mat
     opts = mat.clean_select_options([{"value": "", "label": "Selecione"}, {"value": "9", "label": " Redação  UFPR "},

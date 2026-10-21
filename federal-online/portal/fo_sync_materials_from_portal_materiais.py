@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urlencode, urljoin
 
 from fo_session_security import protect_storage_state, save_storage_state
 from fo_sync_materials import (
@@ -204,6 +204,7 @@ class PortalRow:
     data_path: str
     data_token: str
     data_value: str
+    action_name: str = ""
 
 
 def sanitize_filename(name: str) -> str:
@@ -1043,10 +1044,13 @@ def collect_visible_filter_diagnostics(page: Any, extra_subjects: list[str] | No
 
           const visibleSubjects = new Set();
           const snippets = [];
+          const rowSubjects = [];
           for (const row of rows) {
             const text = (row.innerText || row.textContent || "").replace(/\\s+/g, " ").trim();
             const textNorm = normalize(text);
             snippets.push(text.slice(0, 300));
+            const cells = row.querySelectorAll("td");
+            rowSubjects.push(((cells[2]?.innerText || cells[2]?.textContent || "")).replace(/\\s+/g, " ").trim());
             for (const subject of normalizedSubjects) {
               if (subject.norm && textNorm.includes(subject.norm)) {
                 visibleSubjects.add(subject.raw);
@@ -1064,6 +1068,7 @@ def collect_visible_filter_diagnostics(page: Any, extra_subjects: list[str] | No
           return {
             row_count: rows.length,
             visible_subjects: Array.from(visibleSubjects),
+            row_subjects: rowSubjects,
             selected_course_text: getSelectedText("#idCurso"),
             selected_discipline_text: getSelectedText("#idDisciplina"),
             row_snippets: snippets.slice(0, 12),
@@ -1092,7 +1097,7 @@ def validate_filtered_results(
             "disciplina sem materiais no momento."
         )
         return
-    visible_subjects = [str(item) for item in diagnostics["visible_subjects"]]
+    visible_subjects = coherent_visible_subjects(diagnostics, portal_subject)
     if portal_subject not in visible_subjects:
         raise RuntimeError(
             f"[{portal_subject}] Resultado filtrado incoerente: disciplina alvo nao aparece nas linhas visiveis. "
@@ -1108,6 +1113,29 @@ def validate_filtered_results(
             f"[{portal_subject}] disciplina_selecionada_pos_submit vazia; "
             "mantendo execucao porque a tabela filtrada esta coerente."
         )
+def coherent_visible_subjects(diagnostics: dict[str, Any], portal_subject: str) -> list[str]:
+    """Subjects really present in the filtered rows.
+
+    Row text is matched by substring, so "Sociologia - Federal" is a false hit inside
+    "Sociologia - Federal - Intensivo". Prefer the exact subject cell; otherwise drop
+    any subject that is only a substring of another matched subject.
+    """
+    row_subjects = [str(item).strip() for item in diagnostics.get("row_subjects") or [] if str(item).strip()]
+    if row_subjects:
+        seen: list[str] = []
+        for item in row_subjects:
+            label = portal_subject if normalize_text(item) == normalize_text(portal_subject) else item
+            if label not in seen:
+                seen.append(label)
+        return seen
+    raw = [str(item) for item in diagnostics.get("visible_subjects") or []]
+    norms = {item: normalize_text(item) for item in raw}
+    return [
+        item for item in raw
+        if not any(other != item and norms[item] in norms[other] for other in raw)
+    ]
+
+
 def list_select_options(page: Any, selector: str) -> list[dict[str, str]]:
     """Real <option> values/labels of an existing filter select (e.g. #idCurso, #idDisciplina)."""
     raw = page.evaluate(
@@ -1268,6 +1296,7 @@ def collect_material_rows(page: Any, logger: Logger, portal_subject: str) -> lis
                 action_text: text,
                 action_href: href,
                 action_tag: (clickable.tagName || "").toLowerCase(),
+                action_name: clickable.getAttribute("name") || "",
                 action_score: score,
                 data_path: clickable.getAttribute("data-path") || "",
                 data_token: clickable.getAttribute("data-token") || "",
@@ -1295,6 +1324,7 @@ def collect_material_rows(page: Any, logger: Logger, portal_subject: str) -> lis
               action_text: bestAction.action_text,
               action_href: bestAction.action_href,
               action_tag: bestAction.action_tag,
+              action_name: bestAction.action_name || "",
               action_score: bestAction.action_score,
               data_path: bestAction.data_path || "",
               data_token: bestAction.data_token || "",
@@ -1327,6 +1357,7 @@ def collect_material_rows(page: Any, logger: Logger, portal_subject: str) -> lis
                 action_text=str(item.get("action_text") or ""),
                 action_href=str(item.get("action_href") or ""),
                 action_tag=str(item.get("action_tag") or ""),
+                action_name=str(item.get("action_name") or ""),
                 action_score=int(item.get("action_score") or 0),
                 data_path=str(item.get("data_path") or ""),
                 data_token=str(item.get("data_token") or ""),
@@ -1501,6 +1532,58 @@ def download_via_fallback_fetch(
     return None
 
 
+DOCUMENT_KEY_PATH = "/portal/documento-online-key"
+
+
+def dismiss_material_modal(page: Any, logger: Logger) -> None:
+    """Close the pdf.js viewer modal (#modal1) so it stops intercepting row clicks."""
+    try:
+        page.evaluate(
+            """
+            () => {
+              for (const btn of document.querySelectorAll(".modal.show [data-dismiss='modal']")) btn.click();
+              for (const modal of document.querySelectorAll(".modal.show")) {
+                modal.classList.remove("show");
+                modal.style.display = "none";
+              }
+              document.querySelectorAll(".modal-backdrop").forEach((node) => node.remove());
+              document.body.classList.remove("modal-open");
+            }
+            """
+        )
+        page.wait_for_timeout(300)
+    except Exception as exc:
+        logger.log(f"[modal] falha ao fechar visualizador detalhe={summarize_exception(exc)}")
+
+
+def download_via_document_key(page: Any, row: PortalRow, logger: Logger, destination: Path) -> str | None:
+    """View-only rows (btnMaterialView, hidden download button) render via pdf.js from the
+    URL returned by /portal/documento-online-key; fetch it with the session cookies."""
+    if not row.data_value or not row.data_token:
+        return None
+    key_url = urljoin(page.url, DOCUMENT_KEY_PATH) + "?" + urlencode(
+        {"idDocumento": row.data_value, "tipo": "I", "token": row.data_token}
+    )
+    try:
+        key_resp = page.request.get(key_url, timeout=30_000)
+        payload = json.loads(key_resp.text())
+        pdf_url = str((payload or {}).get("url") or "")
+        if not pdf_url:
+            logger.log(f"[document_key] resposta sem url status={(payload or {}).get('status')}")
+            return None
+        pdf_url = urljoin(page.url, pdf_url)
+        pdf_resp = page.request.get(pdf_url, timeout=60_000)
+        body = pdf_resp.body()
+        if not body.startswith(b"%PDF-"):
+            logger.log(f"[document_key] conteudo nao-PDF http={getattr(pdf_resp, 'status', '?')} bytes={len(body)}")
+            return None
+        destination.write_bytes(body)
+        return pdf_url
+    except Exception as exc:
+        logger.log(f"[document_key] falhou tipo={type(exc).__name__}")
+        return None
+
+
 def download_material_row(
     page: Any,
     config: PortalRuntimeConfig,
@@ -1509,6 +1592,15 @@ def download_material_row(
     row: PortalRow,
     destination: Path,
 ) -> str:
+    if getattr(row,'action_name','')=='btnMaterialView':
+        # Rendering all PDF canvases can exhaust the browser's cgroup before
+        # the native download timeout. View-only documents use the API directly.
+        dismiss_material_modal(page,logger)
+        source_url=download_via_document_key(page,row,logger,destination)
+        if source_url and destination.exists():
+            logger.log(f"[{portal_subject}] PDF obtido via documento-online-key data_path={row.data_path}")
+            return source_url
+        raise RuntimeError('View-only document key did not return a PDF; viewer was not opened')
     try:
         logger.log(
             f"[{portal_subject}] tentando download nativo tipo={row.material_type} "
@@ -1528,7 +1620,13 @@ def download_material_row(
             f"detalhe={summarize_exception(exc)}"
         )
 
+    dismiss_material_modal(page, logger)
+    source_url = download_via_document_key(page, row, logger, destination)
+    if source_url and destination.exists():
+        logger.log(f"[{portal_subject}] PDF obtido via documento-online-key data_path={row.data_path}")
+        return source_url
     source_url = download_via_fallback_fetch(page, row, logger, destination)
+    dismiss_material_modal(page, logger)
     if source_url and destination.exists():
         return source_url
     raise RuntimeError("Nenhuma estrategia de download conseguiu obter o PDF.")

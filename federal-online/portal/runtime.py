@@ -336,10 +336,14 @@ def materials(args: argparse.Namespace, *, discover_options: Callable[[], list[d
                         failures += 1
                         log(f"[materials] {job['key']} falhou: {exc}")
                     try:
-                        if entries:
-                            write_manifest(build, entries)
-                            _write_course_manifest(final_dir, build, entries)
-                        merge_materials(build, final_dir)
+                        # OneDrive holds a shared lock from copy through check;
+                        # publish a new generation only outside that interval.
+                        with (paths.state_root/'locks/materials-publication.lock').open('a+') as publication:
+                            fcntl.flock(publication,fcntl.LOCK_EX)
+                            if entries:
+                                write_manifest(build, entries)
+                                _write_course_manifest(final_dir, build, entries)
+                            merge_materials(build, final_dir)
                     except Exception as exc:
                         failures+=1
                         log(f"[materials] promotion failed for {job['key']}: {type(exc).__name__}")
