@@ -84,7 +84,7 @@ def register_tools(server: MCPServer, client: FOClient | None = None) -> MCPServ
                             type: str | None = None,
                             limit: Annotated[int, Field(ge=1, le=200)] = 50,
                             offset: Annotated[int, Field(ge=0)] = 0) -> Any:
-        """Find materials by metadata; returns original source citations and dates."""
+        """Find materials with versioned citations and dates; private originals are not exposed."""
         return client.get("/fo/materials", subject=subject, front=front, module=module,
                           title=title, type=type, limit=limit, offset=offset)
 

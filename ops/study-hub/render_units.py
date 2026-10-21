@@ -38,10 +38,16 @@ def render(directory):
         'videos':('portal/video_runtime.py','hourly'),
         'index':('-m fo_hub.ingest','*:0/10'),
         'onedrive':('-m fo_hub.onedrive','*-*-* *:25:00'),
+        'ocr':('-m fo_hub.ocr','*:05/10'),
     }
     for name,(command,calendar) in jobs.items():
         unit=f'study-hub-fo-{name}'
         text=COMMON+f'Type=oneshot\nExecStart=/usr/bin/flock -n {STATE}/locks/{name}.lock {PY} {command}\nTimeoutStartSec=12h\n'
+        if name == 'ocr':
+            text=(COMMON.replace('CPUQuota=100%', 'CPUQuota=25%')
+                  .replace('MemoryMax=2G', 'MemoryMax=512M').replace('TasksMax=512', 'TasksMax=32')
+                  +f'Type=oneshot\nExecStart=/usr/bin/flock -n -E 75 {STATE}/locks/index.lock {PY} {command}\n'
+                  +'SuccessExitStatus=75\nTimeoutStartSec=5min\nNice=15\nIOSchedulingClass=idle\n')
         if name in ('catalog','materials'):
             text+='Restart=on-failure\nRestartSec=900\nRestartPreventExitStatus=2\n'
         (directory/(unit+'.service')).write_text(text)

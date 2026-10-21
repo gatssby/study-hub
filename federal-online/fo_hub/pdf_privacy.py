@@ -10,10 +10,10 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-CPF_RE = re.compile(r"(?<!\d)\d{3}[. ]?\d{3}[. ]?\d{3}[- ]?\d{2}(?!\d)")
-PRIVACY_POLICY_VERSION = 2
+CPF_RE = re.compile(r"(?<!\d)\d{3}[.\s]*\d{3}[.\s]*\d{3}[-\s]*\d{2}(?!\d)")
+PRIVACY_POLICY_VERSION = 3
 LABELED_ID_RE = re.compile(
-    r"(?i)\bcpf\s*[:#-]?\s*[A-Z0-9][A-Z0-9 ./-]{3,40}"
+    r"(?i)\bcpf[ \t]*[:#-][ \t]*[0-9][0-9 ./-]{3,40}"
 )
 LABELED_NAME_RE = re.compile(
     r"(?i)\bnome(?:\s+completo)?\s*[:#-]\s*"
@@ -66,17 +66,40 @@ def sanitize_text(text: str) -> tuple[str, bool]:
     value = LABELED_ID_RE.sub(labeled, value)
     # A name is only safely removed when it shares a page with a CPF marker.
     # Otherwise the page is blocked by classify_page rather than guessing.
-    if "[IDENTIFICADOR REMOVIDO]" in value:
+    if "[IDENTIFICADOR REMOVIDO]" in value or "[DADO REMOVIDO]" in value:
         value = LABELED_NAME_RE.sub(labeled, value)
+        marker = "[IDENTIFICADOR REMOVIDO]"
+        # A repeated unlabelled watermark supplies its own delimiter. Learn
+        # only short, letter-only name spans BETWEEN identifiers, never from a
+        # person's configured identity or production fixture. Single/ambiguous
+        # marks remain blocked, not guessed. Existing v2 text is also supported.
+        spans = value.split(marker)
+        names = {" ".join(span.split()) for span in spans[1:-1]
+                 if re.fullmatch(r"\s*[^\W\d_]+(?:\s+[^\W\d_]+){1,7}\s*", span)}
+        for name in names:
+            pattern = r"(?<!\w)" + r"\s+".join(map(re.escape, name.split())) + r"\s*" + re.escape(marker)
+            if len(re.findall(pattern, value)) >= 2:
+                value = re.sub(pattern, "[MARCA D'AGUA REMOVIDA]", value)
+                changed = True
+                # A clipped/reordered watermark might leave the name without
+                # its identifier. Do not release it via a successful partial match.
+                if re.search(r"\b" + r"\s+".join(map(re.escape, name.split())) + r"\b", value):
+                    return "[REVISAO PRIVACIDADE NECESSARIA]", True
+        if "[DADO REMOVIDO]" in value:
+            value = re.sub(r"(?i)\bCPF\s*[:#-]\s*" + re.escape(marker), "CPF: [DADO REMOVIDO]", value)
     return value, changed
 
 
 def classify_page(text: str, *, pii_redacted: bool) -> PagePrivacy:
     normalized = (text or "").strip()
-    if not normalized:
+    content = normalized.replace("[MARCA D'AGUA REMOVIDA]", "").strip()
+    if not content:
         return PagePrivacy("", pii_redacted, "ocr_pending", "blocked")
-    if LABELED_NAME_RE.search(normalized) and "[DADO REMOVIDO]" not in normalized:
+    if "[IDENTIFICADOR REMOVIDO]" in normalized or "[REVISAO PRIVACIDADE NECESSARIA]" in normalized:
         return PagePrivacy("", pii_redacted, "privacy_review", "blocked")
+    for name in LABELED_NAME_RE.finditer(normalized):
+        if not re.search(r"[:#-]\s*\[DADO REMOVIDO\]\s*$", name.group()):
+            return PagePrivacy("", pii_redacted, "privacy_review", "blocked")
     if len(normalized) < 24:
         return PagePrivacy(normalized, pii_redacted, "low_text", "text_only")
     return PagePrivacy(normalized, pii_redacted, "text", "text_only")

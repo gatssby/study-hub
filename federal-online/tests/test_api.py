@@ -55,3 +55,25 @@ def test_endpoints(client):
 def test_writes_rejected(client):
     assert client.post("/fo/lessons").status_code == 405
     assert client.get("/fo/lessons", params={"limit": 10000}).status_code == 422
+
+
+def test_pdf_inverted_interval_matches_mcp_validation(client):
+    assert client.get('/fo/materials/m1/pdf-text', params={'page_start': 2, 'page_end': 1}).status_code == 422
+
+
+def test_materials_include_citation_but_never_publish_private_original(client):
+    material = client.get('/fo/materials').json()['items'][0]
+    assert material['citation']['id'] == material['material_id']
+    assert material['citation']['version'] == material['sha256']
+    assert material['source_url'] is None
+    assert material['source_access'] == 'private_original_not_exposed'
+
+
+def test_tied_titles_have_stable_identifier_pagination(tmp_path):
+    store = FOStore(tmp_path / 'ties.db')
+    store.sync_lessons([{'course_id': 'c', 'media_id': str(i), 'title': 'Same'} for i in range(10)])
+    ids = [r['lesson_id'] for r in store.list_lessons()]
+    assert ids == sorted(ids)
+    for mid in ['z', 'b', 'a']:
+        store.upsert_material({'material_id': mid, 'title': 'Same'})
+    assert [r['material_id'] for r in store.search_materials()] == ['a', 'b', 'z']

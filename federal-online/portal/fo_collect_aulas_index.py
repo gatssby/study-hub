@@ -1250,14 +1250,6 @@ def collect_direct_videos(
                 error="",
                 video_stream_url=video_stream_url,
             )
-            entries.append(entry)
-            seen_keys.add(dedupe_key)
-            checkpoint_writer()
-            logger.log(
-                "[write] "
-                f"status={entry['status']} source_ref={subject_group} ordem={video_order} "
-                f"media_id={entry['media_id'] or '-'} titulo={entry['titulo_original']}"
-            )
         except Exception as exc:
             if page_requires_login(page):
                 raise SessionExpiredDuringCollection(
@@ -1282,6 +1274,17 @@ def collect_direct_videos(
                 "[warn] "
                 f"status={status} source_ref={subject_group} ordem={video_order} "
                 f"titulo={entry['titulo_original'] or title_hint or '-'} detalhe={error}"
+            )
+        else:
+            # Publication errors are not video-unavailability errors. Propagate
+            # them so the course fails and its last durable checkpoint survives.
+            entries.append(entry)
+            seen_keys.add(dedupe_key)
+            checkpoint_writer()
+            logger.log(
+                "[write] "
+                f"status={entry['status']} source_ref={subject_group} ordem={video_order} "
+                f"media_id={entry['media_id'] or '-'} titulo={entry['titulo_original']}"
             )
         finally:
             detach_network_listeners(page, network_listeners)
@@ -1712,12 +1715,14 @@ def collect_index(
                 )
         return entries
     finally:
-        if context is not None:
-            context.close()
-        if browser is not None:
-            browser.close()
-        if playwright is not None:
-            playwright.stop()
+        # A disconnected/crashed context may raise on close. Still release the
+        # browser and driver, without masking the original collection failure.
+        for resource, method in ((context, "close"), (browser, "close"), (playwright, "stop")):
+            if resource is not None:
+                try:
+                    getattr(resource, method)()
+                except Exception:
+                    pass
 
 
 def main() -> int:

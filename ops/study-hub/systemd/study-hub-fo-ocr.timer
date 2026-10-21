@@ -1,0 +1,9 @@
+[Unit]
+Description=Study Hub FO ocr periodic check
+[Timer]
+OnCalendar=*:05/10
+RandomizedDelaySec=120
+Persistent=true
+Unit=study-hub-fo-ocr.service
+[Install]
+WantedBy=timers.target

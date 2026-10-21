@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 
 from mcp import Client
@@ -34,11 +35,19 @@ async def run(url: str) -> None:
             "anki_delete_deck",
             "anki_move_cards",
         }
+        fo_enabled = os.environ.get('STUDY_HUB_FO_TOOLS', 'false').lower() == 'true'
+        if fo_enabled:
+            required |= {'fo_list_lessons', 'fo_get_lesson', 'fo_search_materials', 'fo_get_pdf_text',
+                         'fo_search_transcripts', 'fo_get_transcript', 'fo_get_sync_status'}
         if names != required:
             raise RuntimeError(f"unexpected MCP tools: {sorted(names)}")
         result = await client.call_tool("anki_health", {})
         if result.is_error:
             raise RuntimeError("anki_health returned an MCP error")
+        if fo_enabled:
+            result = await client.call_tool('fo_get_sync_status', {})
+            if result.is_error:
+                raise RuntimeError('fo_get_sync_status returned an MCP error')
     print("MCP_STREAMABLE_HTTP_SMOKE_OK")
 
 

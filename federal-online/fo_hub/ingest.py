@@ -7,7 +7,7 @@ import os
 import time
 from .store import FOStore, lesson_id_for
 from .transcription import TranscriptionQueue
-from .pdf_privacy import PRIVACY_POLICY_VERSION, sanitize_page
+from .pdf_privacy import PRIVACY_POLICY_VERSION, PagePrivacy, sanitize_page
 
 
 def canonical(url):
@@ -27,6 +27,37 @@ def course_key(url):
     return canonical(url) or 'remote-catalog'
 
 
+def review_indexed_pages(store):
+    """Resume privacy review on saved extraction, including retired manifests.
+
+    Commit small batches atomically. Never restart extraction of existing PDFs
+    just to change privacy policy, and never treat a quality row as proof.
+    """
+    c = store.conn
+    reviewed = 0
+    while True:
+        rows = c.execute(
+            "SELECT p.material_id,p.page,p.text,q.quality,q.pii_redacted "
+            "FROM pdf_pages p LEFT JOIN pdf_page_quality q USING(material_id,page) "
+            "WHERE q.page IS NULL OR q.policy_version<? "
+            "OR (q.quality='text' AND TRIM(REPLACE(p.text,?,''))='') LIMIT 250",
+            (PRIVACY_POLICY_VERSION, "[MARCA D'AGUA REMOVIDA]")).fetchall()
+        if not rows:
+            return reviewed
+        with c:
+            for mid, number, text, old_quality, old_redacted in rows:
+                page = sanitize_page(text)
+                if old_quality in {'privacy_review', 'ocr_review', 'ocr_empty'}:
+                    page = PagePrivacy(page.text, page.pii_redacted or bool(old_redacted), old_quality, 'blocked')
+                c.execute('UPDATE pdf_pages SET text=? WHERE material_id=? AND page=?',
+                          (page.text, mid, number))
+                c.execute('INSERT OR REPLACE INTO pdf_page_quality VALUES(?,?,?,?,?,?,?,?)',
+                          (mid, number, page.quality, page.exposure, len(page.text),
+                           int(page.pii_redacted or bool(old_redacted)),
+                           time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), PRIVACY_POLICY_VERSION))
+        reviewed += len(rows)
+
+
 def ingest(state,db_path,index_pdfs=True):
     state=Path(state);store=FOStore(db_path);c=store.conn
     c.executescript('''CREATE TABLE IF NOT EXISTS lesson_video_sources(
@@ -42,6 +73,7 @@ def ingest(state,db_path,index_pdfs=True):
         c.execute('ALTER TABLE pdf_page_quality ADD COLUMN policy_version INTEGER NOT NULL DEFAULT 1')
     except Exception:
         pass
+    privacy_reviewed = review_indexed_pages(store) if index_pdfs else 0
     candidates={}
     paths=sorted((state/'catalog').rglob('aulas_index*.json'))
     paths+=sorted((state/'catalogs').rglob('aulas_index*.json'))
@@ -126,8 +158,8 @@ def ingest(state,db_path,index_pdfs=True):
                 mid='pdf_'+digest[:24]
                 store.upsert_material({'material_id':mid,'subject':item.get('output_subject') or item.get('portal_subject'),'front':item.get('portal_subject'),'module':item.get('group'),'title':Path(item.get('file_name') or path.name).stem,'material_type':item.get('material_type'),'relative_path':str(path.relative_to(state)),'sha256':digest})
                 count=c.execute('SELECT count(*) FROM pdf_pages WHERE material_id=?',(mid,)).fetchone()[0]
-                reviewed=c.execute('SELECT count(*) FROM pdf_page_quality WHERE material_id=? AND policy_version=?',(mid,PRIVACY_POLICY_VERSION)).fetchone()[0]
-                if index_pdfs and (count==0 or reviewed==0):
+
+                if index_pdfs and count==0:
                     from pypdf import PdfReader
                     privacy_pages=[sanitize_page(page.extract_text() or '') for page in PdfReader(path).pages]
                     store.set_pdf_pages(mid,[page.text for page in privacy_pages])
@@ -141,7 +173,7 @@ def ingest(state,db_path,index_pdfs=True):
             except Exception as exc:
                 pdf_errors+=1
                 with c:c.execute('INSERT OR REPLACE INTO ingestion_errors VALUES(?,?,?)',(str(path),type(exc).__name__,time.time()))
-    status={**summary,'jobs_queued':queued,'source_videos':len(inventory),'pdf_new_pages':page_count,'pdf_errors':pdf_errors,'counts':store.sync_status(),'TRANSCRIPTION_ENABLED':False}
+    status={**summary,'jobs_queued':queued,'source_videos':len(inventory),'pdf_new_pages':page_count,'privacy_reviewed_pages':privacy_reviewed,'pdf_errors':pdf_errors,'counts':store.sync_status(),'TRANSCRIPTION_ENABLED':False}
     with c:c.execute('INSERT OR REPLACE INTO ingestion_status VALUES(?,?,?)',('index',json.dumps(status),time.time()))
     c.close()
     return status

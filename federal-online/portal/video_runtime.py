@@ -8,11 +8,16 @@ import os
 import shutil
 import subprocess
 import time
+import tempfile
 
 import fo_download_upload_videos as core
 
 STATE = Path(os.environ.get('FO_STATE_ROOT', '/home/ubuntu/study-hub-state/federal-online'))
 RESERVE = 4 * 1024**3
+
+
+class SourceDurationMismatch(RuntimeError):
+    """Remote source itself is shorter than catalog; preserve staged evidence."""
 
 
 def canonical_url(url):
@@ -41,12 +46,14 @@ def allowed_bytes(free, reserve=RESERVE):
 def verify_upload(local, remote, runner=subprocess.run):
     parent, filename = remote.rsplit('/', 1)
     # --download compares bytes, not merely size when OneDrive hashes differ.
-    listing = local.parent / '.verify-files'
-    listing.write_text(filename+'\n')
-    try:
-        runner(['rclone','check',str(local.parent),parent,'--files-from-raw',str(listing),'--one-way','--download','--retries','3'],check=True,capture_output=True,text=True,timeout=7200)
-    finally:
-        listing.unlink(missing_ok=True)
+    # Keep the stable resume path intact even if the service is killed mid-check.
+    # A hard link provides the remote basename without duplicating video bytes.
+    with tempfile.TemporaryDirectory(prefix='.verify-', dir=local.parent) as directory:
+        view = Path(directory)
+        os.link(local, view / filename)
+        listing = view / '.verify-files'
+        listing.write_text(filename+'\n')
+        runner(['rclone','check',str(view),parent,'--files-from-raw',str(listing),'--one-way','--download','--retries','3'],check=True,capture_output=True,text=True,timeout=7200)
 
 
 def atomic_json(path, data):
@@ -56,10 +63,10 @@ def atomic_json(path, data):
     os.replace(tmp,path)
 
 
-def discard_recoverable_partial(tmp_dir: Path, key: str, logger: core.Logger) -> int:
+def discard_recoverable_partial(tmp_dir: Path, key: str, logger: core.Logger, revision: str | None = None) -> int:
     """Remove only this job's unvalidated partial; unknown jobs stay untouched."""
     removed = 0
-    for partial in tmp_dir.glob(f"{key}-*.partial.mp4"):
+    for partial in tmp_dir.glob(f"{key}-{revision or '*'}.partial.mp4"):
         try:
             partial.unlink()
             removed += 1
@@ -100,9 +107,8 @@ def main():
     for row in rows_from_catalog():
         key=identity(row);version=revision(row);previous=manifest['items'].get(key,{})
         if previous.get('revision')==version and previous.get('status') in ('verified','existing_remote_verified'):continue
-        if previous.get('retry_at',0)>time.time():
+        if previous.get('revision')==version and previous.get('retry_at',0)>time.time():
             continue
-        discard_recoverable_partial(tmp, key, log)
         legacy=old_by_stream.get(canonical_url(row['video_stream_url']))
         if not previous and legacy:
             relative=legacy['remote_path'].removeprefix('onedrive:Federal Online/')
@@ -119,6 +125,17 @@ def main():
             hierarchy='/'.join(core.source_ref_to_parts(core.source_ref_from_aula(row)))
             destination=f'onedrive:Federal Online/{course}/{hierarchy}/{key}/{version}/{title}.mp4'
             local=tmp/f'{key}-{version}.mp4'
+            if not local.exists() and previous.get('status')=='error':
+                # Repeatedly downloading a source already shorter than catalog
+                # cannot repair it. Probe BEFORE touching its known partial.
+                probe=subprocess.run(['ffprobe','-v','quiet','-show_entries','format=duration',
+                                      '-of','json',row['video_stream_url']],
+                                     capture_output=True,text=True,check=True,timeout=45)
+                source_duration=float(json.loads(probe.stdout).get('format',{}).get('duration') or 0)
+                expected=float(row.get('duracao_segundos') or 0)
+                if expected and source_duration and source_duration<expected*0.95:
+                    raise SourceDurationMismatch('source metadata shorter than catalog')
+            discard_recoverable_partial(tmp, key, log, revision=version)
             candidate=core.build_candidates([row],tmp_dir=tmp,rclone_remote='onedrive:',remote_base='Federal Online/'+course)[0]
             candidate.tmp_partial_path=local.with_suffix('.partial.mp4');candidate.tmp_final_path=local
             candidate.remote_path=destination
@@ -143,19 +160,15 @@ def main():
                 if expected and duration<expected*0.95:raise RuntimeError('Incomplete video; do not upload')
                 os.replace(candidate.tmp_partial_path,local)
             subprocess.run(['rclone','copyto',str(local),destination,'--retries','3','--low-level-retries','5'],capture_output=True,text=True,check=True,timeout=7200)
-            # Local filename and remote filename differ; verify a single-file view via --files-from-raw.
-            # Stage under remote basename for rclone check; only one local video ever exists.
-            named=local.with_name(title+'.mp4');os.replace(local,named)
-            try:verify_upload(named,destination)
-            except Exception:
-                os.replace(named,local);raise
-            size=named.stat().st_size
+            verify_upload(local,destination)
+            size=local.stat().st_size
             manifest['items'][key]={'revision':version,'status':'verified','remote_path':destination,'size':size,'checked_at':time.time()}
             atomic_json(manifest_path,manifest)
-            named.unlink()
+            local.unlink()
         except Exception as exc:
             attempts=int(previous.get('attempts',0))+1
-            manifest['items'][key]={'revision':version,'status':'error','error_type':type(exc).__name__,'attempts':attempts,'retry_at':time.time()+min(86400,60*2**min(attempts,10))}
+            delay=21600 if isinstance(exc,SourceDurationMismatch) else min(86400,60*2**min(attempts,10))
+            manifest['items'][key]={'revision':version,'status':'error','error_type':type(exc).__name__,'attempts':attempts,'retry_at':time.time()+delay}
             atomic_json(manifest_path,manifest)
             # A failed staged upload must not accumulate videos from other jobs.
             break

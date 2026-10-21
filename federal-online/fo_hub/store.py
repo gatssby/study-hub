@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 from urllib.parse import urlsplit, urlunsplit
 
+from .pdf_privacy import PRIVACY_POLICY_VERSION, sanitize_page
+
 DB_ENV = "STUDY_HUB_FO_DB"
 DEFAULT_DB = "fo_hub.db"
 ACCEPTED_CORPUS = "generated_v2"
@@ -170,7 +172,7 @@ class FOStore:
         if not include_missing:
             where.append("present=1")
         sql = "SELECT * FROM lessons" + (" WHERE " + " AND ".join(where) if where else "")
-        sql += " ORDER BY subject, module, title LIMIT ? OFFSET ?"
+        sql += " ORDER BY subject, module, title, lesson_id LIMIT ? OFFSET ?"
         return [self._lesson(r) for r in self.conn.execute(sql, (*args, limit, offset))]
 
     def get_lesson(self, lesson_id: str) -> dict | None:
@@ -216,11 +218,22 @@ class FOStore:
         where, args = self._filters(subject=subject, front=front, module=module, title=title,
                                     material_type=material_type)
         sql = "SELECT * FROM materials" + (" WHERE " + " AND ".join(where) if where else "")
-        sql += " ORDER BY subject, module, title LIMIT ? OFFSET ?"
-        return [dict(r) for r in self.conn.execute(sql, (*args, limit, offset))]
+        sql += " ORDER BY subject, module, title, material_id LIMIT ? OFFSET ?"
+        results = []
+        for row in self.conn.execute(sql, (*args, limit, offset)):
+            item = dict(row)
+            item['citation'] = {'id': item['material_id'], 'name': item['title'],
+                                'version': item['sha256'], 'updated_at': item['updated_at']}
+            # A signed original URL would bypass PDF privacy protections. Its
+            # provenance stays in the private ingestion manifest, not the Plugin.
+            item['source_url'] = None
+            item['source_access'] = 'private_original_not_exposed'
+            results.append(item)
+        return results
 
     def set_pdf_pages(self, material_id: str, pages: list[str]) -> None:
         with self.conn:
+            self.conn.execute("DELETE FROM pdf_page_quality WHERE material_id=?", (material_id,))
             self.conn.execute("DELETE FROM pdf_pages WHERE material_id=?", (material_id,))
             self.conn.executemany("INSERT INTO pdf_pages VALUES(?,?,?)",
                                   [(material_id, i + 1, t) for i, t in enumerate(pages)])
@@ -236,14 +249,22 @@ class FOStore:
         end = page_end if page_end is not None else total
         rows = self.conn.execute(
             "SELECT p.page,p.text,COALESCE(q.quality,'legacy_unreviewed'),"
-            "COALESCE(q.exposure,'blocked') FROM pdf_pages p "
+            "COALESCE(q.exposure,'blocked'),COALESCE(q.policy_version,0) FROM pdf_pages p "
             "LEFT JOIN pdf_page_quality q ON q.material_id=p.material_id AND q.page=p.page "
             "WHERE p.material_id=? AND p.page BETWEEN ? AND ? "
             "ORDER BY p.page", (material_id, page_start, end))
-        pages = [{"page": p, "text": "" if exposure == "blocked" else t,
-                  "quality": quality, "exposure": exposure,
-                  "citation": f"{m['title']}, p. {p} [{material_id}#p{p}]"}
-                 for p, t, quality, exposure in rows]
+        pages = []
+        for p, text, quality, exposure, policy in rows:
+            allowed = (policy == max(3, PRIVACY_POLICY_VERSION) and exposure == "text_only"
+                       and quality in {"text", "low_text"})
+            if allowed:
+                checked = sanitize_page(text)
+                allowed = checked.exposure == 'text_only' and checked.text == text
+            pages.append({"page": p, "text": text if allowed else "",
+                          "quality": quality if policy == PRIVACY_POLICY_VERSION else "legacy_unreviewed",
+                          "exposure": "text_only" if allowed else "blocked",
+                          "policy_version": policy,
+                          "citation": f"{m['title']}, p. {p} [{material_id}#p{p}]"})
         return {"material_id": material_id, "title": m["title"], "page_count": total,
                 "pages": pages, 'version': m['sha256'], 'source': m['relative_path'], 'updated_at': m['updated_at']}
 
@@ -305,6 +326,17 @@ class FOStore:
             "SELECT state,COUNT(*) FROM transcription_jobs GROUP BY state")}
         quality = {r[0]: r[1] for r in self.conn.execute(
             "SELECT quality,COUNT(*) FROM pdf_page_quality GROUP BY quality")}
+        privacy = self.conn.execute(
+            "SELECT COUNT(*),"
+            "SUM(CASE WHEN q.policy_version=? THEN 1 ELSE 0 END),"
+            "SUM(CASE WHEN q.policy_version=2 THEN 1 ELSE 0 END),"
+            "SUM(CASE WHEN q.policy_version=? AND q.exposure='text_only' "
+            "AND q.quality IN ('text','low_text') THEN 1 ELSE 0 END),"
+            "SUM(CASE WHEN q.page IS NULL OR q.policy_version!=? THEN 1 ELSE 0 END),"
+            "SUM(CASE WHEN q.quality='ocr_pending' THEN 1 ELSE 0 END) "
+            "FROM pdf_pages p LEFT JOIN pdf_page_quality q USING(material_id,page)",
+            (PRIVACY_POLICY_VERSION, PRIVACY_POLICY_VERSION, PRIVACY_POLICY_VERSION)).fetchone()
+        total, current, v2, released, unreviewed, ocr = [x or 0 for x in privacy]
         return {
             'TRANSCRIPTION_ENABLED': os.environ.get('TRANSCRIPTION_ENABLED', 'false').strip().lower() == 'true',
             "lessons_total": q("SELECT COUNT(*) FROM lessons"),
@@ -313,6 +345,10 @@ class FOStore:
             "materials_total": q("SELECT COUNT(*) FROM materials"),
             "pdf_pages_total": q("SELECT COUNT(*) FROM pdf_pages"),
             "pdf_page_quality": quality,
+            "pdf_privacy": {"policy_version": PRIVACY_POLICY_VERSION,
+                            "current_policy_pages": current, "v2_pages": v2,
+                            "released_pages": released, "blocked_pages": total - released,
+                            "unreviewed_pages": unreviewed, "ocr_pending_pages": ocr},
             "transcripts_validated": q(f"SELECT COUNT(*) FROM transcripts t {self._CURRENT}"),
             "transcription_jobs": jobs,
             "last_sync": dict(last) if last else None,

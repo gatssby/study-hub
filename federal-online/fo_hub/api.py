@@ -55,6 +55,8 @@ def create_app(db_path: str | os.PathLike) -> FastAPI:
     @app.get(R["fo_get_pdf_text"], operation_id="fo_get_pdf_text")
     def get_pdf_text(material_id: str, page_start: int = Query(1, ge=1),
                      page_end: Optional[int] = Query(None, ge=1)):
+        if page_end is not None and page_end < page_start:
+            raise HTTPException(422, "page_end must not precede page_start")
         out = store.get_pdf_text(material_id, page_start, page_end)
         if out is None:
             raise HTTPException(404, "material not found")
