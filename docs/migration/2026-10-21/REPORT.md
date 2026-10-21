@@ -1,6 +1,6 @@
 # Study Hub — relatório da migração de 21/10/2026
 
-Estado verificado em 21/10/2026; coletas iniciais longas continuam por systemd. Nenhuma data substitui a autorização explícita exigida para transcrições.
+Estado verificado em 21/10/2026; snapshot das contagens às 05:22:59 UTC (02:22:59 -03). Coletas iniciais longas continuam por systemd. Nenhuma data substitui a autorização explícita exigida para transcrições.
 
 ## Regras e decisões
 
@@ -35,7 +35,7 @@ Espaço: livre antes da limpeza 8.921.595.904 bytes; após retirada de apps 13.9
 Código FO `/home/ubuntu/study-hub/federal-online`; estado independente `/home/ubuntu/study-hub-state/federal-online`; venv própria e ambiente privado fora do Git.
 
 - API FO: ativa em loopback 8780.
-- Catálogo: timer habilitado, coleta completa inicial em execução por systemd, oito cursos descobertos dinamicamente. Corrigida navegação portal → cursos → produtos e isolamento de lifecycle Playwright. Checkpoint corrente continha 303 entradas do primeiro curso. Cursos concluídos ficam elegíveis para nova reconciliação após seis horas, não somente semanalmente.
+- Catálogo: timer habilitado, coleta completa inicial em execução por systemd, oito cursos descobertos dinamicamente. Corrigida navegação portal → cursos → produtos e isolamento de lifecycle Playwright. Checkpoint corrente chegou a 395 entradas OK do primeiro curso, com progresso no journal. O registro `courses.json` ainda conserva oito erros da passagem anterior enquanto o curso atual não termina; isso não é uma validação completa dos oito cursos. Cursos concluídos ficam elegíveis para nova reconciliação após seis horas, não somente semanalmente.
 - Materiais: timer habilitado e primeira reconciliação por curso em execução; 36 disciplinas observadas no Extensivo 2026. Um erro de contrato em linhas de download falho interrompeu a primeira passagem; corrigidos o contrato de erro sem arquivo e o checkpoint que marcava done antes da promoção. 156 PDFs autenticados em staging foram promovidos sem cópia/backup e com hash verificado; fonte URL não persistida foi explicitamente marcada como indisponível, não inventada. Jobs foram reabertos para reconciliação. Retry systemd em 15 minutos após falha, além do timer diário.
 - Vídeos: timer habilitado; primeiro ciclo reconciliou 219 originais já existentes e registrou uma tentativa incompleta, sem promover/uploadar um vídeo truncado. Retry persistente/backoff; pendência real, não declarar todas aulas disponíveis.
 - Indexação: timer habilitado; páginas PDF disponíveis pela API.
@@ -46,7 +46,7 @@ Código FO `/home/ubuntu/study-hub/federal-online`; estado independente `/home/u
 
 OneDrive: 1.074 vídeos, 153.904.975.723 bytes. Manifesto relaciona 1.070 aulas com originais remotos; nenhuma fonte desses vínculos faltava no inventário inicial.
 
-Consulta SQLite: 1.180 registros de aulas (incluindo identidades remotas provisórias), 87 PDFs distintos por SHA-256, 4.624 páginas indexadas, 1.161 jobs queued e zero transcrições publicadas. Destes, 1.075 vínculos de source disponíveis e 86 fontes pendentes; 1.075 vínculos não significam 1.075 vídeos distintos (o inventário remoto tem 1.074). Zero jobs de versão stale nessa leitura. Fila e catálogo ainda em reconciliação; não interpretar contagens como total final do portal.
+Consulta SQLite às 05:22:59 UTC: 1.180 registros de aulas (incluindo identidades remotas provisórias), 219 PDFs distintos por SHA-256, 10.618 páginas indexadas, 1.161 jobs queued e zero transcrições publicadas. Destes, 1.075 vínculos de source disponíveis e 86 fontes pendentes; 1.075 vínculos não significam 1.075 vídeos distintos (o inventário remoto tem 1.074). Zero jobs de versão stale na leitura anterior. Fila e catálogo ainda em reconciliação; não interpretar contagens como total final do portal.
 
 ## MCP/Plugin
 
@@ -71,12 +71,14 @@ Serviço separado preparou whisper.cpp e pesos large-v3-f16. Manifest de prepara
 - Varreduras `check_no_secrets.py` e `check_large_files.py`: passaram. `git diff --check` identificou whitespace em arquivos addon preexistentes não incluídos nesta migração.
 - Regressões novas reproduzidas RED→GREEN: navegação por produtos, Playwright sync em thread própria, materiais independentes do lock longo de catálogo, source inválida após revisão e supressão de fallback remoto duplicado.
 - Testes ASR somente mocks/fixtures; nenhum áudio real.
+- CI do commit publicado `015009f`: Federal Online, Contracts, Repository Safety e Anki GPT concluídos com success. A suíte limpa do CI Anki passou; o teste local falho acima inclui alterações dirty anteriores, não incluídas no commit.
+- `systemd-analyze verify` das sete units FO: exit 0. Hashes de 19 fontes Python FO comparados com a VPS: zero divergências. Refresh privado do token rclone permitido no sandbox, sem alterar configurações compartilhadas.
 
 ## GitHub
 
-Repositório renomeado com sucesso para `gatssby/study-hub`, visibilidade pública preservada. Remote local atualizado e lido novamente. Branches remotas originais preservadas; produção não faz git pull do nome antigo (deploys por arquivos). Workflow remoto Cronograma desabilitado manualmente; remoção no Git desta branch ainda a publicar.
+Repositório renomeado com sucesso para `gatssby/study-hub`, visibilidade pública preservada. Remote local atualizado e lido novamente. Branches remotas originais preservadas; produção não faz git pull do nome antigo (deploys por arquivos). Workflow remoto Cronograma desabilitado manualmente; arquivo removido na branch publicada `feat/study-hub-migration`. A branch padrão ainda não foi mesclada, portanto conserva código histórico; não há deploy Cronograma ativo associado.
 
-Commit de desenho/plano: `941b1eb`. Demais commits serão registrados após revisão e varredura de segredos; alterações locais anteriores não serão incluídas indiscriminadamente.
+Commit de desenho/plano: `941b1eb`. Implementação e retirada classificada: `015009f417bb3a9f67e59a57a1d293f2140ddc6a`, publicado e confirmado pela API GitHub na branch `feat/study-hub-migration` (199 arquivos, 8.146 inserções e 31.978 exclusões). Branch original preservada; 85 entradas preexistentes do workspace permaneceram fora do commit. Push inicial pelo osxkeychain expirou sem publicar; retry com helper gh por comando publicou sem mudar configuração global ou expor credenciais.
 
 ## Pendências e limites
 
@@ -84,6 +86,7 @@ Commit de desenho/plano: `941b1eb`. Demais commits serão registrados após revi
 - Coletas iniciais extensas em andamento; confirmar completude por curso e erros no próximo checkup.
 - Tentativa de vídeo incompleta precisa renovar origem/reavaliar duração, não promover truncado.
 - Mídia Anki exclusiva e código local antigo dirty: exclusão bloqueada somente para o conjunto ambíguo.
+- Merge para a branch padrão e verificação do cliente Plugin após reload permanecem pendentes; implantação VPS não depende desse merge.
 - Notion: conector consultado, `connected=false`; não atualizado e não bloqueia produção.
 - Delegações falharam por HTTP 429 do provedor. O coordenador assumiu integração e implementação do worker; não se considera a mensagem de falha como evidência de código concluído.
 - Revisão independente também bloqueada por HTTP 429. Realizada auto-revisão de segurança pelo autor, mais fraca que revisão independente. Corrigidas recuperação de temporários marcados, limite explícito rclone por tamanho, checkpoint de materiais e permissões mínimas de refresh de token rclone. Configurações compartilhadas de outros projetos não foram editadas.
