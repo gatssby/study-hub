@@ -38,6 +38,11 @@ CREATE TABLE IF NOT EXISTS materials(
 CREATE TABLE IF NOT EXISTS pdf_pages(
   material_id TEXT NOT NULL, page INTEGER NOT NULL, text TEXT NOT NULL,
   PRIMARY KEY(material_id, page));
+CREATE TABLE IF NOT EXISTS pdf_page_quality(
+  material_id TEXT NOT NULL, page INTEGER NOT NULL, quality TEXT NOT NULL,
+  exposure TEXT NOT NULL, extracted_chars INTEGER NOT NULL DEFAULT 0,
+  pii_redacted INTEGER NOT NULL DEFAULT 0, updated_at TEXT,
+  PRIMARY KEY(material_id, page));
 CREATE TABLE IF NOT EXISTS transcripts(
   lesson_id TEXT NOT NULL, version INTEGER NOT NULL, model TEXT, corpus TEXT NOT NULL,
   qa_json TEXT, created_at TEXT, PRIMARY KEY(lesson_id, version));
@@ -229,10 +234,14 @@ class FOStore:
                                   (material_id,)).fetchone()[0]
         end = page_end if page_end is not None else total
         rows = self.conn.execute(
-            "SELECT page,text FROM pdf_pages WHERE material_id=? AND page BETWEEN ? AND ? "
-            "ORDER BY page", (material_id, page_start, end))
-        pages = [{"page": p, "text": t,
-                  "citation": f"{m['title']}, p. {p} [{material_id}#p{p}]"} for p, t in rows]
+            "SELECT p.page,p.text,COALESCE(q.quality,'legacy_unreviewed'),"
+            "COALESCE(q.exposure,'blocked') FROM pdf_pages p "
+            "LEFT JOIN pdf_page_quality q ON q.material_id=p.material_id AND q.page=p.page "
+            "WHERE p.material_id=? AND p.page BETWEEN ? AND ? "
+            "ORDER BY p.page", (material_id, page_start, end))
+        pages = [{"page": p, "text": t, "quality": quality, "exposure": exposure,
+                  "citation": f"{m['title']}, p. {p} [{material_id}#p{p}]"}
+                 for p, t, quality, exposure in rows]
         return {"material_id": material_id, "title": m["title"], "page_count": total,
                 "pages": pages, 'version': m['sha256'], 'source': m['relative_path'], 'updated_at': m['updated_at']}
 
@@ -292,6 +301,8 @@ class FOStore:
                                  ).fetchone()
         jobs = {r[0]: r[1] for r in self.conn.execute(
             "SELECT state,COUNT(*) FROM transcription_jobs GROUP BY state")}
+        quality = {r[0]: r[1] for r in self.conn.execute(
+            "SELECT quality,COUNT(*) FROM pdf_page_quality GROUP BY quality")}
         return {
             'TRANSCRIPTION_ENABLED': os.environ.get('TRANSCRIPTION_ENABLED', 'false').strip().lower() == 'true',
             "lessons_total": q("SELECT COUNT(*) FROM lessons"),
@@ -299,6 +310,7 @@ class FOStore:
             "lessons_missing": q("SELECT COUNT(*) FROM lessons WHERE present=0"),
             "materials_total": q("SELECT COUNT(*) FROM materials"),
             "pdf_pages_total": q("SELECT COUNT(*) FROM pdf_pages"),
+            "pdf_page_quality": quality,
             "transcripts_validated": q(f"SELECT COUNT(*) FROM transcripts t {self._CURRENT}"),
             "transcription_jobs": jobs,
             "last_sync": dict(last) if last else None,

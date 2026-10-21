@@ -56,6 +56,19 @@ def atomic_json(path, data):
     os.replace(tmp,path)
 
 
+def discard_recoverable_partial(tmp_dir: Path, key: str, logger: core.Logger) -> int:
+    """Remove only this job's unvalidated partial; unknown jobs stay untouched."""
+    removed = 0
+    for partial in tmp_dir.glob(f"{key}-*.partial.mp4"):
+        try:
+            partial.unlink()
+            removed += 1
+            logger.log(f"[recovery] partial nao validado removido para nova tentativa key={key}")
+        except OSError as exc:
+            logger.log(f"[recovery] partial preservado key={key} erro={type(exc).__name__}")
+    return removed
+
+
 def rows_from_catalog():
     paths = sorted((STATE/'catalog').rglob('aulas_index*.json'))
     paths += sorted((STATE/'catalogs').rglob('aulas_index*.json'))
@@ -86,12 +99,10 @@ def main():
     log=core.Logger([])
     for row in rows_from_catalog():
         key=identity(row);version=revision(row);previous=manifest['items'].get(key,{})
-        staged=list(tmp.glob('*.mp4'))
-        if staged and not all(p.name.startswith(key+'-') for p in staged):continue
         if previous.get('revision')==version and previous.get('status') in ('verified','existing_remote_verified'):continue
         if previous.get('retry_at',0)>time.time():
-            if staged:break
             continue
+        discard_recoverable_partial(tmp, key, log)
         legacy=old_by_stream.get(canonical_url(row['video_stream_url']))
         if not previous and legacy:
             relative=legacy['remote_path'].removeprefix('onedrive:Federal Online/')
