@@ -76,6 +76,25 @@ def test_transcript_allowlist_fails_closed(tmp_path, monkeypatch, change):
     assert _transcript_allowlist(tmp_path, root) == []
 
 
+def test_inventory_proof_binds_listing_start_to_exact_snapshot(tmp_path, monkeypatch):
+    import hashlib
+    from fo_hub import onedrive
+    clock = [1000]
+    monkeypatch.setattr(onedrive.time, 'time', lambda: clock[0])
+    def runner(command, **kwargs):
+        if command[1] == 'lsjson':
+            clock[0] = 2000  # completion must not become the capture start
+            return subprocess.CompletedProcess(command, 0, stdout=json.dumps([
+                {'Path': 'Course/Áula.mp4', 'Size': 42, 'ID': 'object', 'ModTime': 'now'},
+                {'Path': 'ignored.txt', 'Size': 1}]))
+        return subprocess.CompletedProcess(command, 0, stdout=(tmp_path/'onedrive-status.json').read_text() if command[1] == 'cat' else '')
+    result = onedrive.sync(tmp_path, runner=runner)
+    assert result['inventory_started_at'] == 1000
+    assert result['inventory_sha256'] == hashlib.sha256((tmp_path/'remote-videos.json').read_bytes()).hexdigest()
+    assert result['remote_videos'] == 1
+    assert json.loads((tmp_path/'onedrive-status.json').read_text()) == result
+
+
 def test_onedrive_never_deletes_remote_or_uploads_credentials(tmp_path):
     from fo_hub.onedrive import sync
     calls=[]

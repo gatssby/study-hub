@@ -1,6 +1,7 @@
 """Non-destructive OneDrive copy + byte verification, and source reconciliation."""
 from pathlib import Path
 import fcntl
+import hashlib
 import json
 import os
 import re
@@ -112,9 +113,13 @@ def sync(state,runner=subprocess.run):
                         runner(['rclone','check',str(transcripts),'onedrive:Study Hub/Federal Online/Transcripts/generated_v2',*selection,'--one-way','--download'],check=True,capture_output=True,text=True,timeout=7200)
                     status['transcript_sync']='verified'
         phase='video_inventory'
+        inventory_started_at=time.time()
         result=runner(['rclone','lsjson','onedrive:Federal Online','--recursive','--files-only'],check=True,capture_output=True,text=True,timeout=300)
         videos=[{k:x.get(k) for k in ('Path','Size','ModTime','ID')} for x in json.loads(result.stdout) if Path(x['Path']).suffix.lower() in ('.mp4','.mkv','.mov','.webm','.m4v')]
-        temporary=state/'remote-videos.json.tmp';temporary.write_text(json.dumps(videos,ensure_ascii=False));os.replace(temporary,state/'remote-videos.json')
+        snapshot=json.dumps(videos,ensure_ascii=False).encode('utf-8')
+        temporary=state/'remote-videos.json.tmp';temporary.write_bytes(snapshot);os.replace(temporary,state/'remote-videos.json')
+        status['inventory_started_at']=inventory_started_at
+        status['inventory_sha256']=hashlib.sha256(snapshot).hexdigest()
         status['remote_videos']=len(videos)
         status['remote_video_bytes']=sum(x['Size'] for x in videos)
         status['remote_deletion_policy']='never'

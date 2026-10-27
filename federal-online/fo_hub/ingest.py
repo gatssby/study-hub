@@ -3,6 +3,7 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 import hashlib
 import json
+import math
 import os
 import time
 from .store import FOStore, lesson_id_for
@@ -126,8 +127,37 @@ def ingest(state,db_path,index_pdfs=True):
     rows=[x[1] for x in candidates.values()]
     summary=store.sync_lessons(rows,authoritative=False) if rows else {'created':0}
     queue=TranscriptionQueue(store)
-    remote=read_json(state/'remote-videos.json',[])
+    inventory_path=state/'remote-videos.json'
+    inventory_bytes=inventory_path.read_bytes() if inventory_path.exists() else b'[]'
+    remote=json.loads(inventory_bytes)
     inventory={x['Path']:x for x in remote}
+    try:
+        proof=read_json(state/'onedrive-status.json',{})
+    except (OSError,ValueError):
+        proof={}
+    if not isinstance(proof,dict):proof={}
+    started=proof.get('inventory_started_at')
+    if (not isinstance(started,(int,float)) or isinstance(started,bool)
+            or not math.isfinite(started) or started<=0
+            or proof.get('inventory_sha256')!=hashlib.sha256(inventory_bytes).hexdigest()):
+        started=None
+    video_state=read_json(state/'videos.json',{}).get('items',{})
+    verified_by_path={}
+    for record in video_state.values():
+        if record.get('status')=='verified':
+            verified_by_path.setdefault(record.get('remote_path'),[]).append(record)
+
+    def inventory_source(full, observed):
+        if observed is None:return None
+        for verified in verified_by_path.get(full,[]):
+            if observed.get('Size')==verified.get('size'):continue
+            checked=verified.get('checked_at')
+            # Completion mtime can follow an upload that raced the listing.
+            # Only a hash-bound listing START strictly after verification wins.
+            if (started is None or type(checked) not in (int,float)
+                    or not math.isfinite(checked) or checked<=0 or started<=checked):
+                return {'Size':verified['size']}
+        return observed
     if (state/'remote-videos.json').exists():
         with c:
             for existing in c.execute('SELECT lesson_id,remote_path FROM lesson_video_sources WHERE available=1').fetchall():
@@ -136,8 +166,7 @@ def ingest(state,db_path,index_pdfs=True):
                     c.execute('UPDATE lesson_video_sources SET available=0 WHERE lesson_id=?', (existing['lesson_id'],))
     manifests=read_json(state/'catalog/video_upload_manifest.json',{}).get('items',[])
     by_url={canonical(x.get('video_stream_url')):x for x in manifests if x.get('video_stream_url')}
-    used=set();queued=0
-    video_state=read_json(state/'videos.json',{}).get('items',{})
+    used=set();visited=set();queued=0
     for row in rows:
         if row['media_type']!='video':continue
         lid=lesson_id_for(row['course_id'],row['media_id'],row['item_id'])
@@ -151,15 +180,13 @@ def ingest(state,db_path,index_pdfs=True):
         if current.get('status')=='verified' and current.get('revision')==expected:
             full=current['remote_path'];relative=full.removeprefix('onedrive:Federal Online/')
             observed=inventory.get(relative)
-            # A verified upload is newer than an inventory with a different
-            # size. Never attach that stale object's ID/ModTime to this upload.
-            source=observed if observed and observed.get('Size')==current['size'] else {'Size':current['size']}
+            source=observed if observed is not None else {'Size':current['size']}
             if observed is None and (state/'remote-videos.json').exists():
                 source=None
         elif item and item.get('duration_seconds') is not None and item['duration_seconds']!=row['duration_s']:
             source=None
         if not source:continue
-        used.add(relative);lesson=observe_video_source(store,lid,full,source)
+        used.add(relative);visited.add(lid);lesson=observe_video_source(store,lid,full,inventory_source(full,source))
         # A fallback remote identity is metadata, not a second video to transcribe.
         aliases=c.execute("SELECT s.lesson_id FROM lesson_video_sources s JOIN lessons l USING(lesson_id) WHERE s.remote_path=? AND s.lesson_id!=? AND l.course_id LIKE 'remote:%'",(full,lid)).fetchall()
         with c:
@@ -168,22 +195,39 @@ def ingest(state,db_path,index_pdfs=True):
                 c.execute('UPDATE lessons SET present=0 WHERE lesson_id=?',(alias[0],))
                 c.execute("UPDATE transcription_jobs SET state='superseded' WHERE lesson_id=? AND state='queued'",(alias[0],))
         queued+=queue.enqueue(lid,lesson['version'])
+    # Persisted classified aliases remain authoritative mappings even when a
+    # partial portal traversal omits them. Observe each lesson only once; never
+    # promote an old mapping to a lesson whose catalog media revision changed.
+    for existing in c.execute("SELECT s.*,l.version,l.present FROM lesson_video_sources s "
+                              "JOIN lessons l USING(lesson_id) WHERE l.course_id NOT LIKE 'remote:%'").fetchall():
+        full=existing['remote_path']
+        if not full:continue
+        relative=full.removeprefix('onedrive:Federal Online/')
+        used.add(relative)  # a known classified path must not create a fallback
+        if (existing['lesson_id'] in visited or not existing['present']
+                or str(existing['revision'])!=str(existing['version'])):continue
+        source=inventory_source(full,inventory.get(relative))
+        if source is None:continue
+        lesson=observe_video_source(store,existing['lesson_id'],full,source)
+        queued+=queue.enqueue(existing['lesson_id'],lesson['version'])
     # Every verified remote original belongs in the queue, even if an old partial
     # portal traversal omitted it. Remote object identity is explicit, not guessed title identity.
     for relative,source in inventory.items():
         if relative in used:continue
         parts=relative.split('/')
         row={'course_id':'remote:'+parts[0],'media_id':'remote:'+str(source.get('ID') or hashlib.sha256(relative.encode()).hexdigest()),'item_id':None,'subject':parts[1] if len(parts)>2 else '', 'front':parts[2] if len(parts)>3 else '', 'module':' > '.join(parts[:-1]),'title':Path(relative).stem,'media_type':'video','video_url':None,'duration_s':None}
-        existing=c.execute("SELECT l.media_id FROM lesson_video_sources s JOIN lessons l USING(lesson_id) "
+        existing=c.execute("SELECT l.media_id,l.present,l.version,s.revision FROM lesson_video_sources s JOIN lessons l USING(lesson_id) "
                            "WHERE s.remote_path=? AND l.course_id=? ORDER BY l.first_seen LIMIT 1",
                            ('onedrive:Federal Online/'+relative,row['course_id'])).fetchone()
         if existing:
+            if not existing['present'] or str(existing['revision'])!=str(existing['version']):continue
             # Keep the lesson identity when the object at its known path is
             # replaced; record the new remote ID in observations, not lesson ID.
             row['media_id']=existing['media_id']
         store.sync_lessons([row],authoritative=False)
         lid=lesson_id_for(row['course_id'],row['media_id'],None)
-        lesson=observe_video_source(store,lid,'onedrive:Federal Online/'+relative,source)
+        lesson=observe_video_source(store,lid,'onedrive:Federal Online/'+relative,
+                                    inventory_source('onedrive:Federal Online/'+relative,source))
         queued+=queue.enqueue(lid,lesson['version'])
     # New catalog videos not uploaded yet are explicitly pending, never ASR-consumed.
     for row in rows:
