@@ -210,3 +210,12 @@ Procedimento exato em `federal-online/transcription/ACTIVATION.md`. Exige execut
 - Estado read-back às 23:31:11 UTC: quatro serviços Anki vNext e API FO ativos. MCP PID **70375**, túnel PID **3495063** e API FO PID **377374** iguais aos observados antes da intervenção; seis timers FO não-ASR continuam presentes. Nenhum serviço/timer foi alterado nesta intervenção.
 - Gate ASR confirmado por `fo_get_sync_status`: **TRANSCRIPTION_ENABLED=false**, `transcripts_validated=0`; unit `disabled`/`inactive`, autorização ausente. Nenhum worker, benchmark, processamento de áudio ou migração foi iniciado.
 
+## Preparação final do pipeline ASR — 27/10/2026
+
+- Relatório desta missão: `docs/research/2026-10-27-fo-transcription-preparation.md`; runbook atualizado em `federal-online/transcription/ACTIVATION.md`. Esse relatório distingue teste sintético, preflight real sem áudio e homologação de precisão ainda pendente.
+- Corrigidos stitching/offsets, revisão de fronteiras ambíguas, silêncio medido, repetição, fonte versionada, retomada/checkpoints, backpressure de disco, integridade/proveniência e publicação allowlist validada. Métricas avançadas do benchmark foram implementadas; os resultados sintéticos não medem modelos.
+- Nova observação às **18:50:06 UTC**: SQLite `quick_check=ok`, **3.299 queued**, **24 superseded**, **3.104 queued elegíveis**, **zero transcrições/segmentos**. O número elegível difere do inventário inicial de 3.102; é uma observação nova do estado corrente, não conversão de jobs para validated. **851 grupos de mesmo caminho remoto, 853 vínculos adicionais** reforçam a utilidade do reúso por bytes. Caminho/tamanho iguais, sozinhos, não autorizam reúso sem identidade do conteúdo.
+- Reserva mínima **4 GiB**, três threads, CPU 300%, RAM 12 GiB, 128 tasks. Baseline de recurso real antes do deploy: **14.979.719.168 bytes livres**, **22.738.886.656 bytes de RAM disponíveis**, quatro vCPUs. Capacidade total e throughput de inferência continuam não medidos.
+- Corpus anterior de 1.018 transcrições não foi recriado, migrado nem usado como gold. Nenhum áudio real foi baixado/processado nesta preparação; nenhum conteúdo sintético entrou na base real ou no OneDrive como transcrição. Nenhum arquivo existente foi excluído.
+- Serviço de transcrição permanece **inactive/disabled**, `MainPID=0`, variável persistente **false**, autorização ausente, nenhum timer. Alterações de terceiros/Anki permanecem fora dos commits e do deploy FO. A verificação final de hashes, testes, MCP e preflight está discriminada no relatório datado.
+

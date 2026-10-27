@@ -28,7 +28,7 @@ Limites desta pesquisa:
 
 ## 3. Escolha provisória (depende do benchmark)
 
-1. **Baseline e candidato padrão: whisper.cpp + large-v3** (q5_0 e f16), com VAD ligado e `-l pt`. É o único com caminho CPU ARM64 maduro, timestamps nativos e pegada que cabe (≤ 3,9 GB de RAM).
+1. **Baseline e candidato padrão: whisper.cpp + large-v3 FP16**, `-l pt`. VAD permanece **desligado até comprovação de pesos, compatibilidade e funcionamento**; suporte no help não basta. Quantização q5_0 é comparação posterior, não baseline de maior precisão presumida. A estimativa do README é de ~3,9 GB para large, não um pico medido nesta VPS.
 2. **Desafiante de qualidade: Qwen3-ASR-1.7B** (transformers, CPU fp32/bf16), opcionalmente com ForcedAligner em janelas ≤ 5 min. Substitui o baseline se vencer pelos critérios da seção 4.5 e operar sustentavelmente, mesmo muito mais lento.
 3. **Desafiantes opcionais: Canary-1b-v2 e Parakeet v3** se o NeMo instalar em aarch64 sem GPU; large-v3-turbo pelo runtime whisper.cpp, sem depender de NeMo.
 4. **Excluídos localmente: VibeVoice-ASR (disco/RAM) e APIs de nuvem** (fora do escopo).
@@ -63,7 +63,7 @@ Nenhum número de qualidade ou velocidade é afirmado aqui. A decisão final sai
 
 ### 4.4 Configurações fixas
 - `language=pt` forçado, temperatura 0 e beam declarado. Whisper: `no_speech_threshold`/VAD on vs off são duas configs separadas. Qwen: `max_new_tokens` suficiente, chunking declarado.
-- Para cada configuração, registrar o commit/versão do runtime, o hash dos pesos e as threads (4).
+- Para cada configuração, registrar o commit/versão do runtime, o hash dos pesos e as threads (3 na preparação de 27/10, preservando uma vCPU para serviços).
 - Mesmo áudio de entrada para todos: 16 kHz mono WAV, gerado uma vez com comando ffmpeg registrado.
 
 ### 4.5 Critérios de decisão (qualidade acima de velocidade)
@@ -73,7 +73,7 @@ Nenhum número de qualidade ou velocidade é afirmado aqui. A decisão final sai
 4. Alucinação em silêncio > 2× o baseline exige revisão acústica humana e investigação antes da promoção; não apagar texto legítimo por heurística ou tratar razão isolada como prova.
 
 ### 4.6 Orçamento de disco (9,3 GB livres)
-- Rodar um candidato por vez e apagar os pesos antes do próximo.
+- Rodar um candidato por vez. Não apagar pesos ou arquivos existentes sem autorização específica; ampliar armazenamento ou adiar candidatos quando a reserva não comportar a comparação.
 - Estimativas de pico:
   - whisper.cpp large-v3: f16 3,1 GB + q5_0 1,1 GB;
   - Qwen3-ASR-1.7B: 4,7 GB + Aligner + torch (~1–2 GB);
@@ -94,7 +94,19 @@ Confirmar professores distintos e escolher manualmente ruído/silêncio antes de
 
 `PYTHONPATH=federal-online python -m fo_hub.benchmark score gold.txt hypothesis.txt --duration-s 300`
 calcula WER/CER por distância de edição e caracteres/minuto em gold vazio; não inicia modelo.
-Normalização implementada: NFC, minúsculas e tokens de palavra; números mantidos como escritos. Glossário, IC bootstrap e comparação de timestamps do protocolo continuam como etapa de avaliação a completar após autorização.
+Atualização de 27/10: `score-batch` implementa agregação ponderada de WER/CER, IC95 bootstrap, termos por ocorrência, erros restritos ao glossário, alucinação em não fala, loops, inserções longas, timestamps e recursos fornecidos. Normalização v2 preserva acentos, números com sinal/decimais e operadores científicos; não mistura métricas anteriores. Detalhes, limites estatísticos, fixture sintética e contrato em `federal-online/transcription/benchmark-evaluation.md`. Recursos e hipóteses precisam ser medidos, não preenchidos por estimativa. Nenhum resultado real foi obtido.
+
+## Atualização de preparação — 27/10/2026 (prevalece sobre estimativas históricas)
+
+- Modelo local SHA-256 `64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2`, 3.095.033.483 bytes, igual ao objeto LFS publicado de `ggerganov/whisper.cpp/ggml-large-v3.bin`, consultado via API Hugging Face. Verificação não carrega o modelo para inferência.
+- Runtime instalado `1.9.5-dev`, commit `231638a0717b7822784297e5980965ffcec05810`, CLI SHA-256 `61f809860bea4cef8a936049280e06006b849a87e7ae35e919e7703237db3c5c`. Help e código do commit confirmam os flags e o fallback 0→1 em passos de 0,2; `-nf` torna o incremento efetivo zero.
+- Matriz de parâmetros preparados em `benchmark-matrix.json`: beam 5/fallback off como candidato inicial, fallback on e beam 10 como comparações isoladas. PT forçado, três threads, no-speech 0,6, entropy 2,4, logprob -1. É metadado de execução, não um runner automático. Não há superioridade medida de nenhuma configuração.
+- A seleção antiga incluía Espanhol e não certificava professores/ruído. A nova `benchmark-selection-2026-10-27.json` seleciona metadados reais de seis aulas em Biologia, Física, Química, Matemática, História e Literatura, com revisões e 18 janelas propostas. Janelas propostas não são gold nem comprovação acústica dos estratos.
+- Gold, pelo menos dois professores identificados, glossário, fala/ruído/música/silêncio anotados, amostras curtas, hashes de áudio e âncoras temporais continuam faltando. O checker deliberadamente reprova o manifesto vazio. Comparações de modelos e qualidade PT-BR permanecem pendentes de autorização + áudio real + trabalho humano.
+- O nome `for-tests-silero-v6.2.0-ggml.bin` não identifica um dummy: a investigação confirmou **885.098 bytes e SHA-256 `2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987`**, iguais aos pesos oficiais v6.2.0 em `ggml-org/whisper-vad`. O runtime carregou o modelo VAD e executou **somente zeros sintéticos em memória**, sem carregar ASR ou abrir áudio real. Sucesso de carregamento/execução não homologa retenção de fala, ruído/música nem timestamps ASR+VAD. Baseline permanece VAD off; habilitação exige comparação real autorizada e validação do mapeamento temporal.
+- Em 27/10 às 18:05 UTC havia 14.980.911.104 bytes livres e 22.749.376.512 bytes de RAM disponíveis. São observações anteriores ao deploy, não garantia de orçamento futuro. Reserva de 4 GiB, serviço de 12 GiB/300% CPU, gzip sem perda e um vídeo temporário por vez protegem a preparação; medir bytes/hora e RSS no piloto antes de afirmar que todo o corpus caberá.
+
+O relatório final da preparação e do deploy está em `docs/research/2026-10-27-fo-transcription-preparation.md`. A precisão real não está homologada; não usar os resultados sintéticos como ranking de modelos.
 
 ### Referências primárias
 

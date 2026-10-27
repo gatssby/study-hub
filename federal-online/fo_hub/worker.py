@@ -8,23 +8,53 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import fcntl
+import gzip
 import hashlib
 import json
+import math
+from functools import lru_cache
 import os
 from pathlib import Path
 import re
 import shutil
 import socket
+import sqlite3
+from contextlib import closing
 import subprocess
 import sys
 import tempfile
 import time
 import uuid
+import zlib
 
 from .store import FOStore, ACCEPTED_CORPUS
 from .transcription import AUTH_PHRASE, DEFAULT_AUTH_FILE, DEFAULT_PLATFORM_MARKER, TranscriptionQueue, qa_segments
 
 RESERVE=4*1024**3
+MODEL_SHA256='64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2'
+
+
+def file_sha256(path):
+    digest=hashlib.sha256()
+    with Path(path).open('rb') as handle:
+        for block in iter(lambda:handle.read(1024*1024),b''):digest.update(block)
+    return digest.hexdigest()
+
+
+@lru_cache(maxsize=8)
+def _verified_hash(path,size,mtime_ns):
+    return file_sha256(path)
+
+
+def identity(path):
+    path=Path(path)
+    if not path.is_file():return None
+    stat=path.stat()
+    return _verified_hash(str(path.resolve()),stat.st_size,stat.st_mtime_ns)
+
+
+class SourceChanged(RuntimeError):
+    pass
 
 
 @dataclass
@@ -38,15 +68,31 @@ class Config:
     chunk_s:int=600
     overlap_s:int=2
     threads:int=3
+    model_sha256:str|None=None
+    beam_size:int=5
+    temperature_fallback:bool=False
 
     @classmethod
     def from_env(cls):
         state=Path(os.environ.get('FO_STATE_ROOT','/home/ubuntu/study-hub-state/federal-online'))
-        return cls(state,Path(os.environ.get('STUDY_HUB_FO_DB',str(state/'hub.sqlite3'))),
+        config=cls(state,Path(os.environ.get('STUDY_HUB_FO_DB',str(state/'hub.sqlite3'))),
                    Path(os.environ.get('WHISPER_CPP_BIN','/home/ubuntu/study-hub-models/whisper.cpp/build/bin/whisper-cli')),
                    Path(os.environ.get('WHISPER_MODEL','/home/ubuntu/study-hub-models/ggml-large-v3.bin')),
                    Path(os.environ.get('STUDY_HUB_FO_TRANSCRIPTION_AUTH',DEFAULT_AUTH_FILE)),
                    Path(os.environ.get('STUDY_HUB_FO_PLATFORM_MARKER',DEFAULT_PLATFORM_MARKER)))
+        config.model_sha256=MODEL_SHA256
+        config.threads=int(os.environ.get('FO_ASR_THREADS','3'))
+        config.beam_size=int(os.environ.get('FO_ASR_BEAM_SIZE','5'))
+        config.temperature_fallback=os.environ.get('FO_ASR_TEMPERATURE_FALLBACK','false').lower()=='true'
+        return config
+
+    def parameters(self):
+        return {'language':'pt','threads':self.threads,'beam_size':self.beam_size,
+                'temperature':0,'temperature_fallback':self.temperature_fallback,
+                'temperature_increment':0.2 if self.temperature_fallback else 0,
+                'best_of':5,'no_speech_threshold':0.6,'max_context':-1,
+                'entropy_threshold':2.4,'logprob_threshold':-1.0,'vad':False,
+                'chunk_s':self.chunk_s,'overlap_s':self.overlap_s,'stitching_version':1,'checkpoint_version':1}
 
 
 def gate(config,env=None,platform=None):
@@ -59,7 +105,8 @@ def gate(config,env=None,platform=None):
     except OSError:reasons.append('authorization file missing')
     if not config.binary.is_file() or not os.access(config.binary,os.X_OK):reasons.append('whisper executable missing')
     if not config.model.is_file():reasons.append('model weights missing')
-    if config.chunk_s<=config.overlap_s or config.overlap_s<0 or config.threads<1:reasons.append('invalid chunk configuration')
+    elif config.model_sha256 and identity(config.model)!=config.model_sha256:reasons.append('model SHA-256 mismatch')
+    if config.chunk_s<=config.overlap_s or config.overlap_s<0 or not 1<=config.threads<=3 or config.beam_size<1:reasons.append('invalid chunk configuration')
     return {'allowed':not reasons,'reasons':reasons,'TRANSCRIPTION_ENABLED':env.get('TRANSCRIPTION_ENABLED','false')}
 
 
@@ -68,14 +115,42 @@ def parse_whisper(payload,offset=0):
     for row in payload.get('transcription',[]):
         times=row.get('offsets')
         if not times or 'from' not in times or 'to' not in times:raise ValueError('missing millisecond offsets')
-        out.append({'start':offset+float(times['from'])/1000,'end':offset+float(times['to'])/1000,'text':str(row.get('text','')).strip()})
+        start,end=float(times['from'])/1000,float(times['to'])/1000
+        if not all(math.isfinite(x) for x in (offset,start,end)) or offset<0 or start<0 or end<start:raise ValueError('invalid millisecond offsets')
+        out.append({'start':offset+start,'end':offset+end,'text':str(row.get('text','')).strip()})
     return out
 
 
 def atomic_json(path,data):
     path.parent.mkdir(parents=True,exist_ok=True)
     tmp=path.with_suffix('.tmp')
-    tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2));os.replace(tmp,path)
+    payload=json.dumps(data,ensure_ascii=False,indent=2,allow_nan=False).encode('utf-8')
+    with tmp.open('wb') as handle:
+        handle.write(gzip.compress(payload,mtime=0) if path.suffix=='.gz' else payload)
+        handle.flush();os.fsync(handle.fileno())
+    os.replace(tmp,path)
+
+
+def evidence_checksum(data):
+    fields=('source_sha256','fingerprint','offset_s','duration_s','raw','silence')
+    payload={key:data[key] for key in fields}
+    return hashlib.sha256(json.dumps(payload,sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False).encode()).hexdigest()
+
+
+def validate_checkpoint(data,source_sha256,fingerprint,offset,length):
+    if not isinstance(data,dict) or data.get('schema_version')!=1:raise ValueError('checkpoint schema')
+    for key,value in (('source_sha256',source_sha256),('fingerprint',fingerprint),('offset_s',offset),('duration_s',length)):
+        if data.get(key)!=value:raise ValueError('checkpoint identity or bounds')
+    if data.get('evidence_sha256')!=evidence_checksum(data):raise ValueError('checkpoint checksum')
+    if not isinstance(data.get('created_at'),(int,float)) or not math.isfinite(data['created_at']):raise ValueError('checkpoint timestamp')
+    raw=data['raw']
+    if not isinstance(raw,dict) or not isinstance(raw.get('transcription'),list):raise ValueError('checkpoint raw schema')
+    for row in raw['transcription']:
+        if not isinstance(row,dict) or not isinstance(row.get('text'),str):raise ValueError('checkpoint row schema')
+    parse_whisper(raw)
+    if not isinstance(data['silence'],list):raise ValueError('checkpoint silence schema')
+    for pair in data['silence']:
+        if not isinstance(pair,list) or len(pair)!=2 or not all(type(x) in (int,float) and math.isfinite(x) for x in pair) or not 0<=pair[0]<=pair[1]<=length:raise ValueError('checkpoint silence bounds')
 
 
 def silence_intervals(log,duration):
@@ -86,6 +161,85 @@ def silence_intervals(log,duration):
         elif start is not None:intervals.append((start,value));start=None
     if start is not None:intervals.append((start,duration))
     return intervals
+
+
+def reconcile_silent_gaps(qa,segments,chunks,duration):
+    intervals=sorted((c['offset_s']+start,c['offset_s']+end)
+                     for c in chunks for start,end in c['silence'])
+    qa['observations']=[]
+    retained=[]
+    for flag in qa['flags']:
+        if flag['kind']!='silence_gap':retained.append(flag);continue
+        idx=flag['idx']
+        start=max((s['end'] for s in segments[:idx]),default=0)
+        end=segments[idx]['start'] if idx<len(segments) else duration
+        covered=start
+        for left,right in intervals:
+            if left<=covered+0.05:covered=max(covered,right)
+        if covered>=end-0.05:
+            qa['observations'].append({**flag,'kind':'measured_silence_gap','start':start,'end':end})
+        else:retained.append(flag)
+    qa['flags']=retained
+
+
+def preflight(config,runner=subprocess.run):
+    """Inspect files, SQLite, versions and CLI capabilities, never open media.
+
+    Preparation readiness is separate from authorization. Network publication
+    access is audited separately, not silently treated as verified here.
+    """
+    checks={};problems=[]
+    for name,args in [('ffmpeg',['-version']),('ffprobe',['-version']),('rclone',['version']),
+                      ('whisper',["--version"])]:
+        executable=str(config.binary) if name=='whisper' else shutil.which(name)
+        entry:dict={'available':bool(executable and Path(executable).is_file())}
+        if entry['available']:
+            try:
+                result=runner([executable,*args],check=True,capture_output=True,text=True,timeout=30)
+                entry['version']=(result.stdout or result.stderr or '').splitlines()[0]
+            except (OSError,subprocess.SubprocessError,IndexError):entry['available']=False
+        if not entry['available']:problems.append(f'{name} unavailable')
+        checks[name]=entry
+    if checks['whisper']['available']:
+        try:
+            result=runner([str(config.binary),'--help'],check=True,capture_output=True,text=True,timeout=30)
+            help_text=(result.stdout or '')+(result.stderr or '')
+            missing=[flag for flag in ('-ojf','-nth','-et','-lpt','-tpi','-nf','-bs') if flag not in help_text]
+            checks['whisper']['missing_flags']=missing
+            if missing:problems.append('required whisper flags unavailable')
+        except (OSError,subprocess.SubprocessError):problems.append('whisper help failed')
+    digest=identity(config.model)
+    if not digest or (config.model_sha256 and digest!=config.model_sha256):problems.append('model integrity failed')
+    eligible=largest=invalid=0
+    try:
+        with closing(FOStore(config.db,readonly=True).conn) as c:
+            eligible=c.execute("SELECT COUNT(*) FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version JOIN lesson_video_sources s ON s.lesson_id=j.lesson_id WHERE j.state='queued' AND l.present=1 AND s.available=1 AND s.revision=CAST(j.version AS TEXT) AND s.remote_path IS NOT NULL").fetchone()[0]
+            largest=c.execute('SELECT COALESCE(MAX(size),0) FROM lesson_video_sources WHERE available=1').fetchone()[0]
+            invalid=c.execute("SELECT count(*) FROM lesson_video_sources WHERE available=1 AND (remote_path IS NULL OR remote_path NOT LIKE 'onedrive:Federal Online/%' OR size IS NULL OR size<=0)").fetchone()[0]
+            if invalid:problems.append('unclassified or invalid sources')
+    except (sqlite3.Error,OSError):
+        eligible=largest=invalid=0
+        problems.append('database unavailable or required schema missing')
+    free=None
+    try:
+        free=shutil.disk_usage(config.state).free
+        if free<RESERVE+largest+100*1024**2:problems.append('insufficient storage reserve')
+    except OSError:problems.append('state storage unavailable')
+    available=None
+    if Path('/proc/meminfo').exists():
+        entries={line.split(':')[0]:line.split(':')[1].strip() for line in Path('/proc/meminfo').read_text().splitlines()}
+        available=int(entries['MemAvailable'].split()[0])*1024
+        if available<12*1024**3:problems.append('less than 12 GiB RAM available')
+    return {'ready':not problems,'problems':problems,'dependencies':checks,
+            'model_sha256':digest,'model_expected_sha256':config.model_sha256,
+            'runtime_sha256':identity(config.binary),'parameters':config.parameters(),
+            'eligible_jobs':eligible,'invalid_sources':invalid,
+            'storage':{'free_bytes':free,'reserve_bytes':RESERVE,'largest_source_bytes':largest},
+            'resources':{'cpu_count':os.cpu_count(),'threads':config.threads,'memory_available_bytes':available,
+                         'service_memory_max_bytes':12*1024**3,'service_cpu_quota_percent':300},
+            'publication':{'source_root':'onedrive:Federal Online/',
+                           'target':'onedrive:Study Hub/Federal Online/Transcripts/generated_v2',
+                           'remote_access_verified':False},'inference_executed':False}
 
 
 class Worker:
@@ -111,12 +265,13 @@ class Worker:
         with self.c:
             self.c.execute("UPDATE transcription_jobs SET state=CASE WHEN attempts>=max_attempts THEN 'failed' ELSE 'queued' END,lease_owner=NULL,lease_until=NULL,last_error='worker interrupted; resumed from persistent queue' WHERE state='leased' AND lease_owner LIKE 'fo-worker:%'")
 
-    def lease(self):
+    def lease(self,lesson_id=None):
         now=time.time()
         self.c.execute('BEGIN IMMEDIATE')
         try:
-            self.c.execute("UPDATE transcription_jobs SET state='stale' WHERE state='queued' AND EXISTS(SELECT 1 FROM lessons l WHERE l.lesson_id=transcription_jobs.lesson_id AND l.version!=transcription_jobs.version)")
-            row=self.c.execute("SELECT j.* FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version JOIN lesson_video_sources s ON s.lesson_id=j.lesson_id WHERE j.state='queued' AND COALESCE(j.retry_at,0)<=? AND j.attempts<j.max_attempts AND l.present=1 AND s.available=1 AND CAST(j.version AS TEXT)=s.revision AND s.remote_path IS NOT NULL ORDER BY j.created_at,j.lesson_id LIMIT 1",(now,)).fetchone()
+            self.c.execute("UPDATE transcription_jobs SET state='superseded' WHERE state='queued' AND EXISTS(SELECT 1 FROM lessons l WHERE l.lesson_id=transcription_jobs.lesson_id AND l.version!=transcription_jobs.version)")
+            self.c.execute("UPDATE transcription_jobs SET state='done',progress=1 WHERE state='queued' AND EXISTS(SELECT 1 FROM transcripts t WHERE t.lesson_id=transcription_jobs.lesson_id AND t.version=transcription_jobs.version AND t.corpus=?)",(ACCEPTED_CORPUS,))
+            row=self.c.execute("SELECT j.* FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version JOIN lesson_video_sources s ON s.lesson_id=j.lesson_id WHERE j.state='queued' AND COALESCE(j.retry_at,0)<=? AND j.attempts<j.max_attempts AND l.present=1 AND s.available=1 AND CAST(j.version AS TEXT)=s.revision AND s.remote_path IS NOT NULL AND (? IS NULL OR j.lesson_id=?) ORDER BY j.created_at,j.lesson_id LIMIT 1",(now,lesson_id,lesson_id)).fetchone()
             if row is None:self.c.commit();return None
             self.c.execute("UPDATE transcription_jobs SET state='leased',attempts=attempts+1,lease_owner=?,lease_until=?,updated_at=? WHERE lesson_id=? AND version=?",(self.owner,now+7*86400,str(now),row['lesson_id'],row['version']))
             self.c.commit();return dict(row)
@@ -129,56 +284,119 @@ class Worker:
     def current_source(self,job):
         lesson=self.store.get_lesson(job['lesson_id'])
         source=self.c.execute('SELECT * FROM lesson_video_sources WHERE lesson_id=?',(job['lesson_id'],)).fetchone()
-        if not lesson or not lesson['present'] or lesson['version']!=job['version'] or not source or not source['available'] or source['revision']!=str(job['version']):raise RuntimeError('source revision no longer current')
+        if not lesson or not lesson['present'] or lesson['version']!=job['version'] or not source or not source['available'] or source['revision']!=str(job['version']):raise SourceChanged('source revision no longer current')
         if not str(source['remote_path']).startswith('onedrive:Federal Online/') or '..' in Path(source['remote_path']).parts:raise ValueError('source outside classified FO remote')
         return lesson,dict(source)
 
     def pipeline(self,job,work):
         cfg=self.cfg;lesson,source=self.current_source(job)
+        started=time.time()
+        checkout=cfg.binary.parent.parent.parent
+        runtime_commit=None
+        if (checkout/'.git').exists():
+            runtime_commit=self.command(['git','-C',checkout,'rev-parse','HEAD'],timeout=30).stdout.strip()
+        provenance={'model_sha256':identity(cfg.model),'runtime_sha256':identity(cfg.binary),
+                    'runtime_commit':runtime_commit,
+                    'runtime_libraries':{p.name:identity(p) for p in sorted(cfg.binary.parent.glob('*.so*')) if p.is_file()},
+                    'parameters':cfg.parameters()}
+        fingerprint=hashlib.sha256(json.dumps(provenance,sort_keys=True).encode()).hexdigest()
         size=int(source.get('size') or 0)
         if size<=0 or self.free_bytes()<RESERVE+size+100*1024**2:raise RuntimeError('storage budget or source size invalid')
         video=work/'source.mp4'
         self.command(['rclone','copyto',source['remote_path'],video,'--retries','3','--transfers','1',
                       '--max-size',f'{size}B','--max-transfer',f'{size+1024**2}B','--cutoff-mode','HARD'])
         if video.stat().st_size!=size:raise RuntimeError('source download size mismatch')
+        source_sha256=file_sha256(video)
         probe=self.command(['ffprobe','-v','error','-show_entries','format=duration','-of','json',video],timeout=60)
         duration=float(json.loads(probe.stdout)['format']['duration'])
-        if duration<=0:raise ValueError('invalid source duration')
+        if not math.isfinite(duration) or duration<=0 or duration>24*3600:raise ValueError('invalid source duration')
         expected=lesson.get('duration_s')
         if expected and abs(duration-float(expected))>max(5,float(expected)*0.05):raise ValueError('source duration mismatch')
-        segments=[];chunks=[];acoustic_flags=[];offset=0.0
+        chunks=[];acoustic_flags=[];raw_flags=[];offset=0.0
+        # Reuse only after byte identity, never a shared title, size or remote path.
+        # The video is still downloaded to prove identity; no persistent video cache.
+        evidence=cfg.state/'transcripts/evidence'/source_sha256/fingerprint
+        evidence.mkdir(parents=True,exist_ok=True)
         queue=TranscriptionQueue(self.store)
         while offset<duration:
             if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
             if self.free_bytes()<RESERVE+100*1024**2:raise RuntimeError('storage reserve reached')
             length=min(cfg.chunk_s,duration-offset);audio=work/'chunk.wav';prefix=work/'asr'
-            self.command(['ffmpeg','-nostdin','-y','-ss',str(offset),'-i',video,'-t',str(length),'-ar','16000','-ac','1','-c:a','pcm_s16le',audio])
-            silence=self.command(['ffmpeg','-nostdin','-i',audio,'-af','silencedetect=noise=-40dB:d=1','-f','null','-'])
-            self.command([cfg.binary,'-m',cfg.model,'-f',audio,'-l','pt','-t',str(cfg.threads),'-bs','5','-tp','0','-nf','-ng','-oj','-of',prefix],timeout=172800)
-            payload=json.loads(prefix.with_suffix('.json').read_text())
+            checkpoint=evidence/f'{offset:.3f}-{length:.3f}.json.gz'
+            cached=None;rejected=None
+            if checkpoint.is_file():
+                try:
+                    if checkpoint.is_symlink():raise RuntimeError('checkpoint symlink refused')
+                    cached=json.loads(gzip.decompress(checkpoint.read_bytes()))
+                    validate_checkpoint(cached,source_sha256,fingerprint,offset,length)
+                except (OSError,EOFError,zlib.error,ValueError,TypeError,KeyError,AttributeError,OverflowError) as exc:
+                    quarantine=checkpoint.with_name(checkpoint.name+'.rejected-'+uuid.uuid4().hex)
+                    checkpoint.rename(quarantine)
+                    rejected={'path':str(quarantine),'reason':type(exc).__name__,'rejected_at':time.time()}
+                    cached=None
+            if cached is not None:
+                payload=cached['raw'];intervals=cached['silence']
+            else:
+                if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
+                self.command(['ffmpeg','-nostdin','-y','-threads','1','-ss',str(offset),'-i',video,'-t',str(length),'-ar','16000','-ac','1','-c:a','pcm_s16le','-threads','1',audio])
+                silence=self.command(['ffmpeg','-nostdin','-threads','1','-i',audio,'-af','silencedetect=noise=-40dB:d=1','-f','null','-'])
+                command=[cfg.binary,'-m',cfg.model,'-f',audio,'-l','pt','-t',str(cfg.threads),'-bs',str(cfg.beam_size),'-bo','5','-mc','-1','-tp','0','-tpi','0.2' if cfg.temperature_fallback else '0','-nth','0.6','-et','2.4','-lpt','-1','-ng','-ojf','-of',prefix]
+                if not cfg.temperature_fallback:command.append('-nf')
+                self.command(command,timeout=172800)
+                raw_text=prefix.with_suffix('.json').read_text()
+                created_at=time.time()
+                # Preserve even malformed JSON before any decoder-output parsing.
+                atomic_json(evidence/f'{offset:.3f}-{length:.3f}.decoder-{uuid.uuid4().hex}.json.gz',
+                            {'raw_text':raw_text,'created_at':created_at,'rejected_cache':rejected,
+                             'source_sha256':source_sha256,'fingerprint':fingerprint,
+                             'offset_s':offset,'duration_s':length})
+                payload=json.loads(raw_text)
+                intervals=silence_intervals(silence.stderr or '',length)
+                record={'schema_version':1,'source_sha256':source_sha256,'fingerprint':fingerprint,
+                        'offset_s':offset,'duration_s':length,'raw':payload,'silence':intervals,
+                        'created_at':created_at,'rejected_cache':rejected,
+                        'decoder_command':[str(x) for x in command]}
+                record['evidence_sha256']=evidence_checksum(record)
+                atomic_json(checkpoint,record)
             current=parse_whisper(payload,offset)
-            intervals=silence_intervals(silence.stderr or '',length)
+            for flag in qa_segments(current,offset+length)['flags']:
+                if flag['kind'] in ('bad_timestamp','non_monotonic'):
+                    row=current[flag['idx']]
+                    raw_flags.append({**flag,'chunk_idx':len(chunks),'start':row['start'],'end':row['end']})
             for row in current:
                 for start,end in intervals:
                     if row['text'] and row['start']>=offset+start and row['end']<=offset+end:acoustic_flags.append({'kind':'text_during_measured_silence','start':row['start'],'end':row['end']})
-            # Preserve overlap text; QA flags alignment/duplication for focused review.
-            segments.extend(current);chunks.append({'offset_s':offset,'duration_s':length,'segments':current,'silence':intervals})
+            chunks.append({'offset_s':offset,'duration_s':length,'segments':current,'silence':intervals,'raw':payload,'reused':cached is not None})
             queue.progress(job['lesson_id'],job['version'],self.owner,min(1,(offset+length)/duration))
-            with self.c:self.c.execute('UPDATE transcription_jobs SET lease_until=? WHERE lesson_id=? AND version=?',(time.time()+7*86400,job['lesson_id'],job['version']))
+            with self.c:self.c.execute('UPDATE transcription_jobs SET lease_until=?,updated_at=? WHERE lesson_id=? AND version=? AND lease_owner=?',(time.time()+7*86400,str(time.time()),job['lesson_id'],job['version'],self.owner))
             audio.unlink(missing_ok=True);prefix.with_suffix('.json').unlink(missing_ok=True)
             if offset+length>=duration:break
             offset+=cfg.chunk_s-cfg.overlap_s
+        from .stitching import stitch_chunks
+        stitched=stitch_chunks(chunks)
+        segments=stitched['segments']
         qa=qa_segments(segments,duration)
+        reconcile_silent_gaps(qa,segments,chunks,duration)
+        qa['flags'].extend(stitched['flags'])
+        qa['flags'].extend(raw_flags)
         qa['flags'].extend(acoustic_flags)
         if not segments:qa['flags'].append({'kind':'empty_output'})
         qa['passed']=not qa['flags'];qa['metrics']['flag_count']=len(qa['flags'])
-        self.current_source(job)  # Catalog/source may have changed during long inference.
-        artifact={'lesson_id':job['lesson_id'],'version':job['version'],'model':'whisper-large-v3','model_path':str(cfg.model),'runtime_path':str(cfg.binary),'parameters':{'language':'pt','threads':cfg.threads,'beam_size':5,'temperature':0,'temperature_fallback':False,'chunk_s':cfg.chunk_s,'overlap_s':cfg.overlap_s},'source_size':size,'duration_s':duration,'created_at':time.time(),'corpus':ACCEPTED_CORPUS,'qa':qa,'chunks':chunks}
+        _,latest=self.current_source(job)
+        if any(latest[k]!=source[k] for k in ('remote_path','revision','size','available')):raise SourceChanged('source changed during inference')
+        artifact={'lesson_id':job['lesson_id'],'version':job['version'],'model':'whisper-large-v3','model_path':str(cfg.model),'runtime_path':str(cfg.binary),**provenance,'source_size':size,'source_sha256':source_sha256,'source_revision':source['revision'],'source_remote_path':source['remote_path'],'duration_s':duration,'created_at':time.time(),'elapsed_s':time.time()-started,'corpus':ACCEPTED_CORPUS,'qa':qa,'chunks':chunks,'segments':segments,'stitching':stitched.get('decisions',[])}
         status='validated' if qa['passed'] else 'review'
-        path=cfg.state/'transcripts'/('generated_v2' if qa['passed'] else 'review')/job['lesson_id']/f"v{job['version']}.json"
+        path=cfg.state/'transcripts'/('private' if qa['passed'] else 'review')/job['lesson_id']/f"v{job['version']}.json.gz"
         atomic_json(path,artifact)
         if qa['passed']:
-            self.store.add_transcript(job['lesson_id'],job['version'],segments,artifact['model'],ACCEPTED_CORPUS,True,qa)
+            lock=cfg.state/'locks/transcript-publication.lock';lock.parent.mkdir(parents=True,exist_ok=True)
+            with lock.open('a+') as handle:
+                fcntl.flock(handle,fcntl.LOCK_EX)
+                self.current_source(job)
+                public={k:artifact[k] for k in ('lesson_id','version','corpus','segments')}
+                public['qa']={'passed':True}
+                atomic_json(cfg.state/'transcripts/generated_v2'/job['lesson_id']/f"v{job['version']}.json",public)
+                self.store.add_transcript(job['lesson_id'],job['version'],segments,artifact['model'],ACCEPTED_CORPUS,True,qa)
         else:
             with self.c:
                 for flag in qa['flags']:
@@ -188,10 +406,13 @@ class Worker:
                     self.c.execute("INSERT OR IGNORE INTO focused_reviews VALUES(?,?,?,?,?,'pending_manual_review')",(job['lesson_id'],job['version'],start,end,flag['kind']))
         return status
 
-    def run_once(self):
+    def run_once(self,lesson_id=None):
         g=self.gate_fn()
         if not g['allowed']:return {'state':'blocked','gate':g}
-        job=self.lease()
+        largest=self.c.execute('SELECT COALESCE(MAX(size),0) FROM lesson_video_sources WHERE available=1').fetchone()[0]
+        if self.free_bytes()<RESERVE+largest+100*1024**2:
+            return {'state':'paused_storage','reserve_bytes':RESERVE,'largest_source_bytes':largest}
+        job=self.lease(lesson_id)
         if job is None:return {'state':'idle'}
         temp=self.cfg.state/'tmp/transcription';temp.mkdir(parents=True,exist_ok=True)
         try:
@@ -202,31 +423,39 @@ class Worker:
             return {'state':status,'lesson_id':job['lesson_id'],'version':job['version']}
         except Exception as exc:
             current=self.c.execute('SELECT attempts,max_attempts FROM transcription_jobs WHERE lesson_id=? AND version=?',(job['lesson_id'],job['version'])).fetchone()
-            state='failed' if current['attempts']>=current['max_attempts'] else 'queued'
+            state='superseded' if isinstance(exc,SourceChanged) else ('failed' if current['attempts']>=current['max_attempts'] else 'queued')
             with self.c:self.c.execute('UPDATE transcription_jobs SET state=?,retry_at=?,last_error=?,lease_owner=NULL,lease_until=NULL WHERE lesson_id=? AND version=?',(state,time.time()+min(86400,60*2**current['attempts']),type(exc).__name__,job['lesson_id'],job['version']))
-            return {'state':'retry' if state=='queued' else 'failed','error_type':type(exc).__name__,'lesson_id':job['lesson_id']}
+            return {'state':'retry' if state=='queued' else state,'error_type':type(exc).__name__,'lesson_id':job['lesson_id']}
 
 
 def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__);mode=p.add_mutually_exclusive_group(required=True)
     mode.add_argument('--check-only',action='store_true');mode.add_argument('--run',action='store_true')
     once=p.add_mutually_exclusive_group();once.add_argument('--once',action='store_true');once.add_argument('--loop',action='store_true')
+    p.add_argument('--lesson-id',help='Restrict an authorized pilot to exactly this queued lesson')
     a=p.parse_args(argv);cfg=Config.from_env();g=gate(cfg)
+    if a.lesson_id and a.loop:p.error('--lesson-id cannot be combined with --loop')
     if a.check_only:
-        with FOStore(cfg.db,readonly=True).conn as c:
-            counts={r[0]:r[1] for r in c.execute('SELECT state,count(*) FROM transcription_jobs GROUP BY state')}
-        print(json.dumps({'gate':g,'queue':counts,'inference_executed':False}));return 0
+        counts={}
+        try:
+            with closing(FOStore(cfg.db,readonly=True).conn) as c:
+                counts={r[0]:r[1] for r in c.execute('SELECT state,count(*) FROM transcription_jobs GROUP BY state')}
+        except (sqlite3.Error,OSError):pass
+        print(json.dumps({'gate':g,'queue':counts,'preflight':preflight(cfg),'inference_executed':False}));return 0
     if not g['allowed']:print(json.dumps({'state':'blocked','gate':g}));return 3
+    preparation=preflight(cfg)
+    if not preparation['ready']:
+        print(json.dumps({'state':'blocked','preflight':preparation}));return 3
     locks=cfg.state/'locks';locks.mkdir(parents=True,exist_ok=True)
     with (locks/'transcription.lock').open('a+') as lock:
         try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:print('transcription worker already owns lock',file=sys.stderr);return 4
         worker=Worker(cfg);worker.recover()
         while True:
-            result=worker.run_once();print(json.dumps(result),flush=True)
+            result=worker.run_once(a.lesson_id);print(json.dumps(result),flush=True)
             if result['state']=='blocked':return 3
             if not a.loop:return 0
-            if result['state'] in ('idle','retry','failed'):time.sleep(60)
+            if result['state'] in ('idle','retry','failed','paused_storage'):time.sleep(60)
 
 
 if __name__=='__main__':raise SystemExit(main())

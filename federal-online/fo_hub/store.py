@@ -274,8 +274,9 @@ class FOStore:
                        qa: Mapping[str, Any] | None = None) -> None:
         if corpus != ACCEPTED_CORPUS:
             raise TranscriptRejected(f"corpus {corpus!r} not accepted (need {ACCEPTED_CORPUS})")
-        if not validated:
+        if not validated or (qa is not None and qa.get('passed') is False):
             raise TranscriptRejected("transcript not validated")
+        qa = {**(qa or {}), 'passed': True}
         les = self.get_lesson(lesson_id)
         if les is None or les["version"] != version:
             raise TranscriptRejected("lesson missing or version is not current")
@@ -289,8 +290,18 @@ class FOStore:
                 [(lesson_id, version, i, s["start"], s["end"], s["text"])
                  for i, s in enumerate(segments)])
 
-    _CURRENT = ("JOIN lessons l ON l.lesson_id=t.lesson_id AND l.version=t.version "
-                "AND t.corpus='" + ACCEPTED_CORPUS + "'")
+    @property
+    def _CURRENT(self):
+        # Read-only API instances must also work against the legacy schema.
+        source_guard = ''
+        if self.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='lesson_video_sources'").fetchone():
+            source_guard = (" AND EXISTS(SELECT 1 FROM lesson_video_sources src WHERE "
+                            "src.lesson_id=l.lesson_id AND src.available=1 "
+                            "AND src.revision=CAST(l.version AS TEXT) AND src.remote_path IS NOT NULL)")
+        return ("JOIN lessons l ON l.lesson_id=t.lesson_id AND l.version=t.version "
+                "AND l.present=1 AND t.corpus='" + ACCEPTED_CORPUS + "' "
+                "AND CASE WHEN json_valid(t.qa_json) THEN "
+                "json_type(t.qa_json,'$.passed')='true' ELSE 0 END" + source_guard)
 
     def get_transcript(self, lesson_id: str) -> dict | None:
         t = self.conn.execute(
@@ -324,6 +335,17 @@ class FOStore:
                                  ).fetchone()
         jobs = {r[0]: r[1] for r in self.conn.execute(
             "SELECT state,COUNT(*) FROM transcription_jobs GROUP BY state")}
+        aliases = {'leased': 'processing', 'done': 'validated', 'stale': 'superseded'}
+        states = dict.fromkeys(('queued', 'processing', 'validated', 'review', 'failed', 'superseded'), 0)
+        for state, count in jobs.items():
+            normalized = aliases.get(state, state)
+            if normalized in states:
+                states[normalized] += count
+        processing = self.conn.execute(
+            "SELECT lease_until,progress FROM transcription_jobs WHERE state IN ('leased','processing')").fetchall()
+        progress = {'stale_leases': sum(r['lease_until'] is not None and r['lease_until'] <= time.time() for r in processing),
+                    'processing_progress': sum(r['progress'] or 0 for r in processing) / len(processing) if processing else 0,
+                    'total': sum(jobs.values()), 'unknown_states': {k: v for k, v in jobs.items() if aliases.get(k, k) not in states}}
         quality = {r[0]: r[1] for r in self.conn.execute(
             "SELECT quality,COUNT(*) FROM pdf_page_quality GROUP BY quality")}
         privacy = self.conn.execute(
@@ -351,5 +373,7 @@ class FOStore:
                             "unreviewed_pages": unreviewed, "ocr_pending_pages": ocr},
             "transcripts_validated": q(f"SELECT COUNT(*) FROM transcripts t {self._CURRENT}"),
             "transcription_jobs": jobs,
+            "transcription_states": states,
+            "transcription_progress": progress,
             "last_sync": dict(last) if last else None,
         }

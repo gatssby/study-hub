@@ -1,0 +1,19 @@
+{
+  "status": "planned_only_no_authorization",
+  "inference_executed": false,
+  "runtime_verified_on": "2026-10-27",
+  "runtime_commit": "231638a0717b7822784297e5980965ffcec05810",
+  "runtime_version": "1.9.5-dev",
+  "runtime_sha256": "61f809860bea4cef8a936049280e06006b849a87e7ae35e919e7703237db3c5c",
+  "weights_sha256": "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
+  "vad_validation": {"model":"silero-v6.2.0","path":"/home/ubuntu/study-hub-models/whisper.cpp/models/for-tests-silero-v6.2.0-ggml.bin","bytes":885098,"sha256":"2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987","official_lfs_match":true,"runtime_load_and_zero_pcm_probe":"passed","vad_synthetic_inference_executed":true,"real_audio_opened":false,"asr_inference_executed":false,"production_enabled":false,"pending":"speech retention, music/noise, ASR original-time mapping and quality comparison after authorization"},
+  "resource_limits": {"threads":3,"cpu_quota_percent":300,"memory_max_gib":12,"disk_reserve_gib":4},
+  "configs": [
+    {"id":"large-v3-fp16-no-fallback","role":"primary_quality_candidate","model":"large-v3","precision":"FP16","runtime":"whisper.cpp","language":"pt","threads":3,"beam_size":5,"temperature":0,"temperature_fallback":false,"temperature_increment":0,"fallback_schedule":[0],"vad":false,"chunk_s":600,"overlap_s":2,"no_speech_threshold":0.6,"entropy_threshold":2.4,"logprob_threshold":-1.0},
+    {"id":"large-v3-fp16-fallback","role":"controlled_fallback_comparison","model":"large-v3","precision":"FP16","runtime":"whisper.cpp","language":"pt","threads":3,"beam_size":5,"temperature":0,"temperature_fallback":true,"temperature_increment":0.2,"fallback_schedule":[0,0.2,0.4,0.6,0.8,1.0],"vad":false,"chunk_s":600,"overlap_s":2,"no_speech_threshold":0.6,"entropy_threshold":2.4,"logprob_threshold":-1.0},
+    {"id":"large-v3-fp16-beam10","role":"controlled_beam_comparison","model":"large-v3","precision":"FP16","runtime":"whisper.cpp","language":"pt","threads":3,"beam_size":10,"temperature":0,"temperature_fallback":false,"temperature_increment":0,"fallback_schedule":[0],"vad":false,"chunk_s":600,"overlap_s":2,"no_speech_threshold":0.6,"entropy_threshold":2.4,"logprob_threshold":-1.0}
+  ],
+  "blocked_until_recorded": ["explicit authorization reference", "same 16kHz mono input hashes and conversion command", "measured wall time RSS disk and failures", "manual teachers subjects noise nonspeech gold and timestamp annotations"],
+  "deferred": ["VAD on/off: runtime and weights verified on synthetic zeros; still requires authorized speech/noise/music quality and ASR timestamp mapping validation", "q5_0 versus FP16: separate controlled config only after approval", "Qwen or NeMo candidates: separate installation and execution authorization"],
+  "execution_policy": "This is metadata, not an executable runner. No model download, inference, deletion, or automatic promotion. No RTF cutoff."
+}

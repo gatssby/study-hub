@@ -1,0 +1,32 @@
+{
+  "status": "not_ready_manual_annotation_required",
+  "synthetic": false,
+  "inference_executed": false,
+  "authorization_ref": null,
+  "seed": 20261021,
+  "normalization": "NFC casefold word tokens; numeric spelling unchanged",
+  "requirements": {
+    "lessons": 6,
+    "teachers": 2,
+    "subjects": 2,
+    "speech_gold_minutes": 90,
+    "per_lesson": ["opening 300s", "middle_science 300s", "noise_interaction 300s"],
+    "nonspeech": "2 x 180s human-verified empty gold",
+    "full_lesson": "at least one entire lesson; annotate sparse timestamps and inspect loops/cuts",
+    "second_annotator_fraction": 0.2,
+    "maximum_interannotator_wer": 0.03,
+    "timestamp_anchor_spacing_s": 30
+  },
+  "lesson_fields": ["lesson_id", "teacher_id", "subject", "manually_verified"],
+  "segment_fields": ["id", "lesson_id", "kind", "stratum", "duration_s", "audio_sha256", "manually_verified", "gold_verified"],
+  "lessons": [],
+  "segments": [],
+  "input_conversion_command": null,
+  "runtime_commit": null,
+  "binary_sha256": null,
+  "weights_sha256": null,
+  "hardware": null,
+  "safe_resource_budgets": null,
+  "second_annotator_review": null,
+  "warning": "Empty on purpose. Do not invent teacher identities, noise labels, hashes, gold or measurements. Metadata readiness is not authorization."
+}

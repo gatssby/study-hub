@@ -138,12 +138,15 @@ _WORD = re.compile(r"\w+", re.UNICODE)
 
 def qa_segments(segments: Sequence[Mapping[str, Any]], duration_s: float | None = None,
                 max_run: int = 4, silence_gap_s: float = 20.0) -> dict:
-    """Flag (never remove) suspicious content. Returns segments unchanged."""
+    """Flag, never remove, suspicious content; silence gaps are informational."""
+    import math
+
     flags: list[dict] = []
     prev_end, prev_text, total_words, rep_words = 0.0, None, 0, 0
     for i, s in enumerate(segments):
         start, end, text = float(s["start"]), float(s["end"]), str(s.get("text", ""))
-        if end < start or start < 0 or (duration_s is not None and end > duration_s + 1):
+        finite = math.isfinite(start) and math.isfinite(end)
+        if not finite or end < start or start < 0 or (duration_s is not None and end > duration_s + 1):
             flags.append({"idx": i, "kind": "bad_timestamp"})
         if i and start < prev_end - 0.05:
             flags.append({"idx": i, "kind": "non_monotonic"})
@@ -160,14 +163,30 @@ def qa_segments(segments: Sequence[Mapping[str, Any]], duration_s: float | None 
             rep_words += best
         if prev_text is not None and text.strip() and text.strip().lower() == prev_text:
             flags.append({"idx": i, "kind": "duplicate_segment"})
-        prev_end, prev_text = max(prev_end, end), text.strip().lower()
+        # Detect consecutive repeated multiword phrases, not just token runs.
+        ngram_best = 0
+        for width in range(2, min(8, len(words) // (max_run + 1)) + 1):
+            for offset in range(width):
+                last, count = None, 0
+                for pos in range(offset, len(words) - width + 1, width):
+                    gram = tuple(words[pos:pos + width])
+                    count = count + 1 if gram == last else 1
+                    last = gram
+                    if count > max_run:
+                        ngram_best = max(ngram_best, count * width)
+        if ngram_best:
+            flags.append({"idx": i, "kind": "ngram_repetition", "words": ngram_best})
+            rep_words += max(0, ngram_best - (best if best > max_run else 0))
+        if finite and end >= start and start >= 0:
+            prev_end = max(prev_end, end)
+        prev_text = text.strip().lower()
     if duration_s and segments and duration_s - prev_end > silence_gap_s:
         flags.append({"idx": len(segments), "kind": "silence_gap",
                       "gap_s": round(duration_s - prev_end, 2)})
     metrics = {"segments": len(segments), "words": total_words,
                "repetition_ratio": round(rep_words / total_words, 4) if total_words else 0.0,
                "covered_until_s": prev_end, "flag_count": len(flags)}
-    return {"passed": not flags, "flags": flags, "metrics": metrics,
+    return {"passed": not any(f["kind"] != "silence_gap" for f in flags), "flags": flags, "metrics": metrics,
             "segments": [dict(s) for s in segments]}
 
 

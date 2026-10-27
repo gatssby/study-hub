@@ -1,5 +1,6 @@
 """Worker tests inject all subprocesses; no audio or model inference is executed."""
 import json
+import gzip
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -71,8 +72,8 @@ def test_fake_pipeline_publishes_only_passed_current_version_and_cleans_temps(tm
     # A 28-second uncovered tail is deliberately flagged for review, not published.
     assert result['state']=='review'
     assert store.get_transcript(lesson['lesson_id']) is None
-    artifacts=list((tmp_path/'transcripts/review').rglob('*.json'))
-    assert artifacts and 'A célula' in artifacts[0].read_text()
+    artifacts=list((tmp_path/'transcripts/review').rglob('*.json.gz'))
+    assert artifacts and 'A célula' in gzip.decompress(artifacts[0].read_bytes()).decode()
     assert not list((tmp_path/'tmp/transcription').glob('*'))
     assert any(cmd[0]==str(cfg.binary) for cmd in calls)
     assert '--max-size' in next(cmd for cmd in calls if cmd[0]=='rclone')
@@ -84,15 +85,15 @@ def test_whisper_offsets_are_milliseconds_and_overlap_kept_for_review():
     assert rows==[{'start':602.0,'end':604.5,'text':'núcleo'}]
 
 
-def test_insufficient_disk_retries_without_download_and_preserves_queue(tmp_path):
+def test_insufficient_disk_pauses_without_download_or_consuming_attempts(tmp_path):
     from fo_hub.worker import Worker
     store,lesson,cfg=setup(tmp_path)
     w=Worker(cfg,store=store,runner=lambda *a,**k:pytest.fail('disk guard failed'),gate_fn=lambda:{'allowed':True},free_bytes=lambda:1)
     store.conn.execute('insert into lesson_video_sources values(?,?,?,?,?,?)',(lesson['lesson_id'],'onedrive:Federal Online/a.mp4','1',9,1,'now'));store.conn.commit()
-    assert w.run_once()['state']=='retry'
+    assert w.run_once()['state']=='paused_storage'
     row=store.conn.execute('select * from transcription_jobs').fetchone()
-    assert row['state']=='queued' and row['retry_at']>0 and row['lease_owner'] is None
-    assert w.run_once()['state']=='idle'
+    assert row['state']=='queued' and row['attempts']==0 and row['lease_owner'] is None
+    assert w.run_once()['state']=='paused_storage'
 
 
 def test_recovery_removes_only_marked_worker_temporary_directories(tmp_path):

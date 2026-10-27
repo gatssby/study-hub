@@ -1,6 +1,8 @@
 """FO MCP protocol tests: only the HTTP boundary is mocked; no ASR or Anki."""
 import asyncio
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -61,18 +63,25 @@ def test_protocol_exposes_exactly_seven_readonly_tools_and_schema_constraints():
 
 
 def test_fo_tools_can_register_alongside_existing_anki_nineteen():
-    from fo_hub.mcp import register_tools
-    sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'services/anki-mcp-v2'))
-    from anki_mcp_v2.server import mcp
-    async def exercise():
-        async with Client(mcp) as client:
-            before={t.name for t in (await client.list_tools()).tools}
-        assert len(before)==19
-        register_tools(mcp)
-        async with Client(mcp) as client:
-            after={t.name for t in (await client.list_tools()).tools}
-        assert after==before|{x[0] for x in CASES}
-    asyncio.run(exercise())
+    # Registration is intentionally persistent; isolate it from Anki's tests.
+    root=Path(__file__).resolve().parents[2]
+    script='''import asyncio
+from mcp import Client
+from fo_hub.mcp import register_tools
+from anki_mcp_v2.server import mcp
+async def exercise():
+    async with Client(mcp) as client:
+        before={t.name for t in (await client.list_tools()).tools}
+    assert len(before)==19
+    register_tools(mcp)
+    async with Client(mcp) as client:
+        after={t.name for t in (await client.list_tools()).tools}
+    assert len(after)==26 and before<=after
+    assert len(after-before)==7 and all(n.startswith('fo_') for n in after-before)
+asyncio.run(exercise())
+'''
+    env={**os.environ,'PYTHONPATH':os.pathsep.join((str(root/'federal-online'),str(root/'services/anki-mcp-v2')))}
+    subprocess.run([sys.executable,'-c',script],env=env,check=True,capture_output=True,text=True,timeout=30)
 
 
 def test_anki_entrypoint_activates_opt_in_fo_registration(monkeypatch):

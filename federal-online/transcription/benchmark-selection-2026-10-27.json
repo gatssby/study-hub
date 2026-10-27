@@ -1,0 +1,178 @@
+{
+  "observed_at": "2026-10-27",
+  "seed": 20261027,
+  "selection": "live SQLite metadata only",
+  "inference_executed": false,
+  "authorization_granted": false,
+  "human_review_required": true,
+  "lessons": [
+    {
+      "lesson_id": "fo_21fd4985e207c5df",
+      "title": "Desenvolvimento embrionário",
+      "subject": "Biologia I",
+      "version": 1,
+      "duration_s": 2817.0,
+      "teacher_id": null,
+      "manually_verified": false,
+      "audio_sha256": null,
+      "windows": [
+        {
+          "start_s": 0,
+          "duration_s": 300,
+          "stratum": "opening"
+        },
+        {
+          "start_s": 1258.5,
+          "duration_s": 300,
+          "stratum": "middle_science"
+        },
+        {
+          "start_s": 2517.0,
+          "duration_s": 300,
+          "stratum": "noise_interaction_proposal_requires_listening"
+        }
+      ]
+    },
+    {
+      "lesson_id": "fo_2d3fb5791f4a014c",
+      "title": "Trabalho mecânico",
+      "subject": "Física I",
+      "version": 1,
+      "duration_s": 1778.0,
+      "teacher_id": null,
+      "manually_verified": false,
+      "audio_sha256": null,
+      "windows": [
+        {
+          "start_s": 0,
+          "duration_s": 300,
+          "stratum": "opening"
+        },
+        {
+          "start_s": 739.0,
+          "duration_s": 300,
+          "stratum": "middle_science"
+        },
+        {
+          "start_s": 1478.0,
+          "duration_s": 300,
+          "stratum": "noise_interaction_proposal_requires_listening"
+        }
+      ]
+    },
+    {
+      "lesson_id": "fo_21bc53736297a731",
+      "title": "Mistura de soluções",
+      "subject": "Química I",
+      "version": 1,
+      "duration_s": 1479.0,
+      "teacher_id": null,
+      "manually_verified": false,
+      "audio_sha256": null,
+      "windows": [
+        {
+          "start_s": 0,
+          "duration_s": 300,
+          "stratum": "opening"
+        },
+        {
+          "start_s": 589.5,
+          "duration_s": 300,
+          "stratum": "middle_science"
+        },
+        {
+          "start_s": 1179.0,
+          "duration_s": 300,
+          "stratum": "noise_interaction_proposal_requires_listening"
+        }
+      ]
+    },
+    {
+      "lesson_id": "fo_a719610740cb128f",
+      "title": "Função afim",
+      "subject": "Matemática I",
+      "version": 1,
+      "duration_s": 1500.0,
+      "teacher_id": null,
+      "manually_verified": false,
+      "audio_sha256": null,
+      "windows": [
+        {
+          "start_s": 0,
+          "duration_s": 300,
+          "stratum": "opening"
+        },
+        {
+          "start_s": 600.0,
+          "duration_s": 300,
+          "stratum": "middle_science"
+        },
+        {
+          "start_s": 1200.0,
+          "duration_s": 300,
+          "stratum": "noise_interaction_proposal_requires_listening"
+        }
+      ]
+    },
+    {
+      "lesson_id": "fo_00f1d411c04e2225",
+      "title": "Governo JK (1956 - 1961) (aula do curso 2025)",
+      "subject": "História I",
+      "version": 1,
+      "duration_s": 1455.0,
+      "teacher_id": null,
+      "manually_verified": false,
+      "audio_sha256": null,
+      "windows": [
+        {
+          "start_s": 0,
+          "duration_s": 300,
+          "stratum": "opening"
+        },
+        {
+          "start_s": 577.5,
+          "duration_s": 300,
+          "stratum": "middle_science"
+        },
+        {
+          "start_s": 1155.0,
+          "duration_s": 300,
+          "stratum": "noise_interaction_proposal_requires_listening"
+        }
+      ]
+    },
+    {
+      "lesson_id": "fo_e2d45966e0eba19c",
+      "title": "Contemporâneo - séc. XX",
+      "subject": "Literatura Geral",
+      "version": 1,
+      "duration_s": 1939.0,
+      "teacher_id": null,
+      "manually_verified": false,
+      "audio_sha256": null,
+      "windows": [
+        {
+          "start_s": 0,
+          "duration_s": 300,
+          "stratum": "opening"
+        },
+        {
+          "start_s": 819.5,
+          "duration_s": 300,
+          "stratum": "middle_science"
+        },
+        {
+          "start_s": 1639.0,
+          "duration_s": 300,
+          "stratum": "noise_interaction_proposal_requires_listening"
+        }
+      ]
+    }
+  ],
+  "additional_required": [
+    "two manually located 180-second nonspeech clips (silence/music/noise)",
+    "30-second short clips and 598-602-second boundary stress probes",
+    "full selected biology lesson stability run",
+    "teacher identification, glossary, 90-minute gold, timestamps and second annotator"
+  ]
+}

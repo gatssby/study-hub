@@ -58,10 +58,47 @@ def review_indexed_pages(store):
         reviewed += len(rows)
 
 
+def observe_video_source(store, lid, full, source):
+    """Compare known metadata only; absence of metadata is not content identity.
+
+    First observation establishes a baseline, including on existing databases.
+    Keep stronger known fields when a later inventory omits them. Metadata cannot
+    detect same-size replacement without an ID/ModTime change; worker hashing
+    protects inference, not already validated transcripts in that case.
+    """
+    c = store.conn
+    with c:
+        lesson = store.get_lesson(lid)
+        old = c.execute('SELECT * FROM lesson_source_observations WHERE lesson_id=? AND remote_path=?',
+                        (lid, full)).fetchone()
+        metadata = {key: source.get(key) for key in ('ID', 'Size', 'ModTime')}
+        previous = json.loads(old['metadata']) if old else {}
+        changed = any(metadata[k] is not None and previous.get(k) is not None
+                      and metadata[k] != previous[k] for k in metadata)
+        if changed and old['version'] == lesson['version']:
+            c.execute('UPDATE lessons SET version=version+1 WHERE lesson_id=?', (lid,))
+            c.execute('INSERT INTO lesson_revisions(lesson_id,version,change_kind,title,video_url,duration_s,at) '
+                      'VALUES(?,?,?,?,?,?,?)',
+                      (lid, lesson['version'] + 1, 'media_changed', lesson['title'], lesson['video_url'],
+                       lesson['duration_s'], time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())))
+            lesson = store.get_lesson(lid)
+        metadata = {k: v if v is not None else previous.get(k) for k, v in metadata.items()}
+        c.execute('INSERT OR REPLACE INTO lesson_source_observations VALUES(?,?,?,?,?)',
+                  (lid, full, json.dumps(metadata, sort_keys=True), lesson['version'], str(time.time())))
+        c.execute("UPDATE transcription_jobs SET state='superseded' WHERE lesson_id=? AND version<? AND state='queued'",
+                  (lid, lesson['version']))
+        c.execute('INSERT OR REPLACE INTO lesson_video_sources VALUES(?,?,?,?,1,?)',
+                  (lid, full, str(lesson['version']), source['Size'], str(time.time())))
+    return lesson
+
+
 def ingest(state,db_path,index_pdfs=True):
     state=Path(state);store=FOStore(db_path);c=store.conn
     c.executescript('''CREATE TABLE IF NOT EXISTS lesson_video_sources(
       lesson_id TEXT PRIMARY KEY,remote_path TEXT,revision TEXT,size INTEGER,available INTEGER,checked_at TEXT);
+      CREATE TABLE IF NOT EXISTS lesson_source_observations(
+        lesson_id TEXT NOT NULL,remote_path TEXT NOT NULL,metadata TEXT NOT NULL,
+        version INTEGER NOT NULL,checked_at TEXT,PRIMARY KEY(lesson_id,remote_path));
       CREATE TABLE IF NOT EXISTS ingestion_errors(path TEXT PRIMARY KEY,error_type TEXT,updated_at REAL);
       CREATE TABLE IF NOT EXISTS ingestion_status(component TEXT PRIMARY KEY,payload TEXT,updated_at REAL);
       CREATE TABLE IF NOT EXISTS pdf_page_quality(
@@ -91,6 +128,12 @@ def ingest(state,db_path,index_pdfs=True):
     queue=TranscriptionQueue(store)
     remote=read_json(state/'remote-videos.json',[])
     inventory={x['Path']:x for x in remote}
+    if (state/'remote-videos.json').exists():
+        with c:
+            for existing in c.execute('SELECT lesson_id,remote_path FROM lesson_video_sources WHERE available=1').fetchall():
+                relative=(existing['remote_path'] or '').removeprefix('onedrive:Federal Online/')
+                if relative not in inventory:
+                    c.execute('UPDATE lesson_video_sources SET available=0 WHERE lesson_id=?', (existing['lesson_id'],))
     manifests=read_json(state/'catalog/video_upload_manifest.json',{}).get('items',[])
     by_url={canonical(x.get('video_stream_url')):x for x in manifests if x.get('video_stream_url')}
     used=set();queued=0
@@ -107,12 +150,16 @@ def ingest(state,db_path,index_pdfs=True):
         expected=hashlib.sha256(json.dumps([canonical(row['video_url']),row['duration_s']]).encode()).hexdigest()[:16]
         if current.get('status')=='verified' and current.get('revision')==expected:
             full=current['remote_path'];relative=full.removeprefix('onedrive:Federal Online/')
-            source={'Size':current['size']}
+            observed=inventory.get(relative)
+            # A verified upload is newer than an inventory with a different
+            # size. Never attach that stale object's ID/ModTime to this upload.
+            source=observed if observed and observed.get('Size')==current['size'] else {'Size':current['size']}
+            if observed is None and (state/'remote-videos.json').exists():
+                source=None
         elif item and item.get('duration_seconds') is not None and item['duration_seconds']!=row['duration_s']:
             source=None
         if not source:continue
-        used.add(relative);lesson=store.get_lesson(lid)
-        with c:c.execute('INSERT OR REPLACE INTO lesson_video_sources VALUES(?,?,?,?,1,?)',(lid,full,str(lesson['version']),source['Size'],str(time.time())))
+        used.add(relative);lesson=observe_video_source(store,lid,full,source)
         # A fallback remote identity is metadata, not a second video to transcribe.
         aliases=c.execute("SELECT s.lesson_id FROM lesson_video_sources s JOIN lessons l USING(lesson_id) WHERE s.remote_path=? AND s.lesson_id!=? AND l.course_id LIKE 'remote:%'",(full,lid)).fetchall()
         with c:
@@ -127,9 +174,16 @@ def ingest(state,db_path,index_pdfs=True):
         if relative in used:continue
         parts=relative.split('/')
         row={'course_id':'remote:'+parts[0],'media_id':'remote:'+str(source.get('ID') or hashlib.sha256(relative.encode()).hexdigest()),'item_id':None,'subject':parts[1] if len(parts)>2 else '', 'front':parts[2] if len(parts)>3 else '', 'module':' > '.join(parts[:-1]),'title':Path(relative).stem,'media_type':'video','video_url':None,'duration_s':None}
+        existing=c.execute("SELECT l.media_id FROM lesson_video_sources s JOIN lessons l USING(lesson_id) "
+                           "WHERE s.remote_path=? AND l.course_id=? ORDER BY l.first_seen LIMIT 1",
+                           ('onedrive:Federal Online/'+relative,row['course_id'])).fetchone()
+        if existing:
+            # Keep the lesson identity when the object at its known path is
+            # replaced; record the new remote ID in observations, not lesson ID.
+            row['media_id']=existing['media_id']
         store.sync_lessons([row],authoritative=False)
-        lid=lesson_id_for(row['course_id'],row['media_id'],None);lesson=store.get_lesson(lid)
-        with c:c.execute('INSERT OR REPLACE INTO lesson_video_sources VALUES(?,?,?,?,1,?)',(lid,'onedrive:Federal Online/'+relative,str(lesson['version']),source['Size'],str(time.time())))
+        lid=lesson_id_for(row['course_id'],row['media_id'],None)
+        lesson=observe_video_source(store,lid,'onedrive:Federal Online/'+relative,source)
         queued+=queue.enqueue(lid,lesson['version'])
     # New catalog videos not uploaded yet are explicitly pending, never ASR-consumed.
     for row in rows:

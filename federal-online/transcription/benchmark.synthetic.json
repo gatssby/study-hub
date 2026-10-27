@@ -1,0 +1,11 @@
+{
+  "synthetic": true,
+  "description": "Invented text and resources for scorer testing ONLY. No ASR, audio, or real benchmark measurements.",
+  "glossary": ["célula", "ácido nucleico"],
+  "records": [
+    {"segment_id":"synthetic-speech","config_id":"large-v3-fp16-no-fallback","kind":"speech","reference":"célula célula tem ácido nucleico","hypothesis":"célula tem ácido nucleico","duration_s":60,"wall_s":120,"peak_rss_mb":100,"anchors":[{"id":"phrase-1","reference_start_s":0,"reference_end_s":2,"hypothesis_start_s":1,"hypothesis_end_s":3},{"id":"phrase-2","reference_start_s":30,"reference_end_s":32,"hypothesis_start_s":33,"hypothesis_end_s":35}]},
+    {"segment_id":"synthetic-silence","config_id":"large-v3-fp16-no-fallback","kind":"nonspeech","reference":"","hypothesis":"a b c d a b c d a b c d","duration_s":180,"wall_s":60,"peak_rss_mb":100},
+    {"segment_id":"synthetic-speech","config_id":"large-v3-fp16-fallback","kind":"speech","reference":"célula célula tem ácido nucleico","hypothesis":"célula célula tem ácido nucleico","duration_s":60,"wall_s":180,"peak_rss_mb":110},
+    {"segment_id":"synthetic-silence","config_id":"large-v3-fp16-fallback","kind":"nonspeech","reference":"","hypothesis":"","duration_s":180,"wall_s":90,"peak_rss_mb":110}
+  ]
+}
