@@ -83,7 +83,7 @@ O checker do manifesto vazio retorna corretamente `ready=false` e enumera o que 
 - Smoke real no transporte MCP existente: **26 ferramentas (19 Anki + sete FO)**; `anki_health` e `fo_get_sync_status` aprovados; `fo_search_transcripts` retornou vazio, `fo_get_transcript` retornou `fo_not_found`/404 para o piloto, como exige a base sem transcrições. Nenhuma escrita Anki chamada. Isso não comprova execução pelo modelo no cliente ChatGPT.
 - Não foi realizado push nesta missão. Alterações preexistentes Anki e arquivos alheios continuam na árvore local, fora dos commits/deploy FO.
 
-## 8. Estado final observado
+## 8. Estado observado e reconciliação posterior
 
 **27/10/2026, 19:09:20 UTC:**
 
@@ -92,6 +92,22 @@ O checker do manifesto vazio retorna corretamente `ready=false` e enumera o que 
 - Publicação `onedrive:Study Hub/Federal Online/Transcripts/generated_v2`: diretório existente/acessível, **zero arquivos publicados**. O diretório vazio foi criado e verificado, sem transcrição artificial. Cópia de uma transcrição real permanece pendente do piloto.
 - Livre: **14.971.527.168 bytes (13,94 GiB)**; RAM disponível **22.738.841.600 bytes (21,18 GiB)**; quatro vCPUs. São snapshots, não capacidade garantida futura. Reserva configurada **4.294.967.296 bytes**; maior fonte **697.698.800 bytes** no preflight.
 - ASR: `TRANSCRIPTION_ENABLED=false` persistente; `study-hub-fo-transcription` **inactive/disabled, MainPID=0**; autorização ausente; nenhum timer/processo ASR. Nenhuma inicialização automática criada.
+
+### Read-back final após indexação já agendada — 19:21:46 UTC
+
+O indexador não-ASR existente executou às 19:10:53–19:11:02 UTC, exit status 0, e voltou a executar sem erro. A migração aditiva agora está observada na base real: **2.478 observações de fonte**; **159 jobs de revisões antigas marcados superseded**. A fila corrente é **3.140 queued e 183 superseded**, mantendo **3.104 elegíveis**, zero transcrições/segmentos e nenhuma inferência. Não são 159 aulas transcritas ou excluídas: trata-se de reconciliação de estado/versionamento. Não foi criado/reconfigurado esse timer, nem iniciado manualmente o indexador.
+
+Última indexação registrou zero jobs novos, zero páginas PDF novas e zero erros PDF. `quick_check=ok` e preflight real repetido **ready=true/gate.allowed=false**. Disco livre **14.969.307.136 bytes**; RAM disponível **22.751.297.536 bytes**. Gates, serviço ASR inativo/desabilitado, ausência de autorização/timer/processos e PIDs Anki inalterados foram reconfirmados. O JSON de evidência preserva também o snapshot anterior para não apagar a história dos contadores.
+
+### Fechamento da cobertura de aliases — 19:34:13 UTC (estado final)
+
+A auditoria adicional identificou 627 vínculos elegíveis persistidos fora da descoberta atual do catálogo, sem observação de fonte. Corrigido no commit **`fd42367852d53945a225c4de09039ad25da552b3`**, implantado com quatro hashes conferidos: todos os aliases classificados agora recebem baseline/invalidação e podem recuperar disponibilidade sem recriar identidades aposentadas ou promover mapeamento de revisão antiga. Inventário só substitui upload verificado de tamanho divergente com SHA do snapshot e início da listagem comprovadamente posterior à verificação; mtime de conclusão sozinho não prova essa ordem. Inventário legado sem prova permanece conservador. Prova nova é registrada pelo sync existente; nenhuma sincronização em massa foi iniciada nesta missão.
+
+Reconciliação manual **somente de metadados**, sob lock existente e `index_pdfs=False`: zero jobs novos, zero PDF/ASR, **3.105 observações**, **zero fontes disponíveis ou jobs elegíveis sem observação**. Após reconciliações já agendadas, estado final **3.138 queued, 185 superseded, 3.104 elegíveis**, zero processing/validated/review/failed/transcrições/segmentos; **161 jobs de versões antigas superseded** no total. Não houve exclusão de arquivos/aulas nem mudança de autorização.
+
+Verificação final: **340 testes locais FO/MCP**, **146 testes sintéticos na VPS**. O ARM revelou um teste cujo glob dependia da ordem de diretório; corrigido no commit **`9e0e58d13fa38c4792519c1358e300fd7e1ff128`**, implantado e repetido com sucesso. Não era defeito de perda de evidência no worker. **Todos os 12 módulos atuais FO** foram reconferidos contra `fd42367`. MCP real repetido: 26 ferramentas/19 Anki/sete FO, status e buscas corretos. Preflight repetido **ready=true**, gate fechado. Os números anteriores nesta seção e no histórico de testes são snapshots preservados, não o resultado final.
+
+Livre **14.945.374.208 bytes (13,92 GiB)**; RAM disponível **22.652.657.664 bytes (21,10 GiB)**. Persistem false, inactive/disabled, autorização ausente, sem timer/processos ASR. Somente a API FO foi reiniciada; componentes Anki não foram reiniciados/modificados. Não foi feito push. Evidência e relatório completos são entregues em commit documental posterior; registros de deploy por commit ficam em `state/deploy/transcription-<sha>.json` com leitura de confirmação.
 
 ## 9. Piloto e ativação posterior
 

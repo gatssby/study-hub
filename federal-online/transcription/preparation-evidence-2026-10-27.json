@@ -1,13 +1,13 @@
 {
-  "observed_at": "2026-10-27T19:09:20.073437+00:00",
-  "code_commit": "51cb0e8da8b31f3dd0a23351c70808865d96c79e",
+  "observed_at": "2026-10-27T19:34:13.038240+00:00",
+  "code_commit": "fd42367852d53945a225c4de09039ad25da552b3",
   "changed_files_deployed_and_verified": 29,
   "all_fo_modules_hash_verified": 12,
   "local_fo_mcp_tests": {
-    "passed": 322
+    "passed": 340
   },
   "vps_mocked_synthetic_tests": {
-    "passed": 128
+    "passed": 146
   },
   "root_suite": {
     "passed": 259,
@@ -26,8 +26,8 @@
       "TRANSCRIPTION_ENABLED": "false"
     },
     "queue": {
-      "queued": 3299,
-      "superseded": 24
+      "queued": 3138,
+      "superseded": 185
     },
     "preflight": {
       "ready": true,
@@ -75,14 +75,14 @@
       "eligible_jobs": 3104,
       "invalid_sources": 0,
       "storage": {
-        "free_bytes": 14970359808,
+        "free_bytes": 14945374208,
         "reserve_bytes": 4294967296,
         "largest_source_bytes": 697698800
       },
       "resources": {
         "cpu_count": 4,
         "threads": 3,
-        "memory_available_bytes": 22752874496,
+        "memory_available_bytes": 22677860352,
         "service_memory_max_bytes": 12884901888,
         "service_cpu_quota_percent": 300
       },
@@ -109,6 +109,115 @@
     "mutations_performed": false
   },
   "snapshot": {
+    "at": "2026-10-27T19:34:13.038240+00:00",
+    "queue": {
+      "queued": 3138,
+      "superseded": 185
+    },
+    "eligible": 3104,
+    "transcripts": 0,
+    "segments": 0,
+    "quick_check": "ok",
+    "free_bytes": 14945374208,
+    "memory_available_bytes": 22652657664,
+    "cpu_count": 4,
+    "services": {
+      "study-hub-fo-transcription": {
+        "MainPID": "0",
+        "CPUQuotaPerSecUSec": "3s",
+        "MemoryMax": "12884901888",
+        "TasksMax": "128",
+        "ActiveState": "inactive",
+        "UnitFileState": "disabled"
+      },
+      "study-hub-fo-api": {
+        "MainPID": "2888207",
+        "CPUQuotaPerSecUSec": "1s",
+        "MemoryMax": "2147483648",
+        "TasksMax": "512",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      },
+      "anki-vnext-api": {
+        "MainPID": "998234",
+        "CPUQuotaPerSecUSec": "infinity",
+        "MemoryMax": "infinity",
+        "TasksMax": "26371",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      },
+      "anki-vnext-mcp": {
+        "MainPID": "998235",
+        "CPUQuotaPerSecUSec": "infinity",
+        "MemoryMax": "infinity",
+        "TasksMax": "26371",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      },
+      "anki-vnext-sync": {
+        "MainPID": "998212",
+        "CPUQuotaPerSecUSec": "infinity",
+        "MemoryMax": "infinity",
+        "TasksMax": "26371",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      },
+      "anki-vnext-mcp-tunnel": {
+        "MainPID": "3495063",
+        "CPUQuotaPerSecUSec": "infinity",
+        "MemoryMax": "infinity",
+        "TasksMax": "26371",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      }
+    },
+    "asr_processes": [],
+    "enabled_lines": [
+      "TRANSCRIPTION_ENABLED=false"
+    ],
+    "authorization_present": false,
+    "transcription_timers": [],
+    "provisional_same_path_groups": [
+      851,
+      853
+    ],
+    "index_metadata": {
+      "updated_at": 1793129638.2830734,
+      "source_observations": 3105,
+      "jobs_queued": 0,
+      "source_videos": 2252,
+      "pdf_new_pages": 0,
+      "pdf_errors": 0,
+      "superseded_old_versions": 161
+    }
+  },
+  "anki_pids_unchanged_from_before_deploy": true,
+  "mcp_smoke": {
+    "tool_count": 26,
+    "anki_tool_count": 19,
+    "fo_tool_count": 7,
+    "anki_health": "passed",
+    "fo_get_sync_status": "passed",
+    "fo_search_transcripts": "empty as expected",
+    "fo_get_transcript": "not found as expected"
+  },
+  "vad_probe": {
+    "weights_sha256": "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987",
+    "official_lfs_match": true,
+    "runtime_load": "passed",
+    "input": "2 seconds zero PCM in memory at 16 kHz",
+    "frames": 63,
+    "maximum_speech_probability": 0.009184654802083969,
+    "asr_model_loaded": false,
+    "real_audio_opened": false,
+    "vad_synthetic_inference_executed": true,
+    "production_vad_enabled": false
+  },
+  "asr_inference_executed": false,
+  "real_audio_downloaded": false,
+  "existing_files_deleted": false,
+  "old_corpus_recreated": false,
+  "snapshot_before_scheduled_index": {
     "at": "2026-10-27T19:09:20.073437+00:00",
     "queue": {
       "queued": 3299,
@@ -182,30 +291,96 @@
       853
     ]
   },
-  "anki_pids_unchanged_from_before_deploy": true,
-  "mcp_smoke": {
-    "tool_count": 26,
-    "anki_tool_count": 19,
-    "fo_tool_count": 7,
-    "anki_health": "passed",
-    "fo_get_sync_status": "passed",
-    "fo_search_transcripts": "empty as expected",
-    "fo_get_transcript": "not found as expected"
+  "index_migration_verified": {
+    "observations": 3105,
+    "available_without_observation": 0,
+    "eligible_without_observation": 0,
+    "superseded_old_version_jobs": 161,
+    "metadata_reconciliation_index_pdfs": false,
+    "asr_started": false
   },
-  "vad_probe": {
-    "weights_sha256": "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987",
-    "official_lfs_match": true,
-    "runtime_load": "passed",
-    "input": "2 seconds zero PCM in memory at 16 kHz",
-    "frames": 63,
-    "maximum_speech_probability": 0.009184654802083969,
-    "asr_model_loaded": false,
-    "real_audio_opened": false,
-    "vad_synthetic_inference_executed": true,
-    "production_vad_enabled": false
+  "snapshot_before_alias_completion": {
+    "at": "2026-10-27T19:21:46.761336+00:00",
+    "queue": {
+      "queued": 3140,
+      "superseded": 183
+    },
+    "eligible": 3104,
+    "transcripts": 0,
+    "segments": 0,
+    "quick_check": "ok",
+    "free_bytes": 14969307136,
+    "memory_available_bytes": 22751297536,
+    "cpu_count": 4,
+    "services": {
+      "study-hub-fo-transcription": {
+        "MainPID": "0",
+        "CPUQuotaPerSecUSec": "3s",
+        "MemoryMax": "12884901888",
+        "TasksMax": "128",
+        "ActiveState": "inactive",
+        "UnitFileState": "disabled"
+      },
+      "study-hub-fo-api": {
+        "MainPID": "2888207",
+        "CPUQuotaPerSecUSec": "1s",
+        "MemoryMax": "2147483648",
+        "TasksMax": "512",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      },
+      "anki-vnext-api": {
+        "MainPID": "998234",
+        "CPUQuotaPerSecUSec": "infinity",
+        "MemoryMax": "infinity",
+        "TasksMax": "26371",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      },
+      "anki-vnext-mcp": {
+        "MainPID": "998235",
+        "CPUQuotaPerSecUSec": "infinity",
+        "MemoryMax": "infinity",
+        "TasksMax": "26371",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      },
+      "anki-vnext-sync": {
+        "MainPID": "998212",
+        "CPUQuotaPerSecUSec": "infinity",
+        "MemoryMax": "infinity",
+        "TasksMax": "26371",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      },
+      "anki-vnext-mcp-tunnel": {
+        "MainPID": "3495063",
+        "CPUQuotaPerSecUSec": "infinity",
+        "MemoryMax": "infinity",
+        "TasksMax": "26371",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      }
+    },
+    "asr_processes": [],
+    "enabled_lines": [
+      "TRANSCRIPTION_ENABLED=false"
+    ],
+    "authorization_present": false,
+    "transcription_timers": [],
+    "provisional_same_path_groups": [
+      851,
+      853
+    ],
+    "index_metadata": {
+      "updated_at": 1793128858.595401,
+      "source_observations": 2478,
+      "jobs_queued": 0,
+      "source_videos": 2252,
+      "pdf_new_pages": 0,
+      "pdf_errors": 0,
+      "superseded_old_versions": 159
+    }
   },
-  "asr_inference_executed": false,
-  "real_audio_downloaded": false,
-  "existing_files_deleted": false,
-  "old_corpus_recreated": false
+  "test_fix_commit": "9e0e58d13fa38c4792519c1358e300fd7e1ff128"
 }
