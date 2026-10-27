@@ -220,5 +220,5 @@ def test_raw_evidence_is_losslessly_compressed_and_not_public(tmp_path):
     private = tmp_path/'transcripts/private'/lesson['lesson_id']/'v1.json.gz'
     payload = json.loads(gzip.decompress(private.read_bytes()))
     assert payload['chunks'][0]['raw']['transcription'][0]['text'] == 'Conteúdo científico legítimo.'
-    checkpoint = next((tmp_path/'transcripts/evidence').rglob('*.json.gz'))
+    checkpoint = next((tmp_path/'transcripts/evidence').rglob('0.000-30.000.json.gz'))
     assert json.loads(gzip.decompress(checkpoint.read_bytes()))['raw'] == payload['chunks'][0]['raw']
