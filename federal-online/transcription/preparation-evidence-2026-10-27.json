@@ -1,0 +1,211 @@
+{
+  "observed_at": "2026-10-27T19:09:20.073437+00:00",
+  "code_commit": "51cb0e8da8b31f3dd0a23351c70808865d96c79e",
+  "changed_files_deployed_and_verified": 29,
+  "all_fo_modules_hash_verified": 12,
+  "local_fo_mcp_tests": {
+    "passed": 322
+  },
+  "vps_mocked_synthetic_tests": {
+    "passed": 128
+  },
+  "root_suite": {
+    "passed": 259,
+    "failed": 1,
+    "skipped": 4,
+    "warnings": 2,
+    "preexisting_failure": "apps/anki-gpt/tests/test_regressions.py::test_background_queue_mutation_publishes_snapshot_and_media_before_releasing"
+  },
+  "preflight": {
+    "gate": {
+      "allowed": false,
+      "reasons": [
+        "TRANSCRIPTION_ENABLED is not true",
+        "authorization file missing"
+      ],
+      "TRANSCRIPTION_ENABLED": "false"
+    },
+    "queue": {
+      "queued": 3299,
+      "superseded": 24
+    },
+    "preflight": {
+      "ready": true,
+      "problems": [],
+      "dependencies": {
+        "ffmpeg": {
+          "available": true,
+          "version": "ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers"
+        },
+        "ffprobe": {
+          "available": true,
+          "version": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers"
+        },
+        "rclone": {
+          "available": true,
+          "version": "rclone v1.73.1"
+        },
+        "whisper": {
+          "available": true,
+          "version": "whisper.cpp version: 1.9.5-dev",
+          "missing_flags": []
+        }
+      },
+      "model_sha256": "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
+      "model_expected_sha256": "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
+      "runtime_sha256": "61f809860bea4cef8a936049280e06006b849a87e7ae35e919e7703237db3c5c",
+      "parameters": {
+        "language": "pt",
+        "threads": 3,
+        "beam_size": 5,
+        "temperature": 0,
+        "temperature_fallback": false,
+        "temperature_increment": 0,
+        "best_of": 5,
+        "no_speech_threshold": 0.6,
+        "max_context": -1,
+        "entropy_threshold": 2.4,
+        "logprob_threshold": -1.0,
+        "vad": false,
+        "chunk_s": 600,
+        "overlap_s": 2,
+        "stitching_version": 1,
+        "checkpoint_version": 1
+      },
+      "eligible_jobs": 3104,
+      "invalid_sources": 0,
+      "storage": {
+        "free_bytes": 14970359808,
+        "reserve_bytes": 4294967296,
+        "largest_source_bytes": 697698800
+      },
+      "resources": {
+        "cpu_count": 4,
+        "threads": 3,
+        "memory_available_bytes": 22752874496,
+        "service_memory_max_bytes": 12884901888,
+        "service_cpu_quota_percent": 300
+      },
+      "publication": {
+        "source_root": "onedrive:Federal Online/",
+        "target": "onedrive:Study Hub/Federal Online/Transcripts/generated_v2",
+        "remote_access_verified": false
+      },
+      "inference_executed": false
+    },
+    "inference_executed": false
+  },
+  "remote_paths": {
+    "at": "2026-10-27T19:09:19.025790+00:00",
+    "eligible_links": 3104,
+    "distinct_eligible_paths": 2252,
+    "live_remote_files": 2252,
+    "missing_eligible_paths": 0,
+    "size_mismatches": 0,
+    "bytes_downloaded": 0,
+    "publication_directory": "onedrive:Study Hub/Federal Online/Transcripts/generated_v2",
+    "is_directory": true,
+    "published_files": 0,
+    "mutations_performed": false
+  },
+  "snapshot": {
+    "at": "2026-10-27T19:09:20.073437+00:00",
+    "queue": {
+      "queued": 3299,
+      "superseded": 24
+    },
+    "eligible": 3104,
+    "transcripts": 0,
+    "segments": 0,
+    "quick_check": "ok",
+    "free_bytes": 14971527168,
+    "memory_available_bytes": 22738841600,
+    "cpu_count": 4,
+    "services": {
+      "study-hub-fo-transcription": {
+        "MainPID": "0",
+        "CPUQuotaPerSecUSec": "3s",
+        "MemoryMax": "12884901888",
+        "TasksMax": "128",
+        "ActiveState": "inactive",
+        "UnitFileState": "disabled"
+      },
+      "study-hub-fo-api": {
+        "MainPID": "2888207",
+        "CPUQuotaPerSecUSec": "1s",
+        "MemoryMax": "2147483648",
+        "TasksMax": "512",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      },
+      "anki-vnext-api": {
+        "MainPID": "998234",
+        "CPUQuotaPerSecUSec": "infinity",
+        "MemoryMax": "infinity",
+        "TasksMax": "26371",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      },
+      "anki-vnext-mcp": {
+        "MainPID": "998235",
+        "CPUQuotaPerSecUSec": "infinity",
+        "MemoryMax": "infinity",
+        "TasksMax": "26371",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      },
+      "anki-vnext-sync": {
+        "MainPID": "998212",
+        "CPUQuotaPerSecUSec": "infinity",
+        "MemoryMax": "infinity",
+        "TasksMax": "26371",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      },
+      "anki-vnext-mcp-tunnel": {
+        "MainPID": "3495063",
+        "CPUQuotaPerSecUSec": "infinity",
+        "MemoryMax": "infinity",
+        "TasksMax": "26371",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      }
+    },
+    "asr_processes": [],
+    "enabled_lines": [
+      "TRANSCRIPTION_ENABLED=false"
+    ],
+    "authorization_present": false,
+    "transcription_timers": [],
+    "provisional_same_path_groups": [
+      851,
+      853
+    ]
+  },
+  "anki_pids_unchanged_from_before_deploy": true,
+  "mcp_smoke": {
+    "tool_count": 26,
+    "anki_tool_count": 19,
+    "fo_tool_count": 7,
+    "anki_health": "passed",
+    "fo_get_sync_status": "passed",
+    "fo_search_transcripts": "empty as expected",
+    "fo_get_transcript": "not found as expected"
+  },
+  "vad_probe": {
+    "weights_sha256": "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987",
+    "official_lfs_match": true,
+    "runtime_load": "passed",
+    "input": "2 seconds zero PCM in memory at 16 kHz",
+    "frames": 63,
+    "maximum_speech_probability": 0.009184654802083969,
+    "asr_model_loaded": false,
+    "real_audio_opened": false,
+    "vad_synthetic_inference_executed": true,
+    "production_vad_enabled": false
+  },
+  "asr_inference_executed": false,
+  "real_audio_downloaded": false,
+  "existing_files_deleted": false,
+  "old_corpus_recreated": false
+}
