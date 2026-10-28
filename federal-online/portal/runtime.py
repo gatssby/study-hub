@@ -341,6 +341,17 @@ def materials(args: argparse.Namespace, *, discover_options: Callable[[], list[d
                 for job in course_jobs:
                     if job["key"] in done:
                         continue
+                    # Retry an interrupted durable generation before downloads can
+                    # mutate staging inodes already linked into the final tree.
+                    if (build / 'manifest.json').exists():
+                        try:
+                            with (paths.state_root/'locks/materials-publication.lock').open('a+') as publication:
+                                fcntl.flock(publication, fcntl.LOCK_EX)
+                                merge_materials(build, final_dir)
+                        except Exception as exc:
+                            failures += 1
+                            log(f"[materials] pending promotion failed for {job['key']}: {type(exc).__name__}")
+                            break
                     build.mkdir(parents=True, exist_ok=True)
                     entries: list = []
                     successful=True
@@ -357,7 +368,8 @@ def materials(args: argparse.Namespace, *, discover_options: Callable[[], list[d
                             fcntl.flock(publication,fcntl.LOCK_EX)
                             if entries:
                                 write_manifest(build, entries)
-                                _write_course_manifest(final_dir, build, entries)
+                                if not (build / 'manifest.json').exists():
+                                    _write_course_manifest(final_dir, build, entries)
                             merge_materials(build, final_dir)
                     except Exception as exc:
                         failures+=1
@@ -384,16 +396,10 @@ def materials(args: argparse.Namespace, *, discover_options: Callable[[], list[d
 
 
 def _write_course_manifest(final_dir: Path, build: Path, entries: list) -> None:
-    """manifest.json per course accumulates by relative_path; absent items are kept (never deleted)."""
+    """Stage new observations only; merge_materials owns historical version merge."""
     from dataclasses import asdict, is_dataclass
 
-    current = read_json(final_dir / "manifest.json", {}).get("items", [])
-    merged = {i.get("relative_path") or i.get("target_key"): i for i in current}
-    for e in entries:
-        item = asdict(e) if is_dataclass(e) else dict(e)
-        if item.get("status") == "ok" or (item.get("relative_path") or item.get("target_key")) not in merged:
-            merged[item.get("relative_path") or item.get("target_key")] = item
-    items = sorted(merged.values(), key=lambda i: str(i.get("relative_path") or i.get("target_key")))
+    items = [asdict(e) if is_dataclass(e) else dict(e) for e in entries]
     atomic_write_json(build / "manifest.json", {"schema_version": SCHEMA_VERSION, "generated_at": now_iso(),
                                                 "count": len(items), "items": items})
 
