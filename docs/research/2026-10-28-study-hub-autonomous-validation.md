@@ -45,3 +45,13 @@ Suíte FO+MCP após runner: 375 passed. Suíte raiz reexecutada: 259 passed, qua
 - Não iniciado: comparações reais, homologação final e publicação; piloto em execução, não concluído.
 
 Próxima ação: acompanhar primeiro checkpoint real sem concorrência de modelos, inspecionar raw e tempos e preparar comparações limitadas. Consolidar achados PDF/operação e revisão independente. Nenhuma decisão desta missão autoriza ativação integral futura.
+
+## Marco integrado — 28/10/2026 04:07 UTC
+
+- Os três findings ASR das revisões independentes foram tratados no commit `c5b72d9`: diagnóstico best-effort não prende lease; checkpoint schema 2 cobre logs/timings no checksum e validação; saída parcial/malformada ou ausência de JSON preserva evidência disponível antes da limpeza. Regressões em `test_worker_failure_evidence.py`; notificação tardia referente ao diff anterior não indica regressão nova. O processo do piloto já estava carregado antes dessas correções; não foi reiniciado para evitar repetir inferência e a presença do commit local não é prova de deploy.
+- Piloto continua ativo, um decoder, ainda sem checkpoint concluído. Última telemetria: pico cgroup **4.680.544.256 bytes**, CPU acumulada **4.314,59 s**, livres **14.409.863.168 bytes**. CPU acumulada não é wall time nem RTF. Não há resultado/qualidade/segmentos finais a anunciar.
+- Reclassificação PDF v4 finalizada: **143.265 páginas** na política atual, **667 bloqueadas** (511 OCR + 156 privacidade), **122 bloqueios adicionais** sobre o snapshot inicial. Nenhum OCR promovido; originais intactos. Ver relatório PDF para limites acadêmicos.
+- Validação direta MCP ampliada: **27 páginas distintas**, 23 text_only/quatro blocked, 27 citações corretas com origem/versão, 22 respostas iguais à reextração sanitizada; busca positiva nas seis disciplinas. Quatro páginas inspecionadas visualmente pelo pai nesta rodada, incluindo três rasters adicionais. Fórmulas, índices e associação de colunas continuam apenas parcialmente avaliados, sem certificação acadêmica.
+- Comparação OCR real em duas páginas, oito reconhecimentos/duas orientações, commit `b72b606`: nenhum benefício semântico demonstrado para troca global; nenhuma promoção, deploy ou mudança do extrator. Gold humano continua uma dependência real.
+- Catálogo/status corrigidos no commit `4c55df5`, mas deploy aguarda revisão independente; confirmar retry sem falsos desaparecimentos antes de executar coleta real. Suíte integrada FO+MCP: **380 passed in 2.37s** no estado integrado. Mudanças Anki preexistentes continuam fora dos commits.
+- Interface ChatGPT indisponível nesta sessão: headless bot-blocked e app nativo sem janela AX utilizável; teste de servidor não foi apresentado como teste do plugin instalado.

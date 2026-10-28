@@ -1,0 +1,485 @@
+{
+  "observed_utc": "2026-10-28T04:07:49+00:00",
+  "scope": "Direct MCP server read-only; not ChatGPT client UI or human academic gold",
+  "privacy_final": {
+    "policy_version": 4,
+    "pages_total": 143265,
+    "text": 142533,
+    "low_text": 65,
+    "ocr_review_blocked": 511,
+    "privacy_review_blocked": 156,
+    "blocked_total": 667
+  },
+  "mcp": {
+    "mcp-pdf-visual-anchors": [
+      {
+        "handle": "f571f03396bf0527",
+        "page": 5,
+        "chars": 2901,
+        "question_labels_in_return_order": [
+          "01",
+          "02",
+          "03",
+          "04",
+          "05",
+          "06",
+          "07",
+          "08",
+          "09",
+          "01",
+          "06"
+        ],
+        "answer_heading_count": 1,
+        "symbol_counts": {
+          "²": 0,
+          "³": 0,
+          "⇒": 0,
+          "→": 1,
+          "√": 0,
+          "α": 0,
+          "β": 0
+        },
+        "visual_checked_by_agent": true,
+        "visual_chemistry_anchors": {
+          "sodium_sulfide_plain": true,
+          "sodium_sulfide_subscript": false,
+          "reaction_arrow_present": true,
+          "superscript_23": false
+        }
+      },
+      {
+        "handle": "d8f04a9cf62a4a19",
+        "page": 5,
+        "chars": 3159,
+        "question_labels_in_return_order": [
+          "01",
+          "02",
+          "04",
+          "05",
+          "06",
+          "07",
+          "08"
+        ],
+        "answer_heading_count": 8,
+        "symbol_counts": {
+          "²": 0,
+          "³": 0,
+          "⇒": 1,
+          "→": 0,
+          "√": 1,
+          "α": 0,
+          "β": 0
+        },
+        "visual_checked_by_agent": true,
+        "visual_formula_anchors": {
+          "18,5_present": true,
+          "55,5_present": true,
+          "h_square_equals_3_contiguous": false
+        }
+      },
+      {
+        "handle": "100c1aae557663c7",
+        "page": 5,
+        "chars": 5024,
+        "question_labels_in_return_order": [
+          "01",
+          "02",
+          "03",
+          "04",
+          "05"
+        ],
+        "answer_heading_count": 0,
+        "symbol_counts": {
+          "²": 0,
+          "³": 0,
+          "⇒": 0,
+          "→": 0,
+          "√": 0,
+          "α": 0,
+          "β": 0
+        },
+        "visual_checked_by_agent": true
+      }
+    ],
+    "mcp-pdf-search-validation": [
+      {
+        "group": "linguagens",
+        "matched": true,
+        "citation_matches": true,
+        "version_matches": true,
+        "returned": 14
+      },
+      {
+        "group": "quimica",
+        "matched": true,
+        "citation_matches": true,
+        "version_matches": true,
+        "returned": 22
+      },
+      {
+        "group": "biologia",
+        "matched": true,
+        "citation_matches": true,
+        "version_matches": true,
+        "returned": 22
+      },
+      {
+        "group": "matematica",
+        "matched": true,
+        "citation_matches": true,
+        "version_matches": true,
+        "returned": 14
+      },
+      {
+        "group": "historia",
+        "matched": true,
+        "citation_matches": true,
+        "version_matches": true,
+        "returned": 22
+      },
+      {
+        "group": "fisica",
+        "matched": true,
+        "citation_matches": true,
+        "version_matches": true,
+        "returned": 14
+      }
+    ],
+    "mcp-pdf-page-validation": {
+      "read_only": true,
+      "count": 27,
+      "pages": [
+        {
+          "handle": "cd50fcb610d4fc6f",
+          "page": 2,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 3862,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "f3dcff26d19ab314",
+          "page": 1,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 3509,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "2d1b6072a63c4d5f",
+          "page": 2,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 5317,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "f571f03396bf0527",
+          "page": 5,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 2901,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "3b9daae0c58101bd",
+          "page": 2,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 4669,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "7495eb3b8cd26d88",
+          "page": 5,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 2390,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "494eba18ca2e58b3",
+          "page": 2,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 8561,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "75b9d1af408a8db6",
+          "page": 5,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 4946,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "e0bf2abf230d3d53",
+          "page": 2,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 8555,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "6ca448e0a0036bdd",
+          "page": 5,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 3044,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "8577d1f4345caa67",
+          "page": 2,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 6195,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "d8f04a9cf62a4a19",
+          "page": 5,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 3159,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "84dbb21739445ef1",
+          "page": 2,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 4592,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "b7615025fd9b3a1b",
+          "page": 5,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 1374,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "8deff49fee29bc6f",
+          "page": 2,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 3982,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "d836392f9d9ec4aa",
+          "page": 5,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 8059,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "1483e679489e3547",
+          "page": 2,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 4972,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "68f866512a2ec6b4",
+          "page": 5,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 6676,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "b97590e90e8454a5",
+          "page": 2,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 5865,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "100c1aae557663c7",
+          "page": 5,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 5024,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "dfb808d59aca8d88",
+          "page": 2,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 3600,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "7204654e205250cb",
+          "page": 5,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 2558,
+          "matches_fresh_sanitized_extraction": true,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "b971a07962a4aac9",
+          "page": 1,
+          "exposure": "text_only",
+          "quality": "text",
+          "policy": 4,
+          "text_chars": 6243,
+          "matches_fresh_sanitized_extraction": null,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "e7b8811c6046cb9f",
+          "page": 1,
+          "exposure": "blocked",
+          "quality": "ocr_review",
+          "policy": 4,
+          "text_chars": 0,
+          "matches_fresh_sanitized_extraction": null,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "006f02f7cd8b3de2",
+          "page": 1,
+          "exposure": "blocked",
+          "quality": "ocr_review",
+          "policy": 4,
+          "text_chars": 0,
+          "matches_fresh_sanitized_extraction": null,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "cf6674ae415c7d1b",
+          "page": 2,
+          "exposure": "blocked",
+          "quality": "privacy_review",
+          "policy": 4,
+          "text_chars": 0,
+          "matches_fresh_sanitized_extraction": null,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        },
+        {
+          "handle": "9cc8a869f02e327e",
+          "page": 6,
+          "exposure": "blocked",
+          "quality": "privacy_review",
+          "policy": 4,
+          "text_chars": 0,
+          "matches_fresh_sanitized_extraction": null,
+          "citation_matches": true,
+          "version_present": true,
+          "source_present": true
+        }
+      ],
+      "client_ui_tested": false
+    }
+  },
+  "limitations": [
+    "Exact sanitized extraction matches do not prove reading order or mathematical fidelity",
+    "Visual anchors are exploratory agent inspection, not human gold or complete formula validation",
+    "No source PDF, raster, raw text, identity field or original path is included"
+  ]
+}
