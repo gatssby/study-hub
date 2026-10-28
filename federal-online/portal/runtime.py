@@ -222,7 +222,8 @@ def run_catalog_course(
     build.rmdir()
     branches = unknown_branches(entries, collector.ACADEMIC_ROOT_AREAS)
     atomic_write_json(out / "branches.json", {"generated_at": at, "unknown_branches": branches})
-    checkpoint.unlink(missing_ok=True)
+    if not status_counts.get("error", 0):
+        checkpoint.unlink(missing_ok=True)
     return {"total": len(entries), "status_counts": status_counts, "unknown_branches": len(branches)}
 
 
@@ -248,7 +249,14 @@ def catalog(args: argparse.Namespace, *, discover: Callable[[], list[dict[str, s
             for course in due:
                 try:
                     summary = run_catalog_course(course, paths, collect, args.mode)
-                    update = {"status": "ok", "last_ok_at": now_iso(), "last_summary": summary, "last_error": ""}
+                    errors = summary["status_counts"].get("error", 0)
+                    if errors:
+                        failures += 1
+                        update = {"status": "error", "last_summary": summary,
+                                  "last_error": f"catalog item errors: {errors}; checkpoint preserved"}
+                        log(f"[catalog] curso={course['course_id']} parcial: {errors} erros")
+                    else:
+                        update = {"status": "ok", "last_ok_at": now_iso(), "last_summary": summary, "last_error": ""}
                 except Exception as exc:  # per-course isolation; checkpoint keeps progress
                     failures += 1
                     update = {"status": "error", "last_error": f"{type(exc).__name__}: {exc}"[:500]}

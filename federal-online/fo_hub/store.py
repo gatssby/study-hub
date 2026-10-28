@@ -359,6 +359,37 @@ class FOStore:
             "FROM pdf_pages p LEFT JOIN pdf_page_quality q USING(material_id,page)",
             (PRIVACY_POLICY_VERSION, PRIVACY_POLICY_VERSION, PRIVACY_POLICY_VERSION)).fetchone()
         total, current, v2, released, unreviewed, ocr = [x or 0 for x in privacy]
+        tables = {r[0] for r in self.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        components = {}
+        if 'ingestion_status' in tables:
+            # Only persisted index counters, never nested status snapshots,
+            # private paths, errors or source URLs. This is an observation,
+            # not a receipt for completion of all reconciliation services.
+            observation = self.conn.execute(
+                "SELECT payload,updated_at FROM ingestion_status WHERE component='index'").fetchone()
+            if observation:
+                try:
+                    payload = json.loads(observation['payload'])
+                except (ValueError, TypeError):
+                    payload = None
+                if isinstance(payload, dict):
+                    fields = ('created', 'renamed', 'media_changed', 'unchanged', 'missing',
+                              'jobs_queued', 'source_videos', 'pdf_new_pages',
+                              'privacy_reviewed_pages', 'pdf_errors')
+                    components['index'] = {'observed_at': observation['updated_at'],
+                        'summary': {k: payload[k] for k in fields
+                                    if type(payload.get(k)) is int and payload[k] >= 0}}
+        current_queued = q("SELECT COUNT(*) FROM transcription_jobs j JOIN lessons l "
+                           "ON j.lesson_id=l.lesson_id AND j.version=l.version "
+                           "WHERE j.state='queued' AND l.present=1")
+        eligible = 0
+        if 'lesson_video_sources' in tables:
+            eligible = q("SELECT COUNT(*) FROM transcription_jobs j JOIN lessons l "
+                         "ON j.lesson_id=l.lesson_id AND j.version=l.version "
+                         "WHERE j.state='queued' AND l.present=1 AND EXISTS ("
+                         "SELECT 1 FROM lesson_video_sources s WHERE s.lesson_id=l.lesson_id "
+                         "AND s.available=1 AND s.revision=CAST(l.version AS TEXT) "
+                         "AND s.remote_path IS NOT NULL)")
         return {
             'TRANSCRIPTION_ENABLED': os.environ.get('TRANSCRIPTION_ENABLED', 'false').strip().lower() == 'true',
             "lessons_total": q("SELECT COUNT(*) FROM lessons"),
@@ -376,4 +407,7 @@ class FOStore:
             "transcription_states": states,
             "transcription_progress": progress,
             "last_sync": dict(last) if last else None,
+            "components": components,
+            "sources": {"current_queued": current_queued, "eligible": eligible,
+                        "pending": current_queued - eligible},
         }

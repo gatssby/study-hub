@@ -1541,14 +1541,22 @@ def load_checkpoint(
     if not isinstance(raw_entries, list):
         logger.log("[checkpoint] entries ausente/invalido; iniciando do zero.")
         return [], set()
-    entries = [entry for entry in raw_entries if isinstance(entry, dict)]
+    # Retry failed items rather than treating their dedupe keys as completed.
+    # Filter only the in-memory resume view; keep durable evidence until the
+    # collector publishes its next checkpoint.
+    failed_keys = {checkpoint_seen_key_from_entry(entry) for entry in raw_entries
+                   if isinstance(entry, dict) and entry.get("status") == "error"}
+    entries = [entry for entry in raw_entries
+               if isinstance(entry, dict) and entry.get("status") != "error"]
     for entry in entries:
         entry.setdefault("video_stream_url", None)
 
     seen_keys: set[tuple[str, str]] = set()
     for raw_key in payload.get("seen_keys") or []:
         if isinstance(raw_key, list) and len(raw_key) == 2:
-            seen_keys.add((str(raw_key[0]), str(raw_key[1])))
+            key = (str(raw_key[0]), str(raw_key[1]))
+            if key not in failed_keys:
+                seen_keys.add(key)
     if not seen_keys:
         for entry in entries:
             key = checkpoint_seen_key_from_entry(entry)

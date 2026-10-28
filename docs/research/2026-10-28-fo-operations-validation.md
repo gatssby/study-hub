@@ -178,3 +178,36 @@ Hashes SHA-256 locais versus produção comparados para `store.py`, `mcp.py`, `a
 | P3 | Merge/retirada editorial remanescente | Revisão independente, classificação de arquivos e respeito ao dirty Anki; não necessário para API FO já ativa |
 
 Este documento não executa nenhum item pendente nem autoriza ativação integral/boot ASR. Não houve mudança funcional ou deploy nesta auditoria; somente este relatório foi criado.
+
+## Adendo — correção local posterior ao relatório `018c1ce` (28/10/2026)
+
+As seções anteriores preservam o snapshot e os limites da auditoria original. Este adendo registra **implementação/testes locais, sem deploy**, não uma nova observação da VPS.
+
+### Catálogo parcial: corrigido e exercitado offline
+
+- RED: `tests/test_catalog_partial.py::test_item_error_preserves_publication_checkpoint_and_retries_only_failed_course` falhou no código anterior com `assert 0 == 1`, usando writer, TSV e validador reais, sem monkeypatch desses componentes.
+- GREEN: `portal/runtime.py` agora publica a saída parcial válida, preserva o checkpoint byte a byte quando há `error`, persiste `last_summary` da tentativa, conserva `last_ok_at` anterior, marca o curso `error` e retorna 1. Continua os cursos seguintes; `not_launched` não provoca falha.
+- A próxima passagem incremental seleciona imediatamente apenas o curso falho. A regressão simula recuperação com o loader real e verifica remoção do checkpoint e atualização de `last_ok_at` somente após sucesso.
+- Segundo RED: o loader retomava também a entrada `error` e sua chave em `seen_keys`; preservar o checkpoint sozinho causaria retries que pulam o item falho. Ajuste mínimo em `portal/fo_collect_aulas_index.py::load_checkpoint`: exclui erros/chaves apenas da visão em memória, preservando sucessos e `not_launched`, sem modificar o arquivo durante a leitura. A segunda regressão passou após essa correção.
+- Essas provas são sintéticas/offline; não demonstram recuperação do curso real nem conclusão da reconciliação na VPS.
+
+### Status: extensão aditiva e limitada às evidências existentes
+
+- `last_sync` e todos os campos legados mantêm a semântica anterior. Um teste realiza sync inicial seguido de fallback individual e verifica que `last_sync` continua identificando o fallback, separado da observação persistida do indexador.
+- Novo `components.index`: `observed_at` da linha existente de `ingestion_status` e `summary` com allowlist de contadores inteiros não negativos. Não retorna payload aninhado `counts`, paths, mensagens privadas nem URLs. Ausência de tabela/evidência resulta em `components={}`; não cria tabelas em leitura.
+- Novo `sources`: `current_queued`, `eligible`, `pending`. Considera apenas jobs queued da versão atual de aulas presentes; mapping elegível exige `available=1`, mesma revisão e caminho não nulo. Não transforma disponibilidade em prova de bytes recém-verificados. Sem tabela de sources, todos esses jobs são pendentes.
+- Testes cobrem fonte ausente, indisponível, revisão obsoleta, caminho nulo, exclusão de aula ausente/job obsoleto/job failed, leitura read-only e resposta HTTP real do app local.
+- **Ainda pendente:** status de catálogo/materiais/vídeos/OneDrive, início/fim/último sucesso por componente e política de staleness. O produtor atual não fornece esses eventos no SQLite; não foram inventados timestamps nem inferida saúde global a partir da observação do indexador.
+
+### Execuções e limites
+
+Com `TMPDIR=/Users/gatsby/.hermes/cache/scratch` e `services/anki-mcp-v2/.venv/bin/python -m pytest`:
+
+1. Catálogo + runtime dinâmico: **19 passed**.
+2. Status operacional: **3 passed** após RED por ausência de `components`/`sources`.
+3. Suíte FO completa: **310 passed, quatro failed em 2,68 s**. As quatro falhas são `ModuleNotFoundError: fo_hub.window_benchmark` em `tests/test_window_benchmark.py`, arquivo untracked concorrente de ASR, fora desta correção. Não alterado.
+4. Reexecução FO excluindo explicitamente apenas esse arquivo concorrente: **310 passed em 1,75 s**. Inclui API, MCP e integração existentes; não equivale a declarar a suíte integral verde.
+5. `git diff --check` restrito aos três módulos de produção desta correção: sem erros. O check global encontra whitespace preexistente em alterações Anki, que não foram tocadas.
+6. Foco final catálogo/status/runtime/API/MCP: **58 passed em 1,11 s**. Após o outro agente criar `fo_hub/window_benchmark.py` (untracked, não incluído neste commit), nova execução **integral FO: 314 passed em 1,76 s**. Esse resultado depende também do trabalho concorrente presente no workspace; as quatro falhas anteriores permanecem registradas acima como histórico real.
+
+Arquivos funcionais: `portal/runtime.py`, `portal/fo_collect_aulas_index.py`, `fo_hub/store.py`; regressões novas: `tests/test_catalog_partial.py`, `tests/test_operational_status.py`. Nenhum módulo PDF/ASR, alteração Anki, serviço, gate, banco de produção ou VPS foi modificado. **Sem deploy ou push.**
