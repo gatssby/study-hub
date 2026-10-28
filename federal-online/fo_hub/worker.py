@@ -306,7 +306,7 @@ class Worker:
         if size<=0 or self.free_bytes()<RESERVE+size+100*1024**2:raise RuntimeError('storage budget or source size invalid')
         video=work/'source.mp4'
         self.command(['rclone','copyto',source['remote_path'],video,'--retries','3','--transfers','1',
-                      '--max-size',f'{size}B','--max-transfer',f'{size+1024**2}B','--cutoff-mode','HARD'])
+                      '--max-transfer',f'{size+1024**2}B','--cutoff-mode','HARD'])
         if video.stat().st_size!=size:raise RuntimeError('source download size mismatch')
         source_sha256=file_sha256(video)
         probe=self.command(['ffprobe','-v','error','-show_entries','format=duration','-of','json',video],timeout=60)
