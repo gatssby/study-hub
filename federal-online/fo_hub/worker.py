@@ -365,14 +365,17 @@ class Worker:
                 record['evidence_sha256']=evidence_checksum(record)
                 atomic_json(checkpoint,record)
             current=parse_whisper(payload,offset)
-            for flag in qa_segments(current,offset+length)['flags']:
-                if flag['kind'] in ('bad_timestamp','non_monotonic'):
+            chunk_qa=qa_segments(current,offset+length)
+            for flag in chunk_qa['flags']:
+                if flag['kind']!='silence_gap':
                     row=current[flag['idx']]
-                    raw_flags.append({**flag,'chunk_idx':len(chunks),'start':row['start'],'end':row['end']})
+                    end_row=current[flag.get('end_idx',flag['idx'])]
+                    raw_flags.append({**flag,'origin':'decoder','chunk_idx':len(chunks),
+                                      'start':row['start'],'end':end_row['end']})
             for row in current:
                 for start,end in intervals:
                     if row['text'] and row['start']>=offset+start and row['end']<=offset+end:acoustic_flags.append({'kind':'text_during_measured_silence','start':row['start'],'end':row['end']})
-            chunks.append({'offset_s':offset,'duration_s':length,'segments':current,'silence':intervals,'raw':payload,'reused':cached is not None,'decoding':decoding})
+            chunks.append({'offset_s':offset,'duration_s':length,'segments':current,'silence':intervals,'raw':payload,'reused':cached is not None,'decoding':decoding,'qa':chunk_qa})
             queue.progress(job['lesson_id'],job['version'],self.owner,min(1,(offset+length)/duration))
             with self.c:self.c.execute('UPDATE transcription_jobs SET lease_until=?,updated_at=? WHERE lesson_id=? AND version=? AND lease_owner=?',(time.time()+7*86400,str(time.time()),job['lesson_id'],job['version'],self.owner))
             audio.unlink(missing_ok=True);prefix.with_suffix('.json').unlink(missing_ok=True)
@@ -383,7 +386,8 @@ class Worker:
         segments=stitched['segments']
         qa=qa_segments(segments,duration)
         reconcile_silent_gaps(qa,segments,chunks,duration)
-        qa['flags'].extend(stitched['flags'])
+        for flag in qa['flags']:flag['origin']='stitched_text'
+        qa['flags'].extend({**flag,'origin':'stitching'} for flag in stitched['flags'])
         qa['flags'].extend(raw_flags)
         qa['flags'].extend(acoustic_flags)
         if not segments:qa['flags'].append({'kind':'empty_output'})
@@ -393,6 +397,7 @@ class Worker:
         if any(latest[k]!=source[k] for k in ('remote_path','revision','size','available')):raise SourceChanged('source changed during inference')
         artifact={'lesson_id':job['lesson_id'],'version':job['version'],'model':'whisper-large-v3','model_path':str(cfg.model),'runtime_path':str(cfg.binary),**provenance,'source_size':size,'source_sha256':source_sha256,'source_revision':source['revision'],'source_remote_path':source['remote_path'],'duration_s':duration,'created_at':time.time(),'elapsed_s':time.time()-started,'corpus':ACCEPTED_CORPUS,'qa':qa,'chunks':chunks,'segments':segments,'stitching':stitched.get('decisions',[])}
         status='validated' if qa['passed'] else 'review'
+        artifact['qa_policy_version']=2
         path=cfg.state/'transcripts'/('private' if qa['passed'] else 'review')/job['lesson_id']/f"v{job['version']}.json.gz"
         atomic_json(path,artifact)
         if qa['passed']:
@@ -429,6 +434,18 @@ class Worker:
             with self.c:self.c.execute("UPDATE transcription_jobs SET state=?,progress=1,lease_owner=NULL,lease_until=NULL,updated_at=? WHERE lesson_id=? AND version=? AND lease_owner=?",('done' if status=='validated' else 'review',str(time.time()),job['lesson_id'],job['version'],self.owner))
             return {'state':status,'lesson_id':job['lesson_id'],'version':job['version']}
         except Exception as exc:
+            if isinstance(exc,(subprocess.CalledProcessError,subprocess.TimeoutExpired)):
+                # Full diagnostics may contain academic text or private paths.
+                # Preserve outside the publication allowlist, never in DB/logs.
+                def text(value):
+                    return value.decode('utf-8',errors='replace') if isinstance(value,bytes) else value
+                atomic_json(self.cfg.state/'transcripts/errors'/job['lesson_id']/
+                            f"v{job['version']}-{uuid.uuid4().hex}.json.gz",
+                            {'lesson_id':job['lesson_id'],'version':job['version'],
+                             'error_type':type(exc).__name__,'created_at':time.time(),
+                             'command':[str(x) for x in exc.cmd],
+                             'returncode':getattr(exc,'returncode',None),
+                             'stdout':text(exc.stdout),'stderr':text(exc.stderr)})
             current=self.c.execute('SELECT attempts,max_attempts FROM transcription_jobs WHERE lesson_id=? AND version=?',(job['lesson_id'],job['version'])).fetchone()
             state='superseded' if isinstance(exc,SourceChanged) else ('failed' if current['attempts']>=current['max_attempts'] else 'queued')
             with self.c:self.c.execute('UPDATE transcription_jobs SET state=?,retry_at=?,last_error=?,lease_owner=NULL,lease_until=NULL WHERE lesson_id=? AND version=?',(state,time.time()+min(86400,60*2**current['attempts']),type(exc).__name__,job['lesson_id'],job['version']))

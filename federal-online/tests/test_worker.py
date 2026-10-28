@@ -77,6 +77,8 @@ def test_fake_pipeline_publishes_only_passed_current_version_and_cleans_temps(tm
     artifact=json.loads(gzip.decompress(artifacts[0].read_bytes()))
     assert artifact['chunks'][0]['decoding']['wall_s']>=0
     assert artifact['chunks'][0]['decoding']['stderr']==''
+    assert artifact['chunks'][0]['qa']['metrics']['repetition']['candidate_tokens']==0
+    assert artifact['qa_policy_version']==2
     assert not list((tmp_path/'tmp/transcription').glob('*'))
     assert any(cmd[0]==str(cfg.binary) for cmd in calls)
     assert '--max-size' in next(cmd for cmd in calls if cmd[0]=='rclone')
@@ -138,3 +140,23 @@ def test_pilot_review_only_is_loaded_without_changing_decoder_fingerprint(monkey
     cfg=Config.from_env()
     assert cfg.review_only is True
     assert cfg.parameters()==baseline
+
+
+def test_subprocess_failure_retains_private_diagnostics_not_public_error(tmp_path):
+    import subprocess
+    from fo_hub.worker import Worker
+    store,lesson,cfg=setup(tmp_path)
+    def failure(cmd,**kwargs):
+        raise subprocess.CalledProcessError(7,cmd,output='private output',stderr='private synthetic source details')
+    worker=Worker(cfg,store=store,runner=failure,gate_fn=lambda:{'allowed':True},free_bytes=lambda:20*1024**3)
+    store.conn.execute('insert into lesson_video_sources values(?,?,?,?,?,?)',(lesson['lesson_id'],'onedrive:Federal Online/a.mp4','1',9,1,'now'));store.conn.commit()
+    result=worker.run_once()
+    assert result['error_type']=='CalledProcessError'
+    assert 'private' not in json.dumps(result)
+    assert store.conn.execute('select last_error from transcription_jobs').fetchone()[0]=='CalledProcessError'
+    evidence=list((tmp_path/'transcripts/errors'/lesson['lesson_id']).glob('*.json.gz'))
+    assert len(evidence)==1
+    detail=json.loads(gzip.decompress(evidence[0].read_bytes()))
+    assert detail['stderr']=='private synthetic source details'
+    assert detail['returncode']==7
+    assert not (tmp_path/'transcripts/generated_v2').exists()
