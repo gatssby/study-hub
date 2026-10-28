@@ -1,0 +1,60 @@
+{
+  "summary": {
+    "materials": 3245,
+    "unique_aliases": 508,
+    "batches": 9,
+    "hashed_paths": 508,
+    "statuses": {
+      "verified": 430,
+      "historical_source_unavailable": 2815
+    },
+    "wall_s": 6.454103231430054,
+    "observed_first_at": 1793163827.7825654,
+    "observed_last_at": 1793163833.6014152,
+    "recorded_identity_bound_readback": 3245,
+    "current_bytes_guaranteed": false,
+    "pdf_writes": 0,
+    "page_text_writes": 0,
+    "remote_writes": 0
+  },
+  "http_api_cases": [
+    {
+      "observation_status": "verified",
+      "http_status": 200,
+      "snapshot_identity_matches": true,
+      "source_is_null": true,
+      "live_guarantee": false,
+      "pages_returned": 1
+    },
+    {
+      "observation_status": "historical_source_unavailable",
+      "http_status": 200,
+      "snapshot_identity_matches": true,
+      "source_is_null": true,
+      "live_guarantee": false,
+      "pages_returned": 1
+    }
+  ],
+  "privacy_counts": [
+    [
+      5,
+      "blocked",
+      919
+    ],
+    [
+      5,
+      "text_only",
+      146774
+    ]
+  ],
+  "observed_at_utc": "2026-10-28T05:06:03.803086+00:00",
+  "privacy_total_pages": 147693,
+  "scope": "Hash aliases and persist identity-bound observations only; not extraction recovery or academic approval",
+  "maintenance": "FO catalog/materials/index/OCR services and associated plus OneDrive timers paused; ASR pilot unchanged",
+  "publication": {
+    "remote_branch": "feat/study-hub-migration",
+    "verified_remote_sha": "186438c2e46563df0c7236a04abf53fbd7d41ccf",
+    "frozen_fo_mcp_tests_passed": 433,
+    "vps_selected_tests_passed": 13
+  }
+}

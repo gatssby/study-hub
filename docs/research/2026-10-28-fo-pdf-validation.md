@@ -1,5 +1,7 @@
 # Validação FO PDF — 2026-10-28
 
+Nota de leitura: seções iniciais são históricas. Declarações de originais preservados referem-se às operações de auditoria/migração, não certificam produtores concorrentes. Foi demonstrado depois que aliases do produtor antigo acumulam versões diferentes; a seção final registra observação completa e pausa preventiva, sem afirmar recuperação de todos os originais históricos.
+
 ## Escopo e segurança
 
 Auditoria read-only do SQLite de produção e leitura privada de PDFs originais; código candidato executado apenas em diretório privado de cache, **sem deploy**, sem alteração do banco, sem ASR e sem Anki. Originais preservados. Nenhum PDF, raster ou valor identificador integra o Git. Esta validação não aprova pixels/metadata dos PDFs para publicação.
@@ -129,3 +131,13 @@ Recuperação privada limitada às 227 páginas, com leitura de originais e veri
 Achado adicional de proveniência: **419 caminhos estão associados a múltiplos hashes em 3.058 registros de material**. Três probes de divergência encontraram o hash atual indexado como outro material: forte evidência de substituição de versão no mesmo caminho, não autorização para reextrair o arquivo atual sob a identidade antiga. A auditoria abrangente e a proteção por objeto imutável/hash estão em frente separada; não declarar o problema corrigido antes da integração. As 22 igualdades textuais anteriores e citações por ID não substituem a prova dos bytes originais. Não foi afirmado que todas as versões históricas têm original local recuperável.
 
 Evidência agregada: `evidence/2026-10-28-fo-pdf-policy5-validation.json`. Scripts, raw e mapeamentos permanecem fora do Git em `validation-2026-10-28/pdf-recovery-private/` na VPS. Snapshot da suíte raiz posterior: **259 passed, quatro skips por anki.collection ausente, uma falha Anki preexistente** em `test_background_queue_mutation_publishes_snapshot_and_media_before_releasing`, duas deprecações jsonschema. Não foi corrigido código Anki para ocultar essa falha.
+
+## Identidade de fonte em produção — 05:06 UTC
+
+`186438c` implantado por hash, API FO reiniciada e 13 testes VPS selecionados aprovados. A API entrega texto como `indexed_snapshot` e não oferece caminho do original (`source=null`). Evidência temporal de fonte é vinculada ao SHA esperado e não garante bytes atuais, privacidade visual ou qualidade acadêmica.
+
+Observação explícita completa: **3.245 materiais/508 aliases**, nove lotes de no máximo 512 IDs e 64 caminhos. Hashes calculados uma vez por alias: **430 identidades verificadas** e **2.815 sem a versão histórica no alias atual**; gravação das 3.245 observações lida de volta, wall time **6,45 s**. A primeira tentativa abortou antes de gravar por pressupor a contagem histórica de 3.147; a retomada usou seleção atual e limites agregados explícitos de 4.096 materiais/512 aliases. Não se conclui que os 2.815 originais estejam ausentes em todo o OneDrive/acervo.
+
+Duas chamadas reais HTTP, uma por estado, confirmaram versão esperada, snapshot textual, `source=null` e `current_bytes_guaranteed=false`; nenhuma devolveu texto de página no relatório. Sem promoção/reextração, escrita de PDF/página ou operação remota nessa rodada. Contagem atual: **147.693 páginas na política 5, 919 bloqueadas/146.774 text_only**. Não atualizar retroativamente os snapshots de 143.265 páginas como se fossem o mesmo acervo.
+
+Produtores periódicos alteravam o acervo enquanto as auditorias avançavam. Foram pausados catalog/materials/index/OCR e timers correspondentes mais OneDrive para impedir novas substituições sob o produtor antigo. O no-clobber `3ecd6cf` está commitado, mas aguarda revisão independente antes de deploy/retomada; não foi alegada preservação retroativa de todas as versões. O piloto ASR não foi interrompido. Evidência sanitizada: `evidence/2026-10-28-fo-pdf-source-status-live.json`.
