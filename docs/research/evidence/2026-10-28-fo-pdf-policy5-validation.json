@@ -1,0 +1,285 @@
+{
+  "code_commit": "97983a5",
+  "deployed_files_sha256_verified": 5,
+  "migration": {
+    "policy": 5,
+    "reviewed_on_resume": 143015,
+    "quarantined_before_migration": 227,
+    "counts": [
+      [
+        5,
+        "low_text",
+        "text_only",
+        65
+      ],
+      [
+        5,
+        "ocr_review",
+        "blocked",
+        511
+      ],
+      [
+        5,
+        "privacy_review",
+        "blocked",
+        383
+      ],
+      [
+        5,
+        "text",
+        "text_only",
+        142306
+      ]
+    ],
+    "completed_at": 1793161857.4504468,
+    "first_unit_failure": "oom-kill; audit script retained a full extraction snapshot; resume uses bounded production batches"
+  },
+  "mcp": {
+    "policy": 5,
+    "pages_checked": 27,
+    "text_only": 23,
+    "blocked": 4,
+    "newly_quarantined_checked": 3,
+    "pages": [
+      {
+        "handle": "b971a07962a4aac9",
+        "page": 1,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 6243,
+        "citation_correct": true
+      },
+      {
+        "handle": "cd50fcb610d4fc6f",
+        "page": 2,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 3862,
+        "citation_correct": true
+      },
+      {
+        "handle": "2d1b6072a63c4d5f",
+        "page": 2,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 5317,
+        "citation_correct": true
+      },
+      {
+        "handle": "f571f03396bf0527",
+        "page": 5,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 2901,
+        "citation_correct": true
+      },
+      {
+        "handle": "3b9daae0c58101bd",
+        "page": 2,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 4669,
+        "citation_correct": true
+      },
+      {
+        "handle": "7495eb3b8cd26d88",
+        "page": 5,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 2390,
+        "citation_correct": true
+      },
+      {
+        "handle": "f3dcff26d19ab314",
+        "page": 1,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 3509,
+        "citation_correct": true
+      },
+      {
+        "handle": "e7b8811c6046cb9f",
+        "page": 1,
+        "exposure": "blocked",
+        "policy": 5,
+        "chars": 0,
+        "citation_correct": true
+      },
+      {
+        "handle": "494eba18ca2e58b3",
+        "page": 2,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 8561,
+        "citation_correct": true
+      },
+      {
+        "handle": "75b9d1af408a8db6",
+        "page": 5,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 4946,
+        "citation_correct": true
+      },
+      {
+        "handle": "e0bf2abf230d3d53",
+        "page": 2,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 8555,
+        "citation_correct": true
+      },
+      {
+        "handle": "6ca448e0a0036bdd",
+        "page": 5,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 3044,
+        "citation_correct": true
+      },
+      {
+        "handle": "8577d1f4345caa67",
+        "page": 2,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 6195,
+        "citation_correct": true
+      },
+      {
+        "handle": "d8f04a9cf62a4a19",
+        "page": 5,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 3159,
+        "citation_correct": true
+      },
+      {
+        "handle": "8deff49fee29bc6f",
+        "page": 2,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 3982,
+        "citation_correct": true
+      },
+      {
+        "handle": "d836392f9d9ec4aa",
+        "page": 5,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 8059,
+        "citation_correct": true
+      },
+      {
+        "handle": "1483e679489e3547",
+        "page": 2,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 4972,
+        "citation_correct": true
+      },
+      {
+        "handle": "68f866512a2ec6b4",
+        "page": 5,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 6676,
+        "citation_correct": true
+      },
+      {
+        "handle": "84dbb21739445ef1",
+        "page": 2,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 4592,
+        "citation_correct": true
+      },
+      {
+        "handle": "b7615025fd9b3a1b",
+        "page": 5,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 1374,
+        "citation_correct": true
+      },
+      {
+        "handle": "006f02f7cd8b3de2",
+        "page": 1,
+        "exposure": "blocked",
+        "policy": 5,
+        "chars": 0,
+        "citation_correct": true
+      },
+      {
+        "handle": "b97590e90e8454a5",
+        "page": 2,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 5865,
+        "citation_correct": true
+      },
+      {
+        "handle": "100c1aae557663c7",
+        "page": 5,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 5024,
+        "citation_correct": true
+      },
+      {
+        "handle": "dfb808d59aca8d88",
+        "page": 2,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 3600,
+        "citation_correct": true
+      },
+      {
+        "handle": "7204654e205250cb",
+        "page": 5,
+        "exposure": "text_only",
+        "policy": 5,
+        "chars": 2558,
+        "citation_correct": true
+      },
+      {
+        "handle": "cf6674ae415c7d1b",
+        "page": 2,
+        "exposure": "blocked",
+        "policy": 5,
+        "chars": 0,
+        "citation_correct": true
+      },
+      {
+        "handle": "9cc8a869f02e327e",
+        "page": 6,
+        "exposure": "blocked",
+        "policy": 5,
+        "chars": 0,
+        "citation_correct": true
+      }
+    ],
+    "client_ui_tested": false
+  },
+  "private_recovery_summary": {
+    "pages_requested": 227,
+    "documents_requested": 205,
+    "pages_recovered_private": 40,
+    "pages_failed": 187,
+    "documents_failed": 169,
+    "artifacts_bytes": 97267,
+    "approved": 0,
+    "db_writes": 0,
+    "original_writes": 0,
+    "completed_at": 1793161959.6315253
+  },
+  "private_recovery_failures": {
+    "documents_source_hash_mismatch": 169,
+    "pages_not_reextracted_against_wrong_version": 187
+  },
+  "limitations": [
+    "Privacy policy is not academic gold",
+    "Cached citation IDs matching is not original PDF byte identity proof",
+    "Old named-field redactions are blocked, not automatically reconstructed or approved",
+    "Private recovered raw text is neither database promotion nor public derivative"
+  ]
+}

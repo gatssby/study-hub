@@ -67,3 +67,13 @@ Varredura v5 read-only das 143.265 páginas identificou **227 páginas adicionai
 Commit `97983a5` implantado: cinco arquivos verificados por SHA-256 e recibo lido de volta. Primeira unidade de migração v5 atingiu limite de 1GiB porque o script de auditoria retinha um snapshot integral do acervo em memória; quarentena e arquivo privado já estavam persistidos. Falha **oom-kill** registrada, sem imputar êxito. Retomada `study-hub-fo-privacy-v5-20261028-r2` usa apenas o migrador de produção em lotes de 250, CPU50%/1GiB/20min e lock do índice; snapshot posterior mostrou cerca de 110MB de pico e execução em andamento. API FO reiniciada com política 5; versões antigas permanecem fail-closed durante a migração. Não houve restart do piloto.
 
 Runner de janelas **ainda não foi usado em áudio real**. Revisão encontrou timeout que pode deixar descendente fora do lock, QA absoluto inventando lacuna antes da janela, cache sem validar raw/log externos e comparações sem seleção informativa prévia. Correções com regressões estão em frente independente; não operar o runner anterior.
+
+## Marco de recuperação e integridade PDF — após migração v5
+
+Migração concluída: todas as 143.265 páginas em política 5; **894 bloqueadas (511 OCR + 383 privacidade)**, 142.371 com exposição textual. MCP revalidado em 27 páginas, mais três recém-quarentenadas; nenhuma destas três expõe texto. Evidência: `evidence/2026-10-28-fo-pdf-policy5-validation.json`.
+
+Reextração estrita das 227 páginas em quarentena recuperou **40 páginas/36 materiais** privadamente e recusou **187 páginas/169 materiais** por divergência entre hash histórico e bytes atuais no mesmo caminho. Não substituir a identidade antiga pelo PDF atual. Há 419 caminhos com múltiplos hashes em 3.058 registros; investigação/proteção de versões originais está em frente independente. Recuperação não promoveu conteúdo nem escreveu SQLite/originais. Ausência do original histórico é uma pendência real, não motivo para fabricar texto.
+
+Nova revisão operacional encontrou duas lacunas importantes em `4c55df5`: retomada pode esquecer falha não revisitada e publicação `error` pode degradar URL/duração/versão de aula válida. Correções com regressões estão em andamento; esse commit não foi implantado. Piloto real permanece limitado à aula única e passou a ter acompanhamento independente de métricas/QA até conclusão; nenhuma inferência extra foi iniciada.
+
+Suíte raiz reexecutada: **259 passed, quatro skips, uma falha Anki preexistente** `apps/anki-gpt/tests/test_regressions.py::test_background_queue_mutation_publishes_snapshot_and_media_before_releasing` e duas deprecações. Mantida fora do escopo, sem alteração da coleção.
