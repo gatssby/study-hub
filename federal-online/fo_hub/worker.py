@@ -135,16 +135,26 @@ def atomic_json(path,data):
 
 def evidence_checksum(data):
     fields=('source_sha256','fingerprint','offset_s','duration_s','raw','silence')
+    if data.get('schema_version')==2:
+        fields+=('schema_version','created_at','decoder_command','decoding')
     payload={key:data[key] for key in fields}
     return hashlib.sha256(json.dumps(payload,sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False).encode()).hexdigest()
 
 
 def validate_checkpoint(data,source_sha256,fingerprint,offset,length):
-    if not isinstance(data,dict) or data.get('schema_version')!=1:raise ValueError('checkpoint schema')
+    if not isinstance(data,dict) or data.get('schema_version') not in (1,2):raise ValueError('checkpoint schema')
     for key,value in (('source_sha256',source_sha256),('fingerprint',fingerprint),('offset_s',offset),('duration_s',length)):
         if data.get(key)!=value:raise ValueError('checkpoint identity or bounds')
     if data.get('evidence_sha256')!=evidence_checksum(data):raise ValueError('checkpoint checksum')
     if not isinstance(data.get('created_at'),(int,float)) or not math.isfinite(data['created_at']):raise ValueError('checkpoint timestamp')
+    if data['schema_version']==2:
+        diagnostic=data.get('decoding')
+        if not isinstance(diagnostic,dict) or type(diagnostic.get('wall_s')) not in (int,float) or not math.isfinite(diagnostic['wall_s']) or diagnostic['wall_s']<0:
+            raise ValueError('checkpoint decoding timing')
+        if not all(isinstance(diagnostic.get(key),str) for key in ('stdout','stderr')):
+            raise ValueError('checkpoint decoding logs')
+        if not isinstance(data.get('decoder_command'),list) or not all(isinstance(x,str) for x in data['decoder_command']):
+            raise ValueError('checkpoint decoding command')
     raw=data['raw']
     if not isinstance(raw,dict) or not isinstance(raw.get('transcription'),list):raise ValueError('checkpoint raw schema')
     for row in raw['transcription']:
@@ -338,7 +348,8 @@ class Worker:
                     cached=None
             if cached is not None:
                 payload=cached['raw'];intervals=cached['silence']
-                decoding=cached.get('decoding')
+                # V1 authenticated raw/schema/bounds only, not logs or timings.
+                decoding=cached.get('decoding') if cached['schema_version']==2 else None
             else:
                 if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
                 self.command(['ffmpeg','-nostdin','-y','-threads','1','-ss',str(offset),'-i',video,'-t',str(length),'-ar','16000','-ac','1','-c:a','pcm_s16le','-threads','1',audio])
@@ -346,19 +357,38 @@ class Worker:
                 command=[cfg.binary,'-m',cfg.model,'-f',audio,'-l','pt','-t',str(cfg.threads),'-bs',str(cfg.beam_size),'-bo','5','-mc','-1','-tp','0','-tpi','0.2' if cfg.temperature_fallback else '0','-nth','0.6','-et','2.4','-lpt','-1','-ng','-ojf','-of',prefix]
                 if not cfg.temperature_fallback:command.append('-nf')
                 decode_started=time.monotonic()
-                decoded=self.command(command,timeout=172800)
-                decoding={'wall_s':time.monotonic()-decode_started,'stderr':decoded.stderr or '',
-                          'stdout':decoded.stdout or ''}
-                raw_text=prefix.with_suffix('.json').read_text()
-                created_at=time.time()
-                # Preserve even malformed JSON before any decoder-output parsing.
-                atomic_json(evidence/f'{offset:.3f}-{length:.3f}.decoder-{uuid.uuid4().hex}.json.gz',
-                            {'raw_text':raw_text,'created_at':created_at,'rejected_cache':rejected,
-                             'source_sha256':source_sha256,'fingerprint':fingerprint,
-                             'offset_s':offset,'duration_s':length,'decoding':decoding})
+                decoded=None;failure=None;raw_text=None
+                try:
+                    decoded=self.command(command,timeout=172800)
+                    raw_text=prefix.with_suffix('.json').read_text()
+                except Exception as exc:
+                    failure=exc
+                finally:
+                    def log_text(value):
+                        return value.decode('utf-8',errors='replace') if isinstance(value,bytes) else value or ''
+                    logs=decoded if decoded is not None else failure
+                    decoding={'wall_s':time.monotonic()-decode_started,
+                              'stderr':log_text(getattr(logs,'stderr',None)),
+                              'stdout':log_text(getattr(logs,'stdout',None))}
+                    created_at=time.time()
+                    try:
+                        raw_path=prefix.with_suffix('.json')
+                        if raw_text is None and raw_path.is_file():raw_text=raw_path.read_text(errors='replace')
+                        # Preserve partial/missing output while the temporary
+                        # directory still exists, including a failed decoder.
+                        atomic_json(evidence/f'{offset:.3f}-{length:.3f}.decoder-{uuid.uuid4().hex}.json.gz',
+                                    {'raw_text':raw_text,'created_at':created_at,'rejected_cache':rejected,
+                                     'source_sha256':source_sha256,'fingerprint':fingerprint,
+                                     'offset_s':offset,'duration_s':length,'decoding':decoding,
+                                     'failure_type':type(failure).__name__ if failure else None})
+                    except Exception as diagnostic_exc:
+                        if failure is None:raise
+                        setattr(failure,'fo_evidence_error',type(diagnostic_exc).__name__)
+                if failure is not None:raise failure
+                if raw_text is None:raise ValueError('decoder output unavailable')
                 payload=json.loads(raw_text)
                 intervals=silence_intervals(silence.stderr or '',length)
-                record={'schema_version':1,'source_sha256':source_sha256,'fingerprint':fingerprint,
+                record={'schema_version':2,'source_sha256':source_sha256,'fingerprint':fingerprint,
                         'offset_s':offset,'duration_s':length,'raw':payload,'silence':intervals,
                         'created_at':created_at,'rejected_cache':rejected,
                         'decoder_command':[str(x) for x in command],'decoding':decoding}
@@ -434,22 +464,28 @@ class Worker:
             with self.c:self.c.execute("UPDATE transcription_jobs SET state=?,progress=1,lease_owner=NULL,lease_until=NULL,updated_at=? WHERE lesson_id=? AND version=? AND lease_owner=?",('done' if status=='validated' else 'review',str(time.time()),job['lesson_id'],job['version'],self.owner))
             return {'state':status,'lesson_id':job['lesson_id'],'version':job['version']}
         except Exception as exc:
+            diagnostic_error=getattr(exc,'fo_evidence_error',None)
             if isinstance(exc,(subprocess.CalledProcessError,subprocess.TimeoutExpired)):
                 # Full diagnostics may contain academic text or private paths.
                 # Preserve outside the publication allowlist, never in DB/logs.
                 def text(value):
                     return value.decode('utf-8',errors='replace') if isinstance(value,bytes) else value
-                atomic_json(self.cfg.state/'transcripts/errors'/job['lesson_id']/
-                            f"v{job['version']}-{uuid.uuid4().hex}.json.gz",
-                            {'lesson_id':job['lesson_id'],'version':job['version'],
-                             'error_type':type(exc).__name__,'created_at':time.time(),
-                             'command':[str(x) for x in exc.cmd],
-                             'returncode':getattr(exc,'returncode',None),
-                             'stdout':text(exc.stdout),'stderr':text(exc.stderr)})
+                try:
+                    atomic_json(self.cfg.state/'transcripts/errors'/job['lesson_id']/
+                                f"v{job['version']}-{uuid.uuid4().hex}.json.gz",
+                                {'lesson_id':job['lesson_id'],'version':job['version'],
+                                 'error_type':type(exc).__name__,'created_at':time.time(),
+                                 'command':[str(x) for x in exc.cmd],
+                                 'returncode':getattr(exc,'returncode',None),
+                                 'stdout':text(exc.stdout),'stderr':text(exc.stderr)})
+                except Exception as diagnostic_exc:
+                    diagnostic_error=type(diagnostic_exc).__name__
             current=self.c.execute('SELECT attempts,max_attempts FROM transcription_jobs WHERE lesson_id=? AND version=?',(job['lesson_id'],job['version'])).fetchone()
             state='superseded' if isinstance(exc,SourceChanged) else ('failed' if current['attempts']>=current['max_attempts'] else 'queued')
             with self.c:self.c.execute('UPDATE transcription_jobs SET state=?,retry_at=?,last_error=?,lease_owner=NULL,lease_until=NULL WHERE lesson_id=? AND version=?',(state,time.time()+min(86400,60*2**current['attempts']),type(exc).__name__,job['lesson_id'],job['version']))
-            return {'state':'retry' if state=='queued' else state,'error_type':type(exc).__name__,'lesson_id':job['lesson_id']}
+            result={'state':'retry' if state=='queued' else state,'error_type':type(exc).__name__,'lesson_id':job['lesson_id']}
+            if diagnostic_error:result['diagnostic_error_type']=diagnostic_error
+            return result
 
 
 def main(argv=None):
