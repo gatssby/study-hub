@@ -119,6 +119,10 @@ def ingest(state,db_path,index_pdfs=True):
     for path in paths:
         payload=read_json(path,{})
         for item in payload.get('aulas',[]):
+            # A failed observation is retry evidence, not a media revision.
+            # Keep it in the catalog/checkpoint, never overwrite known metadata
+            # (or outrank a valid candidate from another catalog) with an error.
+            if item.get('status') == 'error':continue
             if not (item.get('media_id') or item.get('item_id')):continue
             row={'course_id':course_key(item.get('course_url') or payload.get('course_url','')),'source_url':item.get('course_url') or payload.get('course_url',''),'media_id':item.get('media_id'),'item_id':item.get('item_id'),'subject':item.get('disciplina') or item.get('portal_subject'),'front':item.get('portal_subject'),'module':item.get('source_ref'),'title':item.get('nome_real_aula') or item.get('titulo_original'),'media_type':'video' if item.get('status')=='ok' else item.get('status','unknown'),'video_url':item.get('video_stream_url'),'duration_s':item.get('duracao_segundos')}
             lid=lesson_id_for(row['course_id'],row['media_id'],row['item_id'])

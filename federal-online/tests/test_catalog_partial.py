@@ -28,7 +28,8 @@ def test_item_error_preserves_publication_checkpoint_and_retries_only_failed_cou
 
     def collect(course, cp, resume):
         calls.append(course["title"])
-        rows = [entry(course, "ok", "ok"), entry(course, "error", "bad")]
+        rows = ([entry(course, "ok", "ok"), entry(course, "error", "bad")]
+                if course["url"] == C26["url"] else [entry(course, "not_launched", "future")])
         cp.parent.mkdir(parents=True, exist_ok=True)
         collector.write_checkpoint(cp, course_url=course["url"], path_filters=[],
                                    entries=rows, seen_keys={collector.checkpoint_seen_key_from_entry(e) for e in rows},
@@ -56,7 +57,8 @@ def test_item_error_preserves_publication_checkpoint_and_retries_only_failed_cou
         assert resume and cp.exists()
         rows, seen = collector.load_checkpoint(cp, course_url=course["url"], path_filters=[],
                                               logger=runtime._Log(lambda _: None), resume_enabled=resume)
-        assert [e["item_id"] for e in rows] == ["ok"]
+        assert [e["item_id"] for e in rows] == ["ok", "bad"]
+        rows = [e for e in rows if e["status"] != "error"]
         assert collector.checkpoint_seen_key_from_entry(entry(course, "error", "bad")) not in seen
         return rows + [entry(course, "ok", "bad")]
 
@@ -78,6 +80,38 @@ def test_checkpoint_resume_retries_error_keys_without_replaying_successes(tmp_pa
     before = cp.read_bytes()
     resumed, seen = collector.load_checkpoint(cp, course_url=C26["url"], path_filters=[],
                                              logger=logger, resume_enabled=True)
-    assert [e["status"] for e in resumed] == ["ok", "not_launched"]
-    assert seen == {collector.checkpoint_seen_key_from_entry(e) for e in resumed}
+    assert [e["status"] for e in resumed] == ["ok", "error", "not_launched"]
+    assert seen == {collector.checkpoint_seen_key_from_entry(e) for e in resumed if e["status"] != "error"}
     assert cp.read_bytes() == before  # retry preparation never destroys durable evidence
+
+
+def test_unvisited_pending_survives_intermediate_checkpoint_and_runtime(tmp_path):
+    paths = runtime.Paths(tmp_path)
+    cid = runtime.course_id_for(C26["url"])
+    cp = paths.course_dir(cid) / "checkpoint.json"
+    logger = runtime._Log(lambda _: None)
+    rows = [entry(C26, "ok", "ok"), entry(C26, "error", "bad")]
+    collector.write_checkpoint(cp, course_url=C26["url"], path_filters=[], entries=rows,
+                               seen_keys=set(), logger=logger)
+
+    def partial(course, checkpoint, resume):
+        loaded, seen = collector.load_checkpoint(checkpoint, course_url=course["url"],
+                                                path_filters=[], logger=logger, resume_enabled=True)
+        # Traversal publishes another branch before failing to expand the pending branch.
+        loaded.append(entry(course, "ok", "new"))
+        collector.write_checkpoint(checkpoint, course_url=course["url"], path_filters=[],
+                                   entries=loaded, seen_keys=seen, logger=logger)
+        persisted = json.loads(checkpoint.read_text())["entries"]
+        assert any(e["status"] == "error" for e in persisted)
+        # Runtime must also defend against an adapter returning only successes.
+        return [e for e in loaded if e["status"] != "error"]
+
+    assert runtime.catalog(ns(tmp_path, "catalog"), discover=lambda: [C26],
+                           collect=partial, log=lambda _: None) == 1
+    assert cp.exists()
+    course = json.loads(paths.courses_json.read_text())["courses"][0]
+    assert course["status"] == "error" and "last_ok_at" not in course
+    assert course["last_summary"]["status_counts"] == {"ok": 2, "error": 1}
+    assert runtime.courses_due({"courses": [course]}, "incremental", datetime.now(timezone.utc))
+    published = json.loads((cp.parent / "aulas_index.json").read_text())
+    assert published["status_counts"] == {"ok": 2, "error": 1}

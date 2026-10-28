@@ -199,6 +199,13 @@ def run_catalog_course(
     checkpoint = out / collector.CHECKPOINT_FILENAME
     resume = mode != "weekly" or checkpoint.exists()
     entries = collect(course, checkpoint, resume)
+    pending, _ = collector.load_checkpoint(
+        checkpoint, course_url=course["url"], path_filters=[],
+        logger=_Log(lambda _: None), resume_enabled=True)
+    observed = {collector.checkpoint_seen_key_from_entry(e) for e in entries}
+    entries = list(entries) + [e for e in pending if e.get("status") == "error"
+                              and (collector.checkpoint_seen_key_from_entry(e) is None
+                                   or collector.checkpoint_seen_key_from_entry(e) not in observed)]
     at = now_iso()
     from collections import Counter
 

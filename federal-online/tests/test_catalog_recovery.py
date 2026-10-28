@@ -48,7 +48,8 @@ def test_collect_index_preserves_original_failure_and_releases_all_resources(tmp
     assert closed == ["context", "browser", "playwright"]
 
 
-def test_checkpoint_failure_is_not_converted_to_unavailable_or_duplicated(monkeypatch):
+@pytest.mark.parametrize("retry_pending", [False, True])
+def test_checkpoint_failure_is_not_converted_to_unavailable_or_duplicated(monkeypatch, retry_pending):
     page = SimpleNamespace(wait_for_timeout=lambda value: None)
     item = SimpleNamespace(scroll_into_view_if_needed=lambda: None, click=lambda: None)
     monkeypatch.setattr(collector, "wait_for_video_items_stable", lambda *args: None)
@@ -64,6 +65,12 @@ def test_checkpoint_failure_is_not_converted_to_unavailable_or_duplicated(monkey
     monkeypatch.setattr(collector, "extract_video_stream_url", lambda *args, **kw: None)
     monkeypatch.setattr(collector, "detach_network_listeners", lambda *args: None)
     entries = []
+    if retry_pending:
+        entries.append(collector.build_entry(
+            subject_group="Aulas Gerais > Biologia", order=1,
+            item_info={"mediaType": "V", "itemId": "1", "dataVideo": "10", "title": "Aula 1"},
+            current=None, course_url="https://example.invalid/course",
+            captured_at="2026-10-20T00:00:00Z", status="error", error="synthetic timeout"))
     calls = []
 
     def checkpoint():

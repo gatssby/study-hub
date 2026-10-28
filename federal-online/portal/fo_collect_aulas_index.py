@@ -1208,7 +1208,7 @@ def collect_direct_videos(
                 error="Aula existe no portal, mas ainda nao possui video disponivel.",
                 video_stream_url=None,
             )
-            entries.append(entry)
+            record_collected_entry(entries, entry)
             seen_keys.add(dedupe_key)
             checkpoint_writer()
             logger.log(
@@ -1267,7 +1267,7 @@ def collect_direct_videos(
                 error=error,
                 video_stream_url=None,
             )
-            entries.append(entry)
+            record_collected_entry(entries, entry)
             seen_keys.add(dedupe_key)
             checkpoint_writer()
             logger.log(
@@ -1278,7 +1278,7 @@ def collect_direct_videos(
         else:
             # Publication errors are not video-unavailability errors. Propagate
             # them so the course fails and its last durable checkpoint survives.
-            entries.append(entry)
+            record_collected_entry(entries, entry)
             seen_keys.add(dedupe_key)
             checkpoint_writer()
             logger.log(
@@ -1467,6 +1467,16 @@ def checkpoint_seen_key_from_entry(entry: dict[str, Any]) -> tuple[str, str] | N
     return source_ref, dedupe_value
 
 
+def record_collected_entry(entries: list[dict[str, Any]], entry: dict[str, Any]) -> None:
+    """Only an observation of the same item resolves a pending failure."""
+    key = checkpoint_seen_key_from_entry(entry)
+    if key is not None:
+        entries[:] = [old for old in entries
+                      if not (old.get("status") == "error"
+                              and checkpoint_seen_key_from_entry(old) == key)]
+    entries.append(entry)
+
+
 def build_status_counts(entries: list[dict[str, Any]]) -> dict[str, int]:
     return dict(Counter(str(entry.get("status") or "") for entry in entries))
 
@@ -1541,13 +1551,11 @@ def load_checkpoint(
     if not isinstance(raw_entries, list):
         logger.log("[checkpoint] entries ausente/invalido; iniciando do zero.")
         return [], set()
-    # Retry failed items rather than treating their dedupe keys as completed.
-    # Filter only the in-memory resume view; keep durable evidence until the
-    # collector publishes its next checkpoint.
+    # Keep pending failures in every checkpoint/output until explicitly replaced.
+    # Their keys are not completed, so traversal can retry them.
     failed_keys = {checkpoint_seen_key_from_entry(entry) for entry in raw_entries
                    if isinstance(entry, dict) and entry.get("status") == "error"}
-    entries = [entry for entry in raw_entries
-               if isinstance(entry, dict) and entry.get("status") != "error"]
+    entries = [entry for entry in raw_entries if isinstance(entry, dict)]
     for entry in entries:
         entry.setdefault("video_stream_url", None)
 
@@ -1560,7 +1568,7 @@ def load_checkpoint(
     if not seen_keys:
         for entry in entries:
             key = checkpoint_seen_key_from_entry(entry)
-            if key:
+            if key and key not in failed_keys:
                 seen_keys.add(key)
 
     logger.log(

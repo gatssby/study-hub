@@ -211,3 +211,31 @@ Com `TMPDIR=/Users/gatsby/.hermes/cache/scratch` e `services/anki-mcp-v2/.venv/b
 6. Foco final catálogo/status/runtime/API/MCP: **58 passed em 1,11 s**. Após o outro agente criar `fo_hub/window_benchmark.py` (untracked, não incluído neste commit), nova execução **integral FO: 314 passed em 1,76 s**. Esse resultado depende também do trabalho concorrente presente no workspace; as quatro falhas anteriores permanecem registradas acima como histórico real.
 
 Arquivos funcionais: `portal/runtime.py`, `portal/fo_collect_aulas_index.py`, `fo_hub/store.py`; regressões novas: `tests/test_catalog_partial.py`, `tests/test_operational_status.py`. Nenhum módulo PDF/ASR, alteração Anki, serviço, gate, banco de produção ou VPS foi modificado. **Sem deploy ou push.**
+
+## Adendo — dois P1 da revisão `4c55df5` corrigidos localmente (28/10/2026)
+
+Este adendo substitui **a estratégia de descartar entradas error da memória** descrita acima; o snapshot de produção e as execuções históricas continuam válidos somente nos seus respectivos momentos. Nenhuma observação nova de produção foi feita.
+
+### Pendências não revisitadas
+
+- RED real: os dois testes de retomada, atualizados para exigir a retenção do item pendente, falharam com o loader anterior. Depois do ajuste no loader, o novo teste de checkpoint intermediário/runner retornando somente sucessos ainda falhou com `assert 0 == 1`: o runtime apagava o checkpoint e concluía o curso.
+- GREEN: o loader conserva entradas `error`, mas não suas chaves em `seen_keys`, inclusive quando precisa reconstruir esse conjunto. Cada gravação intermediária preserva a pendência se seu ramo não for revisitado. Uma observação explícita da mesma chave substitui o erro, em vez de duplicá-lo, nos três caminhos de publicação do coletor.
+- O runtime também reconcilia os erros pendentes do checkpoint com as observações retornadas pelo adapter antes de contar/publicar a passagem. Um retorno somente com sucessos não resolve itens omitidos. Curso continua `error`, imediatamente elegível para retry, sem novo `last_ok_at`; checkpoint e saída parcial conservam o erro. Uma resolução explícita permite concluir e remover o checkpoint normalmente.
+- Regressões exercitam loader/writer/TSV/validador reais, checkpoint intermediário, preservação do último sucesso e substituição de erro no coletor sem duplicação, inclusive se a publicação seguinte falhar.
+
+### Erro transitório não é revisão de mídia
+
+- RED real, writer de catálogo e ingestão SQLite reais: após aula válida v1, publicar `error` com URL/duração nulas produzia v2 (`assert 2 == 1`). `authoritative=False` não protegia contra atualizar destrutivamente uma identidade presente.
+- GREEN: `ingest` filtra somente `status=error` **antes** de selecionar candidatos e chamar `sync_lessons`. O erro continua observável no catálogo/checkpoint e retry; não é persistido como nova revisão de aula. Mesmo um erro mais recente em outro arquivo não ganha de um candidato válido, e uma identidade conhecida apenas por erro não cria aula inválida.
+- A regressão comprova preservação de versão, URL, duração, tipo/presença, vínculo source (caminho/revisão/tamanho/disponibilidade) e job atual após erro. Um `ok` posterior com duração realmente alterada cria v2, invalida o vínculo antigo e mantém job da versão atual queued. Não afirma que jobs obsoletos sejam automaticamente marcados superseded em todos os caminhos.
+- `not_launched` e `invalid_source` continuam sendo estados explícitos ingeridos; não são filtrados como erro transitório. Não foi alterada a semântica de remoção real do store, nem introduzida remoção por ausência em coleta parcial.
+
+### Verificação e escopo do commit
+
+Com `TMPDIR=/Users/gatsby/.hermes/cache/scratch` e `services/anki-mcp-v2/.venv/bin/python -m pytest`:
+
+1. Foco `test_catalog_partial.py test_catalog_recovery.py test_dynamic_runtime.py test_ingest.py test_ingest_catalog_errors.py`: **33 passed em 0,10 s**.
+2. Suíte integral `federal-online/tests -q`: **362 passed em 4,95 s**, no workspace compartilhado com outras frentes; não é prova isolada das mudanças concorrentes nem paridade com a VPS.
+3. `git diff --check` limitado aos sete arquivos desta correção: sem erros.
+
+Arquivos desta correção: `federal-online/portal/fo_collect_aulas_index.py`, `federal-online/portal/runtime.py`, `federal-online/fo_hub/ingest.py`, `federal-online/tests/test_catalog_partial.py`, `federal-online/tests/test_catalog_recovery.py`, novo `federal-online/tests/test_ingest_catalog_errors.py` e este relatório. Todas as fixtures são sintéticas. `store.py`, PDF/privacy, worker e window benchmark não foram alterados. **Sem VPS, deploy, push, ASR ou mutações de produção.**
