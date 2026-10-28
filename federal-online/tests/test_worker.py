@@ -110,10 +110,11 @@ def test_recovery_removes_only_marked_worker_temporary_directories(tmp_path):
     assert (unknown/'important.txt').read_text()=='preserve unknown'
 
 
-@pytest.mark.parametrize('silence,expected',[('', 'validated'),('silence_start: 0\nsilence_end: 30','review')])
-def test_passed_output_is_published_but_text_in_measured_silence_is_reviewed(tmp_path,silence,expected):
+@pytest.mark.parametrize('silence,review_only,expected',[('',False,'validated'),('silence_start: 0\nsilence_end: 30',False,'review'),('',True,'review')])
+def test_passed_output_is_published_but_text_in_measured_silence_is_reviewed(tmp_path,silence,review_only,expected):
     from fo_hub.worker import Worker
     store,lesson,cfg=setup(tmp_path)
+    cfg.review_only=review_only
     def run(cmd,**kwargs):
         if cmd[0]=='rclone':Path(cmd[3]).write_bytes(b'fakevideo')
         elif cmd[0]=='ffprobe':return SimpleNamespace(stdout=json.dumps({'format':{'duration':'30'}}),stderr='')
@@ -125,3 +126,12 @@ def test_passed_output_is_published_but_text_in_measured_silence_is_reviewed(tmp
     assert w.run_once()['state']==expected
     assert (store.get_transcript(lesson['lesson_id']) is not None)==(expected=='validated')
     if expected=='review':assert store.conn.execute('select count(*) from focused_reviews').fetchone()[0]>0
+
+
+def test_pilot_review_only_is_loaded_without_changing_decoder_fingerprint(monkeypatch):
+    from fo_hub.worker import Config
+    baseline=Config.from_env().parameters()
+    monkeypatch.setenv('FO_ASR_REVIEW_ONLY','true')
+    cfg=Config.from_env()
+    assert cfg.review_only is True
+    assert cfg.parameters()==baseline

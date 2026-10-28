@@ -71,6 +71,7 @@ class Config:
     model_sha256:str|None=None
     beam_size:int=5
     temperature_fallback:bool=False
+    review_only:bool=False
 
     @classmethod
     def from_env(cls):
@@ -84,6 +85,7 @@ class Config:
         config.threads=int(os.environ.get('FO_ASR_THREADS','3'))
         config.beam_size=int(os.environ.get('FO_ASR_BEAM_SIZE','5'))
         config.temperature_fallback=os.environ.get('FO_ASR_TEMPERATURE_FALLBACK','false').lower()=='true'
+        config.review_only=os.environ.get('FO_ASR_REVIEW_ONLY','false').lower()=='true'
         return config
 
     def parameters(self):
@@ -381,6 +383,7 @@ class Worker:
         qa['flags'].extend(raw_flags)
         qa['flags'].extend(acoustic_flags)
         if not segments:qa['flags'].append({'kind':'empty_output'})
+        if cfg.review_only:qa['flags'].append({'kind':'pilot_manual_review_required','start':0,'end':duration})
         qa['passed']=not qa['flags'];qa['metrics']['flag_count']=len(qa['flags'])
         _,latest=self.current_source(job)
         if any(latest[k]!=source[k] for k in ('remote_path','revision','size','available')):raise SourceChanged('source changed during inference')
