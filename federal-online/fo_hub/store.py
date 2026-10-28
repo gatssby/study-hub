@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS lesson_revisions(
 CREATE TABLE IF NOT EXISTS materials(
   material_id TEXT PRIMARY KEY, lesson_id TEXT, subject TEXT, front TEXT, module TEXT,
   title TEXT, material_type TEXT, relative_path TEXT, sha256 TEXT, updated_at TEXT);
+CREATE TABLE IF NOT EXISTS pdf_source_observations(
+  material_id TEXT PRIMARY KEY, expected_sha256 TEXT, actual_sha256 TEXT,
+  status TEXT NOT NULL, observed_at REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS pdf_pages(
   material_id TEXT NOT NULL, page INTEGER NOT NULL, text TEXT NOT NULL,
   PRIMARY KEY(material_id, page));
@@ -211,6 +214,65 @@ class FOStore:
                 + ",updated_at=excluded.updated_at",
                 (*[m.get(c) for c in cols], _now()))
 
+    def record_pdf_source_snapshot(self, snapshot: Mapping[str, Any]) -> int:
+        """Persist an explicitly refreshed, identity-bound observation atomically.
+
+        No hashing here or in readers. Reject an entire batch if identities have
+        changed since selection; callers must observe again, never relabel text.
+        """
+        import math
+        import re
+        at = snapshot.get('observed_at')
+        if isinstance(at, bool) or not isinstance(at, (int, float)) or not math.isfinite(at) or at <= 0:
+            raise ValueError('invalid observation timestamp')
+        entries = snapshot.get('materials')
+        if not isinstance(entries, dict) or any(not isinstance(v, dict) for v in entries.values()):
+            raise ValueError('invalid material observations')
+        hashed = snapshot.get('hashed_paths')
+        actuals = {v.get('actual_sha256') for v in entries.values() if isinstance(v.get('actual_sha256'), str)}
+        if type(hashed) is not int or not len(actuals) <= hashed <= len(entries):
+            raise ValueError('invalid hashed path count')
+        sha_ok = lambda s: isinstance(s, str) and re.fullmatch('[0-9a-f]{64}', s) is not None
+        statuses = {'verified', 'historical_source_unavailable', 'source_unavailable',
+                    'not_observed', 'invalid_identity', 'invalid_path'}
+        with self.conn:
+            if not self.conn.in_transaction:
+                self.conn.execute('BEGIN IMMEDIATE')
+            for mid, observation in entries.items():
+                expected = observation.get('expected_sha256')
+                actual = observation.get('actual_sha256')
+                status = observation.get('status')
+                row = self.conn.execute('SELECT sha256 FROM materials WHERE material_id=?', (mid,)).fetchone()
+                if row is None or row['sha256'] != expected:
+                    raise ValueError('material identity changed or missing')
+                if status not in statuses or (status != 'invalid_identity' and not sha_ok(expected)):
+                    raise ValueError('invalid observation status or identity')
+                if status in {'verified', 'historical_source_unavailable'}:
+                    if not sha_ok(actual) or (actual == expected) != (status == 'verified'):
+                        raise ValueError('inconsistent byte observation')
+                elif actual is not None:
+                    raise ValueError('unexpected actual hash')
+                if status == 'invalid_identity' and sha_ok(expected):
+                    raise ValueError('valid hash cannot be invalid identity')
+                previous = self.conn.execute('SELECT observed_at FROM pdf_source_observations WHERE material_id=?', (mid,)).fetchone()
+                if previous and previous[0] > at:
+                    raise ValueError('older observation rejected')
+                self.conn.execute('INSERT OR REPLACE INTO pdf_source_observations VALUES(?,?,?,?,?)',
+                                  (mid, expected, actual, status, at))
+        return len(entries)
+
+    def _pdf_source_observation(self, material_id: str, expected: str | None) -> dict:
+        """Read cached evidence only; legacy read-only databases fail closed."""
+        row = None
+        if self.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pdf_source_observations'").fetchone():
+            row = self.conn.execute('SELECT * FROM pdf_source_observations WHERE material_id=? AND expected_sha256 IS ?',
+                                    (material_id, expected)).fetchone()
+        status = row['status'] if row else 'not_observed'
+        return dict(status=status, observed_at=row['observed_at'] if row else None,
+                    expected_sha256=expected, actual_sha256=row['actual_sha256'] if row else None,
+                    meaning='verified_at_observation' if status == 'verified' else status,
+                    current_bytes_guaranteed=False)
+
     def search_materials(self, subject: str | None = None, front: str | None = None,
                          module: str | None = None, title: str | None = None,
                          material_type: str | None = None, limit: int = 50,
@@ -226,6 +288,8 @@ class FOStore:
                                 'version': item['sha256'], 'updated_at': item['updated_at']}
             # A signed original URL would bypass PDF privacy protections. Its
             # provenance stays in the private ingestion manifest, not the Plugin.
+            item['relative_path'] = None
+            item['source_observation'] = self._pdf_source_observation(item['material_id'], item['sha256'])
             item['source_url'] = None
             item['source_access'] = 'private_original_not_exposed'
             results.append(item)
@@ -266,7 +330,10 @@ class FOStore:
                           "policy_version": policy,
                           "citation": f"{m['title']}, p. {p} [{material_id}#p{p}]"})
         return {"material_id": material_id, "title": m["title"], "page_count": total,
-                "pages": pages, 'version': m['sha256'], 'source': m['relative_path'], 'updated_at': m['updated_at']}
+                "pages": pages, 'version': m['sha256'], 'source': None, 'updated_at': m['updated_at'],
+                'text_provenance': 'indexed_snapshot',
+                'source_reason': 'private_original_not_exposed; mutable_alias_not_version_identity',
+                'source_observation': self._pdf_source_observation(material_id, m['sha256'])}
 
     # ---------- transcripts ----------
     def add_transcript(self, lesson_id: str, version: int, segments: list[Mapping[str, Any]],

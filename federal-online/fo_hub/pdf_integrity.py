@@ -129,3 +129,54 @@ def integrity_snapshot(root, materials, *, max_paths=64):
         output[row['material_id']] = dict(status=status, expected_sha256=expected,
                                           actual_sha256=actual)
     return dict(observed_at=time.time(), hashed_paths=hashed, materials=output)
+
+
+def main(argv=None):
+    """Explicit bounded observer. Not called by API or routine ingestion."""
+    import argparse
+    import json
+    import sqlite3
+    from collections import Counter
+    from .store import FOStore
+
+    parser = argparse.ArgumentParser(description='Observe selected PDF aliases; no current-byte guarantee')
+    parser.add_argument('--db', required=True)
+    parser.add_argument('--state-root', required=True)
+    parser.add_argument('--material-id', action='append', required=True)
+    parser.add_argument('--max-paths', type=int, default=64)
+    parser.add_argument('--refresh', action='store_true', required=True,
+                        help='Explicitly authorize bounded observation and cached status update')
+    args = parser.parse_args(argv)
+    ids = list(dict.fromkeys(args.material_id))
+    if not 0 <= args.max_paths <= 512 or not 1 <= len(ids) <= 512:
+        parser.error('path/material budget must be between 0/1 and 512')
+    # Read-only first: a typo must never create an empty database.
+    try:
+        store = FOStore(args.db, readonly=True)
+        try:
+            with store.conn:
+                store.conn.execute('BEGIN')
+                rows = [dict(row) for row in store.conn.execute(
+                    'SELECT material_id,sha256,relative_path FROM materials WHERE material_id IN ('
+                    + ','.join('?' for _ in ids) + ') ORDER BY material_id', ids)]
+        finally:
+            store.conn.close()
+        if len(rows) != len(ids):
+            parser.error('selection contains unknown material IDs')
+        snapshot = integrity_snapshot(args.state_root, rows, max_paths=args.max_paths)
+        store = FOStore(args.db)
+        try:
+            recorded = store.record_pdf_source_snapshot(snapshot)
+        finally:
+            store.conn.close()
+    except (OSError, ValueError, sqlite3.Error):
+        parser.error('observation failed; no source paths or private diagnostics exposed')
+    print(json.dumps(dict(observed_at=snapshot['observed_at'],
+                          hashed_paths=snapshot['hashed_paths'], recorded_materials=recorded,
+                          statuses=dict(Counter(row['status'] for row in snapshot['materials'].values())),
+                          current_bytes_guaranteed=False), sort_keys=True))
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
