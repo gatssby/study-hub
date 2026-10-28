@@ -11,16 +11,10 @@ import unicodedata
 from dataclasses import dataclass
 
 CPF_RE = re.compile(r"(?<!\d)\d{3}[.\s]*\d{3}[.\s]*\d{3}[-\s]*\d{2}(?!\d)")
-PRIVACY_POLICY_VERSION = 4
-LABELED_ID_RE = re.compile(
-    r"(?i)\bcpf[ \t]*[:#-][ \t]*[0-9][0-9 ./-]{3,40}"
-)
+PRIVACY_POLICY_VERSION = 5
 NAME_LABEL = r"(?:nome(?:[ \t]+completo)?|aluno|propriet[aá]rio|titular)"
-LABELED_NAME_RE = re.compile(
-    rf"(?i)\b{NAME_LABEL}[ \t]*[:#-][ \t]*[^\n\r]{{2,120}}"
-)
-EMPTY_NAME_RE = re.compile(rf"(?im)\b{NAME_LABEL}[ \t]*[:#-][ \t]*$")
-UNRESOLVED_CPF_RE = re.compile(r"(?i)\bcpf[ \t]*(?:[:#-][ \t]*)?[0-9]")
+NAME_FIELD_RE = re.compile(rf"(?i)\b{NAME_LABEL}[ \t]*[:：#-]")
+UNRESOLVED_CPF_RE = re.compile(r"(?i)\bcpf[ \t]*(?:[:：#-][ \t]*)?[0-9]")
 WATERMARK_HINT_RE = re.compile(
     r"(?i)\b(?:cpf|nome(?:\s+completo)?|aluno|propriet[aá]rio|titular|documento)\b"
 )
@@ -59,17 +53,10 @@ def sanitize_text(text: str) -> tuple[str, bool]:
 
     value = CPF_RE.sub(cpf, value)
 
-    def labeled(match: re.Match[str]) -> str:
-        nonlocal changed
-        changed = True
-        label = match.group(0).split(":", 1)[0].split("#", 1)[0].split("-", 1)[0]
-        return f"{label}: [DADO REMOVIDO]"
-
-    value = LABELED_ID_RE.sub(labeled, value)
-    # A name is only safely removed when it shares a page with a CPF marker.
-    # Otherwise the page is blocked by classify_page rather than guessing.
-    if "[IDENTIFICADOR REMOVIDO]" in value or "[DADO REMOVIDO]" in value:
-        value = LABELED_NAME_RE.sub(labeled, value)
+    # A label and a CPF elsewhere do not prove which words belong to an
+    # identity. Preserve academic lines/numbers here; classify_page blocks
+    # ambiguous fields instead of truncating a scientist, equation or name.
+    if "[IDENTIFICADOR REMOVIDO]" in value:
         marker = "[IDENTIFICADOR REMOVIDO]"
         # A repeated unlabelled watermark supplies its own delimiter. Learn
         # only short, letter-only name spans BETWEEN identifiers, never from a
@@ -87,8 +74,7 @@ def sanitize_text(text: str) -> tuple[str, bool]:
                 # its identifier. Do not release it via a successful partial match.
                 if re.search(r"\b" + r"\s+".join(map(re.escape, name.split())) + r"\b", value):
                     return "[REVISAO PRIVACIDADE NECESSARIA]", True
-        if "[DADO REMOVIDO]" in value:
-            value = re.sub(r"(?i)\bCPF\s*[:#-]\s*" + re.escape(marker), "CPF: [DADO REMOVIDO]", value)
+
     return value, changed
 
 
@@ -99,11 +85,10 @@ def classify_page(text: str, *, pii_redacted: bool) -> PagePrivacy:
         return PagePrivacy("", pii_redacted, "ocr_pending", "blocked")
     if "[IDENTIFICADOR REMOVIDO]" in normalized or "[REVISAO PRIVACIDADE NECESSARIA]" in normalized:
         return PagePrivacy("", pii_redacted, "privacy_review", "blocked")
-    if EMPTY_NAME_RE.search(normalized) or UNRESOLVED_CPF_RE.search(normalized):
+    # Even legacy '[DADO REMOVIDO]' after a name label can represent a lossy
+    # or partial redaction. It is not proof that the next line is anonymous.
+    if NAME_FIELD_RE.search(normalized) or UNRESOLVED_CPF_RE.search(normalized):
         return PagePrivacy("", pii_redacted, "privacy_review", "blocked")
-    for name in LABELED_NAME_RE.finditer(normalized):
-        if not re.search(r"[:#-]\s*\[DADO REMOVIDO\]\s*$", name.group()):
-            return PagePrivacy("", pii_redacted, "privacy_review", "blocked")
     if len(normalized) < 24:
         return PagePrivacy(normalized, pii_redacted, "low_text", "text_only")
     return PagePrivacy(normalized, pii_redacted, "text", "text_only")

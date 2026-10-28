@@ -13,10 +13,11 @@ def test_student_identity_label_without_cpf_is_blocked():
     assert page.text == ''
 
 
-def test_student_identity_label_with_cpf_is_redacted():
+def test_student_identity_label_with_cpf_requires_provenance_review():
     page = sanitize_page('Aluno: Pessoa Sintetica\nCPF: 123.456.789-00\nBiologia celular.')
     assert 'Pessoa Sintetica' not in page.text
-    assert page.exposure == 'text_only'
+    assert page.exposure == 'blocked'
+    assert page.text == ''
 
 
 def test_unpunctuated_cpf_watermark_is_blocked():

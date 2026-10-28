@@ -7,15 +7,15 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "portal"))
 
 
-def test_pdf_privacy_redacts_valid_cpf_and_labeled_name_without_logging_value():
+def test_pdf_privacy_blocks_labeled_name_even_with_valid_cpf():
     from fo_hub.pdf_privacy import sanitize_page
 
     page = sanitize_page("Nome: Maria da Silva\nCPF: 529.982.247-25\nQuestão: 2")
     assert "Maria da Silva" not in page.text
     assert "529.982.247-25" not in page.text
-    assert "[DADO REMOVIDO]" in page.text
+    assert page.text == ""
     assert page.pii_redacted is True
-    assert page.exposure == "text_only"
+    assert page.exposure == "blocked"
 
 
 def test_pdf_privacy_blocks_empty_and_ambiguous_identity_pages():

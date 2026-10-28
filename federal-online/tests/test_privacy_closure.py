@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fo_hub.api import create_app
-from fo_hub.pdf_privacy import sanitize_page
+from fo_hub.pdf_privacy import sanitize_page, sanitize_text
 from fo_hub.store import FOStore
 
 
@@ -49,7 +49,9 @@ def test_invalid_labelled_cpf_does_not_exempt_an_unredacted_name():
     text = 'Conteudo da aula de direito constitucional.\nCPF: 111.222.333-44\nNome: PESSOA FICTICIA'
     page = sanitize_page(text)
     assert 'PESSOA FICTICIA' not in page.text
-    assert 'constitucional' in page.text
+    assert page.exposure == 'blocked'
+    # Ambiguity blocks delivery, not license to delete the academic line.
+    assert 'constitucional' in sanitize_text(text)[0]
 
 
 def test_redaction_on_one_label_never_exempts_another_label():
