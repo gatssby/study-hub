@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from fo_hub.pdf_privacy import sanitize_page
+from fo_hub.pdf_privacy import PRIVACY_POLICY_VERSION, sanitize_page
 from fo_hub.store import FOStore
 
 
@@ -22,7 +22,7 @@ def seed(tmp_path):
     store.set_pdf_pages("m", [""])
     with store.conn:
         store.conn.execute("INSERT INTO pdf_page_quality VALUES(?,?,?,?,?,?,?,?)",
-                           ("m", 1, "ocr_pending", "blocked", 0, 0, "now", 3))
+                           ("m", 1, "ocr_pending", "blocked", 0, 0, "now", PRIVACY_POLICY_VERSION))
     return state, store
 
 

@@ -5,6 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fo_hub.ingest import ingest
 from fo_hub.store import FOStore
+from fo_hub.pdf_privacy import PRIVACY_POLICY_VERSION
 
 
 def test_existing_pages_outside_current_manifest_are_reviewed_incrementally(tmp_path):
@@ -20,7 +21,7 @@ def test_existing_pages_outside_current_manifest_are_reviewed_incrementally(tmp_
                            ("old", 3, "text", "text_only", 30, 0, "then", 3))
     ingest(state, db)
     result = store.get_pdf_text("old")
-    assert result["pages"][0]["policy_version"] == 3
+    assert result["pages"][0]["policy_version"] == PRIVACY_POLICY_VERSION
     assert "PESSOA FICTICIA" not in result["pages"][0]["text"]
     assert result["pages"][1]["quality"] == "ocr_pending"
     assert result["pages"][2]["text"] == "Outra pagina didatica sem marca."
@@ -46,7 +47,7 @@ def test_sync_status_counts_unreviewed_and_current_policy_separately(tmp_path):
     store.set_pdf_pages("m", ["raw", "reviewed"])
     with store.conn:
         store.conn.execute("INSERT INTO pdf_page_quality VALUES(?,?,?,?,?,?,?,?)",
-                           ("m", 2, "text", "text_only", 8, 0, "then", 3))
+                           ("m", 2, "text", "text_only", 8, 0, "then", PRIVACY_POLICY_VERSION))
     status = store.sync_status()["pdf_privacy"]
     assert status["current_policy_pages"] == 1
     assert status["unreviewed_pages"] == 1

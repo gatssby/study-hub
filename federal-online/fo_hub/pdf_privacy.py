@@ -11,14 +11,16 @@ import unicodedata
 from dataclasses import dataclass
 
 CPF_RE = re.compile(r"(?<!\d)\d{3}[.\s]*\d{3}[.\s]*\d{3}[-\s]*\d{2}(?!\d)")
-PRIVACY_POLICY_VERSION = 3
+PRIVACY_POLICY_VERSION = 4
 LABELED_ID_RE = re.compile(
     r"(?i)\bcpf[ \t]*[:#-][ \t]*[0-9][0-9 ./-]{3,40}"
 )
+NAME_LABEL = r"(?:nome(?:[ \t]+completo)?|aluno|propriet[aá]rio|titular)"
 LABELED_NAME_RE = re.compile(
-    r"(?i)\bnome(?:\s+completo)?\s*[:#-]\s*"
-    r"[^\n\r]{2,120}"
+    rf"(?i)\b{NAME_LABEL}[ \t]*[:#-][ \t]*[^\n\r]{{2,120}}"
 )
+EMPTY_NAME_RE = re.compile(rf"(?im)\b{NAME_LABEL}[ \t]*[:#-][ \t]*$")
+UNRESOLVED_CPF_RE = re.compile(r"(?i)\bcpf[ \t]*(?:[:#-][ \t]*)?[0-9]")
 WATERMARK_HINT_RE = re.compile(
     r"(?i)\b(?:cpf|nome(?:\s+completo)?|aluno|propriet[aá]rio|titular|documento)\b"
 )
@@ -96,6 +98,8 @@ def classify_page(text: str, *, pii_redacted: bool) -> PagePrivacy:
     if not content:
         return PagePrivacy("", pii_redacted, "ocr_pending", "blocked")
     if "[IDENTIFICADOR REMOVIDO]" in normalized or "[REVISAO PRIVACIDADE NECESSARIA]" in normalized:
+        return PagePrivacy("", pii_redacted, "privacy_review", "blocked")
+    if EMPTY_NAME_RE.search(normalized) or UNRESOLVED_CPF_RE.search(normalized):
         return PagePrivacy("", pii_redacted, "privacy_review", "blocked")
     for name in LABELED_NAME_RE.finditer(normalized):
         if not re.search(r"[:#-]\s*\[DADO REMOVIDO\]\s*$", name.group()):
