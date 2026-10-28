@@ -1,0 +1,378 @@
+{
+  "observed_at": 1793178454.12431,
+  "mission_start": {
+    "unit": "study-hub-fo-window-20261028-b1",
+    "started_at": 1793172021.6009402,
+    "budget_seconds": 21600,
+    "max_distinct_windows": 6
+  },
+  "elapsed_budget_s": 6432.523370265961,
+  "measured_runs": [
+    {
+      "lesson_id": "fo_00f1d411c04e2225",
+      "window": 1,
+      "config": "baseline",
+      "start_s": 577.5,
+      "duration_s": 300,
+      "artifact_sha256": "d9c899220b99c1e5bd1804b2f7766112b233c4ec5971740e907e391e842d39fd",
+      "artifact_bytes": 409729,
+      "raw_sha256": "2efa01f1c6facdc6e53a3aa6c36246f73333d5907d950dadf9d475ebf72b78c6",
+      "resource_sha256": "5f9ea4dc358daf434cabb353104d03ee0f65b8dcb47d7f2863a364a00cfb9325",
+      "audio_sha256": "30ed0d212c62cad5b9d0a4843b2f3b45394dd26e6d01abe070f5c469493c4598",
+      "source_sha256": "446523422fd52491e76276d076cb876ca8bbf9b88229b1c258f0427b7ef55027",
+      "model_sha256": "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
+      "runtime_sha256": "61f809860bea4cef8a936049280e06006b849a87e7ae35e919e7703237db3c5c",
+      "wall_s": 808.1085990590509,
+      "rtf": 2.6936953301968365,
+      "resources": {
+        "cpu_user_s": 2377.94,
+        "cpu_system_s": 5.06,
+        "maxrss_kib": 4143940.0,
+        "exit_status": 0.0
+      },
+      "segments": 50,
+      "words_whitespace": 608,
+      "union_coverage_s": 284.68000000000063,
+      "union_coverage_fraction": 0.9489333333333354,
+      "gap_count": 22,
+      "gap_total_s": 15.319999999999368,
+      "gap_max_s": 2.17999999999995,
+      "overlap_excess_s": 0.0,
+      "qa_passed": false,
+      "qa_counts": {
+        "ngram_repetition": 1
+      },
+      "repetition_candidates_per_relative_minute": {
+        "0": 1
+      },
+      "source_unchanged": true,
+      "published": false,
+      "human_gold": null,
+      "wer": null,
+      "cer": null,
+      "acoustic_reviewed": false
+    },
+    {
+      "lesson_id": "fo_21bc53736297a731",
+      "window": 1,
+      "config": "baseline",
+      "start_s": 589.5,
+      "duration_s": 300,
+      "artifact_sha256": "0c94a20cd629fffbc404a865e970f4a28f7876321cbaddf98964a78f25d0495e",
+      "artifact_bytes": 641161,
+      "raw_sha256": "3a668acd9a86800ac21c2a7fb28fc1b7949ce6dc44045a5495b1e08e6e73129b",
+      "resource_sha256": "ff0ef8047ebcbdc13e4b8492dca7dd53f5be5396a9c747f2c50d0a16ea2440e0",
+      "audio_sha256": "647a585ba48463c64ab376983c50d11fa146faf67b4c7d740eabb3cfc0a6fecd",
+      "source_sha256": "f05624ad3fa69c5b8c10684286047d6fc9e9e7c18305edb26aff67aa140c9bab",
+      "model_sha256": "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
+      "runtime_sha256": "61f809860bea4cef8a936049280e06006b849a87e7ae35e919e7703237db3c5c",
+      "wall_s": 999.238954330096,
+      "rtf": 3.3307965144336533,
+      "resources": {
+        "cpu_user_s": 2934.91,
+        "cpu_system_s": 6.24,
+        "maxrss_kib": 4144516.0,
+        "exit_status": 0.0
+      },
+      "segments": 168,
+      "words_whitespace": 877,
+      "union_coverage_s": 254.9999999999999,
+      "union_coverage_fraction": 0.8499999999999996,
+      "gap_count": 13,
+      "gap_total_s": 45.000000000000114,
+      "gap_max_s": 10.0,
+      "overlap_excess_s": 0.0,
+      "qa_passed": false,
+      "qa_counts": {
+        "duplicate_segment": 4,
+        "ngram_repetition": 1
+      },
+      "repetition_candidates_per_relative_minute": {
+        "4": 1
+      },
+      "source_unchanged": true,
+      "published": false,
+      "human_gold": null,
+      "wer": null,
+      "cer": null,
+      "acoustic_reviewed": false
+    },
+    {
+      "lesson_id": "fo_21fd4985e207c5df",
+      "window": 1,
+      "config": "baseline",
+      "start_s": 1258.5,
+      "duration_s": 300,
+      "artifact_sha256": "f4283de52d7d90e8d54552b13890c20ca5b315e9ac02f91edcacc3613a3bc457",
+      "artifact_bytes": 482972,
+      "raw_sha256": "64c3c79f0c55b6d912e8200670cb0284c3d908ab54f230768cf8a9d4eeec422b",
+      "resource_sha256": "96cec6c7bda9981894f2979cdc487ba91332bf3217a8a0169550cecaef8521f5",
+      "audio_sha256": "cc4832a45f185f10929647cb09a1ce67229e351f4345b9f8e5c3a658f48b63ea",
+      "source_sha256": "1a90b75419de46aa3dabd04362c5673323676cbd7d4d639dfa88c219be7c1ee0",
+      "model_sha256": "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
+      "runtime_sha256": "61f809860bea4cef8a936049280e06006b849a87e7ae35e919e7703237db3c5c",
+      "wall_s": 868.7693560700864,
+      "rtf": 2.8958978535669546,
+      "resources": {
+        "cpu_user_s": 2553.25,
+        "cpu_system_s": 5.36,
+        "maxrss_kib": 4144096.0,
+        "exit_status": 0.0
+      },
+      "segments": 70,
+      "words_whitespace": 658,
+      "union_coverage_s": 276.41999999999985,
+      "union_coverage_fraction": 0.9213999999999994,
+      "gap_count": 24,
+      "gap_total_s": 23.580000000000155,
+      "gap_max_s": 5.580000000000155,
+      "overlap_excess_s": 0.0,
+      "qa_passed": true,
+      "qa_counts": {},
+      "repetition_candidates_per_relative_minute": {},
+      "source_unchanged": true,
+      "published": false,
+      "human_gold": null,
+      "wer": null,
+      "cer": null,
+      "acoustic_reviewed": false
+    },
+    {
+      "lesson_id": "fo_2d3fb5791f4a014c",
+      "window": 1,
+      "config": "baseline",
+      "start_s": 739.0,
+      "duration_s": 300,
+      "artifact_sha256": "a405ef823631e319553b1836a52efcca5127954af72376cbd3bf9886c051642f",
+      "artifact_bytes": 444660,
+      "raw_sha256": "71d05697585be729049da87452fe070b9eae6c575322bd456ff78a96501c0d5e",
+      "resource_sha256": "611983812dde1720aba5ae106aaa251166ff1a38280cf4b931fa62d018329d98",
+      "audio_sha256": "8adf2d4aad95181f5e3f202acac280ce5447e144cdd192ec15c1039122400700",
+      "source_sha256": "47d70807f7dd984e39d8e9755e87833a6b1265d8e173b0f7265aa8353bc0260e",
+      "model_sha256": "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
+      "runtime_sha256": "61f809860bea4cef8a936049280e06006b849a87e7ae35e919e7703237db3c5c",
+      "wall_s": 832.8184310870711,
+      "rtf": 2.7760614369569034,
+      "resources": {
+        "cpu_user_s": 2445.74,
+        "cpu_system_s": 5.21,
+        "maxrss_kib": 4144288.0,
+        "exit_status": 0.0
+      },
+      "segments": 39,
+      "words_whitespace": 770,
+      "union_coverage_s": 295.52,
+      "union_coverage_fraction": 0.9850666666666666,
+      "gap_count": 13,
+      "gap_total_s": 4.480000000000018,
+      "gap_max_s": 0.7999999999999545,
+      "overlap_excess_s": 0.0,
+      "qa_passed": true,
+      "qa_counts": {},
+      "repetition_candidates_per_relative_minute": {},
+      "source_unchanged": true,
+      "published": false,
+      "human_gold": null,
+      "wer": null,
+      "cer": null,
+      "acoustic_reviewed": false
+    },
+    {
+      "lesson_id": "fo_a719610740cb128f",
+      "window": 1,
+      "config": "baseline",
+      "start_s": 600.0,
+      "duration_s": 300,
+      "artifact_sha256": "783d7b6fdd29ac5cf6f388ac80e868bcba32989bc76e8c24751f39d4af46fdfc",
+      "artifact_bytes": 450647,
+      "raw_sha256": "530b05e56cf9ad8d63e422aed17cf9d5478b9cad754d8ec0499e4f7625cbc832",
+      "resource_sha256": "e9a05b66d9c0689c57a9ab19b2c2e6b5de12476f4e22abbea18d3e515d0fcfb6",
+      "audio_sha256": "1d9cdcd88f6be44f3ac76d8221958fa08590e27f26d608529c1cd372cf9cc951",
+      "source_sha256": "7cef406d8b2a09d12ea80f7d84be08210ff95aea2546bd99164981f2c1c815a7",
+      "model_sha256": "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
+      "runtime_sha256": "61f809860bea4cef8a936049280e06006b849a87e7ae35e919e7703237db3c5c",
+      "wall_s": 824.2881037199404,
+      "rtf": 2.7476270123998012,
+      "resources": {
+        "cpu_user_s": 2425.45,
+        "cpu_system_s": 5.09,
+        "maxrss_kib": 4143944.0,
+        "exit_status": 0.0
+      },
+      "segments": 90,
+      "words_whitespace": 802,
+      "union_coverage_s": 248.0999999999999,
+      "union_coverage_fraction": 0.8269999999999997,
+      "gap_count": 79,
+      "gap_total_s": 51.90000000000009,
+      "gap_max_s": 3.099999999999909,
+      "overlap_excess_s": 0.0,
+      "qa_passed": true,
+      "qa_counts": {},
+      "repetition_candidates_per_relative_minute": {},
+      "source_unchanged": true,
+      "published": false,
+      "human_gold": null,
+      "wer": null,
+      "cer": null,
+      "acoustic_reviewed": false
+    },
+    {
+      "lesson_id": "fo_e2d45966e0eba19c",
+      "window": 1,
+      "config": "baseline",
+      "start_s": 819.5,
+      "duration_s": 300,
+      "artifact_sha256": "a57639fff3b5a149b892e2361cf969e3d4acd5782500a031ec9f9e15987a4b4b",
+      "artifact_bytes": 456144,
+      "raw_sha256": "43058870f4f8f73396bb2e009d0b922064847e2e02425494f598ad7fb58aad96",
+      "resource_sha256": "ab9fb3ed258b223dcbdfa857bb2268dac43e578b53feb9e7d1602e5222d37af7",
+      "audio_sha256": "ef8f0908069029caee3218622d524bdf775575f84dbb0aa321750f78d6a19253",
+      "source_sha256": "66db5490cc25cf3bbfd9ee0faa92016e0bb13d729ae3490320da381becb6d904",
+      "model_sha256": "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
+      "runtime_sha256": "61f809860bea4cef8a936049280e06006b849a87e7ae35e919e7703237db3c5c",
+      "wall_s": 863.8855672839563,
+      "rtf": 2.879618557613188,
+      "resources": {
+        "cpu_user_s": 2539.51,
+        "cpu_system_s": 5.39,
+        "maxrss_kib": 4143956.0,
+        "exit_status": 0.0
+      },
+      "segments": 63,
+      "words_whitespace": 631,
+      "union_coverage_s": 241.62000000000012,
+      "union_coverage_fraction": 0.8054000000000004,
+      "gap_count": 54,
+      "gap_total_s": 58.37999999999988,
+      "gap_max_s": 5.120000000000118,
+      "overlap_excess_s": 0.0,
+      "qa_passed": false,
+      "qa_counts": {
+        "token_repetition": 4
+      },
+      "repetition_candidates_per_relative_minute": {
+        "2": 3,
+        "4": 1
+      },
+      "source_unchanged": true,
+      "published": false,
+      "human_gold": null,
+      "wer": null,
+      "cer": null,
+      "acoustic_reviewed": false
+    }
+  ],
+  "distinct_windows": 6,
+  "sampled_cgroup_memory_peaks": {
+    "study-hub-fo-window-20261028-b1": 4268138496,
+    "study-hub-fo-window-20261028-b2": 4288942080,
+    "study-hub-fo-window-20261028-b3": 4288507904,
+    "study-hub-fo-window-20261028-b4": 4287963136,
+    "study-hub-fo-window-20261028-b5": 4287950848,
+    "study-hub-fo-window-20261028-b6": 4288274432,
+    "study-hub-fo-window-20261028-b7": 2097152
+  },
+  "private_window_tree_bytes": 177614807,
+  "private_window_tree_files": 55,
+  "budget": {
+    "windows": [
+      "fo_21fd4985e207c5df:1",
+      "fo_2d3fb5791f4a014c:1",
+      "fo_21bc53736297a731:1",
+      "fo_a719610740cb128f:1",
+      "fo_00f1d411c04e2225:1",
+      "fo_e2d45966e0eba19c:1"
+    ],
+    "limit": 18
+  },
+  "failed_runs": [
+    {
+      "artifact_sha256": "485ab6f00b7396e86d8416b2da97319f4116231e9125bab91c981b8645226e54",
+      "config": "beam10",
+      "decoder_exit_status": 10,
+      "reason": "requested_10_decoders_runtime_maximum_8",
+      "resources": {
+        "cpu_user_s": 1.26,
+        "cpu_system_s": 1.69,
+        "maxrss_kib": 3436432.0,
+        "exit_status": 10.0
+      },
+      "stdout_characters": 0,
+      "resource_log_sha256": "23caa28bca1cf9adb00387b878dddd13fd6ee88dad5a7dd35dca641918fdc4ff"
+    }
+  ],
+  "final_safety": {
+    "gate_absent": true,
+    "persistent_false": true,
+    "general_active": "inactive",
+    "general_enabled": "disabled",
+    "decoder_count": 0,
+    "transcription_timer_present": false,
+    "units": {
+      "study-hub-fo-window-20261028-b1": {
+        "MainPID": "0",
+        "Result": "success",
+        "ActiveState": "inactive",
+        "SubState": "dead"
+      },
+      "study-hub-fo-window-20261028-b2": {
+        "MainPID": "0",
+        "Result": "success",
+        "ActiveState": "inactive",
+        "SubState": "dead"
+      },
+      "study-hub-fo-window-20261028-b3": {
+        "MainPID": "0",
+        "Result": "success",
+        "ActiveState": "inactive",
+        "SubState": "dead"
+      },
+      "study-hub-fo-window-20261028-b4": {
+        "MainPID": "0",
+        "Result": "success",
+        "ActiveState": "inactive",
+        "SubState": "dead"
+      },
+      "study-hub-fo-window-20261028-b5": {
+        "MainPID": "0",
+        "Result": "success",
+        "ActiveState": "inactive",
+        "SubState": "dead"
+      },
+      "study-hub-fo-window-20261028-b6": {
+        "MainPID": "0",
+        "Result": "success",
+        "ActiveState": "inactive",
+        "SubState": "dead"
+      },
+      "study-hub-fo-window-20261028-b7": {
+        "MainPID": "0",
+        "Result": "exit-code",
+        "ActiveState": "failed",
+        "SubState": "failed"
+      }
+    }
+  },
+  "finished_at": 1793178454.6203885,
+  "configuration_attempts": 7,
+  "fallback": "not_started_after_beam10_runtime_capability_failure",
+  "publication_barriers": {
+    "mcp_tool_count": 26,
+    "mcp_transcript_error": "fo_not_found",
+    "mcp_transcript_status": 404,
+    "onedrive_allowlist_count": 0,
+    "remote_listing_exit_status": 0,
+    "remote_transcript_files": 0,
+    "remote_pilot_matches": 0,
+    "remote_forbidden_evidence_paths": 0
+  },
+  "final_reverification": {
+    "observed_at": 1793178620.5507026,
+    "pilot_hash_reverified": true,
+    "beam10_same_audio_source_model_runtime_libraries": true,
+    "gate_absent": true,
+    "decoder_count": 0,
+    "disk_free_bytes": 13827010560
+  }
+}
