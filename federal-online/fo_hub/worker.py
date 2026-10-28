@@ -338,26 +338,30 @@ class Worker:
                     cached=None
             if cached is not None:
                 payload=cached['raw'];intervals=cached['silence']
+                decoding=cached.get('decoding')
             else:
                 if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
                 self.command(['ffmpeg','-nostdin','-y','-threads','1','-ss',str(offset),'-i',video,'-t',str(length),'-ar','16000','-ac','1','-c:a','pcm_s16le','-threads','1',audio])
                 silence=self.command(['ffmpeg','-nostdin','-threads','1','-i',audio,'-af','silencedetect=noise=-40dB:d=1','-f','null','-'])
                 command=[cfg.binary,'-m',cfg.model,'-f',audio,'-l','pt','-t',str(cfg.threads),'-bs',str(cfg.beam_size),'-bo','5','-mc','-1','-tp','0','-tpi','0.2' if cfg.temperature_fallback else '0','-nth','0.6','-et','2.4','-lpt','-1','-ng','-ojf','-of',prefix]
                 if not cfg.temperature_fallback:command.append('-nf')
-                self.command(command,timeout=172800)
+                decode_started=time.monotonic()
+                decoded=self.command(command,timeout=172800)
+                decoding={'wall_s':time.monotonic()-decode_started,'stderr':decoded.stderr or '',
+                          'stdout':decoded.stdout or ''}
                 raw_text=prefix.with_suffix('.json').read_text()
                 created_at=time.time()
                 # Preserve even malformed JSON before any decoder-output parsing.
                 atomic_json(evidence/f'{offset:.3f}-{length:.3f}.decoder-{uuid.uuid4().hex}.json.gz',
                             {'raw_text':raw_text,'created_at':created_at,'rejected_cache':rejected,
                              'source_sha256':source_sha256,'fingerprint':fingerprint,
-                             'offset_s':offset,'duration_s':length})
+                             'offset_s':offset,'duration_s':length,'decoding':decoding})
                 payload=json.loads(raw_text)
                 intervals=silence_intervals(silence.stderr or '',length)
                 record={'schema_version':1,'source_sha256':source_sha256,'fingerprint':fingerprint,
                         'offset_s':offset,'duration_s':length,'raw':payload,'silence':intervals,
                         'created_at':created_at,'rejected_cache':rejected,
-                        'decoder_command':[str(x) for x in command]}
+                        'decoder_command':[str(x) for x in command],'decoding':decoding}
                 record['evidence_sha256']=evidence_checksum(record)
                 atomic_json(checkpoint,record)
             current=parse_whisper(payload,offset)
@@ -368,7 +372,7 @@ class Worker:
             for row in current:
                 for start,end in intervals:
                     if row['text'] and row['start']>=offset+start and row['end']<=offset+end:acoustic_flags.append({'kind':'text_during_measured_silence','start':row['start'],'end':row['end']})
-            chunks.append({'offset_s':offset,'duration_s':length,'segments':current,'silence':intervals,'raw':payload,'reused':cached is not None})
+            chunks.append({'offset_s':offset,'duration_s':length,'segments':current,'silence':intervals,'raw':payload,'reused':cached is not None,'decoding':decoding})
             queue.progress(job['lesson_id'],job['version'],self.owner,min(1,(offset+length)/duration))
             with self.c:self.c.execute('UPDATE transcription_jobs SET lease_until=?,updated_at=? WHERE lesson_id=? AND version=? AND lease_owner=?',(time.time()+7*86400,str(time.time()),job['lesson_id'],job['version'],self.owner))
             audio.unlink(missing_ok=True);prefix.with_suffix('.json').unlink(missing_ok=True)

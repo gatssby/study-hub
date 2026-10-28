@@ -74,6 +74,9 @@ def test_fake_pipeline_publishes_only_passed_current_version_and_cleans_temps(tm
     assert store.get_transcript(lesson['lesson_id']) is None
     artifacts=list((tmp_path/'transcripts/review').rglob('*.json.gz'))
     assert artifacts and 'A célula' in gzip.decompress(artifacts[0].read_bytes()).decode()
+    artifact=json.loads(gzip.decompress(artifacts[0].read_bytes()))
+    assert artifact['chunks'][0]['decoding']['wall_s']>=0
+    assert artifact['chunks'][0]['decoding']['stderr']==''
     assert not list((tmp_path/'tmp/transcription').glob('*'))
     assert any(cmd[0]==str(cfg.binary) for cmd in calls)
     assert '--max-size' in next(cmd for cmd in calls if cmd[0]=='rclone')
