@@ -130,6 +130,15 @@ def course_links(links):
     return list(found.values())
 
 
+def _reject_publication_symlinks(path):
+    # Do not resolve first: resolution erases the evidence we must reject.
+    path = Path(path)
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    if any(p.is_symlink() for p in (path, *path.parents)):
+        raise ValueError('publication_symlink')
+
+
 def merge_materials(build: Path, final: Path):
     """Plan then publish immutable PDF names, metadata last; retain builds on error.
 
@@ -138,9 +147,13 @@ def merge_materials(build: Path, final: Path):
     Both legacy promotion wrappers use this same boundary.
     """
     build, final = Path(build), Path(final)
+    _reject_publication_symlinks(build)
+    _reject_publication_symlinks(final)
     if build.resolve() == final.resolve() or build.resolve() in final.resolve().parents or final.resolve() in build.resolve().parents:
         raise ValueError('publication_roots_overlap')
     files = sorted(p for p in build.rglob('*') if p.is_file())
+    for source in files:
+        _reject_publication_symlinks(final / source.relative_to(build))
     if any(not (final / p.relative_to(build)).resolve().is_relative_to(final.resolve()) for p in files):
         raise ValueError('publication_path_escape')
     if any(p.is_symlink() for p in build.rglob('*')):
@@ -155,6 +168,7 @@ def merge_materials(build: Path, final: Path):
         if destination.exists() and _pdf_hash(destination) != digest:
             stem = destination.stem.encode('utf-8')[:120].decode('utf-8', errors='ignore')
             destination = destination.with_name(f'{stem}--{digest}.pdf')
+        _reject_publication_symlinks(destination)
         if destination.exists() and _pdf_hash(destination) != digest:
             raise ValueError('versioned_pdf_collision')
         if not destination.resolve().is_relative_to(final.resolve()):
@@ -183,9 +197,26 @@ def merge_materials(build: Path, final: Path):
                     _, destination, digest = plan
                 else:
                     destination = final / rel
+                    _reject_publication_symlinks(destination)
                     if not destination.resolve().is_relative_to(final.resolve()):
                         raise ValueError('manifest_path_escape')
                     digest = _pdf_hash(destination)
+                    expected = item.get('sha256')
+                    if expected and digest != expected:
+                        # Cleanup may already have removed staging after a
+                        # collision published the full-SHA version. Require its
+                        # durable manifest identity, not merely a guessed name.
+                        candidates = [i for i in prior.get('items', [])
+                                      if i.get('sha256') == expected
+                                      and i.get('file_name') == item.get('file_name')]
+                        for candidate in candidates:
+                            path = final / candidate['relative_path']
+                            _reject_publication_symlinks(path)
+                            if not path.resolve().is_relative_to(final.resolve()):
+                                raise ValueError('manifest_path_escape')
+                            if _pdf_hash(path) == expected:
+                                destination, digest = path, expected
+                                break
                 if item.get('sha256') and item['sha256'] != digest:
                     raise ValueError('manifest_pdf_hash_mismatch')
                 item['sha256'] = digest
@@ -213,7 +244,9 @@ def merge_materials(build: Path, final: Path):
             continue
         data = metadata[source] if source in metadata else source.read_bytes()
         _atomic_metadata(final / source.relative_to(build), data)
-    for source in files:
+    # Keep the root runtime recovery marker until every staged PDF name has
+    # gone. An unlink failure must never expose a hardlinked inode to download.
+    for source in sorted(files, key=lambda p: (p.name == 'manifest.json', p == build / 'manifest.json')):
         source.unlink()
     for directory in sorted((p for p in build.rglob('*') if p.is_dir()), key=lambda p: len(p.parts), reverse=True):
         directory.rmdir()

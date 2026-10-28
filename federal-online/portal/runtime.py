@@ -343,7 +343,7 @@ def materials(args: argparse.Namespace, *, discover_options: Callable[[], list[d
                         continue
                     # Retry an interrupted durable generation before downloads can
                     # mutate staging inodes already linked into the final tree.
-                    if (build / 'manifest.json').exists():
+                    if build.exists() or build.is_symlink():
                         try:
                             with (paths.state_root/'locks/materials-publication.lock').open('a+') as publication:
                                 fcntl.flock(publication, fcntl.LOCK_EX)

@@ -30,7 +30,19 @@ PYTHONPATH=federal-online services/anki-mcp-v2/.venv/bin/python -m pytest federa
 
 Owned-path `git diff --check` passed. One intermediate full run exposed an unrelated concurrent `invalid_identity` source-observation failure; a later full run passed after the other agent's changes. Tests use explicitly synthetic, small PDF-framed bytes and callback/fault injection; they are filesystem/publication evidence, not academic PDF quality, real OneDrive verification, or structural PDF validation. No real PDFs were opened/copied, no mass copy/upload, no VPS operation and no deployment occurred.
 
-## Risks / separate gates
+## Follow-up: interrupted cleanup and symlink roots
+
+Independent review reproduced three defects in `3ecd6cf`: lexicographic cleanup could remove the root manifest before a nested hardlinked PDF; retry after removal of a colliding staged PDF hashed the old alias instead of the published version; and a staging root/ancestor symlink bypassed descendant-only checks and let cleanup unlink originals.
+
+The fix retains all staged manifests until non-manifest files are removed (root manifest last). Missing staged collision bytes are recovered only through a prior published manifest observation with the expected SHA and academic filename, followed by actual byte hashing; mismatch still fails closed. Runtime now recovers **any existing build**, including legacy markerless hardlink remnants, before download; failed recovery prevents that downloader from running. Markerless recovery validates/publishes remaining PDF bytes but cannot reconstruct academic provenance that is no longer present. It does not invent a manifest observation.
+
+Publication rejects symlinks in staging/final roots and their lexical ancestors before publication writes or cleanup, as well as descendant staging links, touched destination paths, generated version names and recovery candidates. Checks do not resolve away the symlink before inspecting it. Originals' bytes/inode/mtime and staged evidence are asserted in synthetic rejection tests. This is not a race-resistant sandbox: trusted, owned staging and exclusion of concurrent path/symlink replacement remain prerequisites; low-level callers still serialize writers. Ancestor aliases such as macOS `/var` must be passed via their canonical non-symlink paths. These checks cover the publication boundary, not every earlier runtime registry/checkpoint write or arbitrary external downloader.
+
+RED→GREEN was observed for both cleanup interruption states, legacy markerless hardlink reaching the downloader, root/ancestor symlinks on both trees, and an internal generated-version symlink. No deploy, VPS, ASR, push, OneDrive operation or real PDF access was performed. The change to runtime is limited to its pre-download publication-recovery predicate. Unrelated Anki work is excluded.
+
+Follow-up verification (with `TMPDIR=/Users/gatsby/.hermes/cache/scratch` and `PYTHONPATH=$PWD/federal-online`, using `services/anki-mcp-v2/.venv/bin/python`): publication regressions **21 passed in 0.07s**; full `federal-online/tests` suite **396 passed in 4.95s**. Owned-path `git diff --check` passed. Initial RED outputs showed the lost root marker, perpetual `manifest_pdf_hash_mismatch`, the markerless hardlink reaching `process`, and root/ancestor/generated symlinks not being rejected; final tests use only synthetic bytes.
+
+### Remaining gates
 
 - This prevents future producer overwrites; it cannot recover bytes lost before this change or make an existing mismatched historical observation verified. Historical cached text/identity is not reassigned to the currently available PDF.
 - Filesystem links/permissions do not protect against an unrelated owner/root writer mutating published inodes. Owned staging and serialized producers are prerequisites. Runtime retries pending publication before downloading; direct legacy callers must obey the same contract.
