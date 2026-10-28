@@ -1,5 +1,7 @@
 # Study Hub — missão autônoma de validação, 28/10/2026
 
+Aviso de supersessão: a entrega consistente de texto da política PDF v4 registrada abaixo **não atesta preservação acadêmica**. Revisão independente posterior demonstrou exclusão excessiva e redação parcial; correção v5 `97983a5` bloqueia campos ambíguos sem eliminar linhas acadêmicas. Migração v5 e sua validação estão em andamento; não homologar v4.
+
 ## Andamento e autoridade
 
 Em execução. A autorização desta missão cobre um piloto completo (`fo_21fd4985e207c5df`) e até 18 janelas reais de cinco minutos, com comparações adicionais nas janelas informativas. Não cobre fila integral, boot ou worker permanente. Documentos de 21/10 e 27/10 são históricos; a autorização explícita de 28/10 prevalece apenas neste escopo.
@@ -55,3 +57,13 @@ Próxima ação: acompanhar primeiro checkpoint real sem concorrência de modelo
 - Comparação OCR real em duas páginas, oito reconhecimentos/duas orientações, commit `b72b606`: nenhum benefício semântico demonstrado para troca global; nenhuma promoção, deploy ou mudança do extrator. Gold humano continua uma dependência real.
 - Catálogo/status corrigidos no commit `4c55df5`, mas deploy aguarda revisão independente; confirmar retry sem falsos desaparecimentos antes de executar coleta real. Suíte integrada FO+MCP: **380 passed in 2.37s** no estado integrado. Mudanças Anki preexistentes continuam fora dos commits.
 - Interface ChatGPT indisponível nesta sessão: headless bot-blocked e app nativo sem janela AX utilizável; teste de servidor não foi apresentado como teste do plugin instalado.
+
+## Correção após revisão independente — política PDF v5
+
+Reproduzidos **17 contraexemplos sintéticos (17 falhas antes)**: aliases/nome com cientista e fórmula, marcador literal global, nome multilinha parcialmente exposto, CPF ambíguo consumindo operadores e dois-pontos Unicode. Política 5 para de apagar campos nominais por regex; bloqueia inclusive marcador nominal legado, preserva números/operadores ambíguos e reconhece delimitador Unicode. Três testes antigos que exigiam liberação foram atualizados para o contrato mais restritivo; não se alegou que contexto textual prova identidade. **56 testes PDF/privacidade/OCR/ingestão passaram**. Suíte integrada durante trabalho concorrente: **400 passed, duas falhas** em comparações de benchmark cujo teste novo precedeu a assinatura de implementação; não foram falhas PDF nem se declarou suíte geral verde nesse instante.
+
+Varredura v5 read-only das 143.265 páginas identificou **227 páginas adicionais** antes liberadas, todas com campo nominal e marcador legado. Não há prova de que todas perderam texto acadêmico; há prova de que o texto salvo não certifica redação completa/sem perda. Extratos afetados foram preservados privadamente em gzip (344.896 bytes, hash registrado no recibo privado), sem Git/OneDrive, antes de quarentena. Os 227 registros foram lidos de volta como bloqueados. Originais PDF intactos; conteúdo possivelmente removido por versões antigas requer reextração/validação, não reconstrução por IA.
+
+Commit `97983a5` implantado: cinco arquivos verificados por SHA-256 e recibo lido de volta. Primeira unidade de migração v5 atingiu limite de 1GiB porque o script de auditoria retinha um snapshot integral do acervo em memória; quarentena e arquivo privado já estavam persistidos. Falha **oom-kill** registrada, sem imputar êxito. Retomada `study-hub-fo-privacy-v5-20261028-r2` usa apenas o migrador de produção em lotes de 250, CPU50%/1GiB/20min e lock do índice; snapshot posterior mostrou cerca de 110MB de pico e execução em andamento. API FO reiniciada com política 5; versões antigas permanecem fail-closed durante a migração. Não houve restart do piloto.
+
+Runner de janelas **ainda não foi usado em áudio real**. Revisão encontrou timeout que pode deixar descendente fora do lock, QA absoluto inventando lacuna antes da janela, cache sem validar raw/log externos e comparações sem seleção informativa prévia. Correções com regressões estão em frente independente; não operar o runner anterior.
