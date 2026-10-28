@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import sqlite3
 import subprocess
 import tempfile
@@ -62,7 +63,82 @@ def _source(cfg,plan):
     return source
 
 
-def run_window(cfg,plan,*,runner=subprocess.run,gate_fn=None,free_bytes=None):
+def run_process_group(args,*,check=True,capture_output=True,text=True,timeout=None):
+    """Own the complete command group, including descendants of /usr/bin/time.
+
+    Do not return (and therefore do not release the caller's lock) until the
+    leader is reaped and no executing group member remains. Zombies cannot run;
+    only their parent/init can reap them. Commands must not detach sessions.
+    """
+    process=subprocess.Popen(args,start_new_session=True,stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE,text=text)
+    def send(sig):
+        try:os.killpg(process.pid,sig)
+        except ProcessLookupError:pass
+    try:
+        stdout,stderr=process.communicate(timeout=timeout)
+        result=subprocess.CompletedProcess(args,process.returncode,stdout,stderr)
+        if check:result.check_returncode()
+        return result
+    finally:
+        send(signal.SIGTERM)
+        # Give cooperative wrappers an opportunity to reap their children.
+        time.sleep(.1)
+        send(signal.SIGKILL)
+        process.communicate()
+        process.wait()
+        while True:
+            try:
+                listing=subprocess.run(['ps','-axo','pgid=,stat='],check=True,capture_output=True,text=True).stdout
+            except (OSError,subprocess.SubprocessError):
+                # Fail closed: retain the caller's lock until termination can
+                # be observed, rather than unlocking on a monitoring failure.
+                send(signal.SIGKILL)
+                time.sleep(.1)
+                continue
+            live=any(int(parts[0])==process.pid and not parts[1].startswith('Z')
+                     for row in listing.splitlines() if len(parts:=row.split())>=2)
+            if not live:break
+            send(signal.SIGKILL)
+            time.sleep(.02)
+
+
+def _verify_evidence(artifact,root):
+    for field in ('raw_path','resource_log'):
+        try:
+            path=Path(artifact[field])
+            if path.is_symlink() or not path.is_file() or path.parent.resolve()!=root.resolve() or file_sha256(path)!=artifact[field+'_sha256']:
+                raise ValueError('cached evidence integrity failed')
+        except (KeyError,OSError) as exc:
+            raise ValueError('cached evidence integrity failed') from exc
+
+
+def _comparison_gate(root,plan,selection):
+    try:
+        if not isinstance(selection,dict) or selection.get('informative') is not True:
+            raise ValueError('informative comparison selection required')
+        configs=selection['configs']
+        if not isinstance(configs,list) or not configs or len(configs)!=len(set(configs)) or not set(configs)<=set(_CONFIGS)-{'baseline'} or plan['config_id'] not in configs:
+            raise ValueError('bounded comparison selection required')
+        if not all(isinstance(selection.get(k),str) and selection[k].strip() for k in ('rationale','operator')) or selection.get('acoustic_reviewed') is not False:
+            raise ValueError('exploratory comparison selection required; no acoustic certification')
+        path=Path(selection['baseline_artifact']);lesson_root=root/plan['lesson_id']
+        if path.is_symlink() or not path.is_file() or path.parent.resolve()!=lesson_root.resolve() or file_sha256(path)!=selection['baseline_sha256']:
+            raise ValueError('baseline integrity failed')
+        artifact=json.loads(path.read_text())
+        baseline=window_plan(plan['lesson_id'],plan['window_index'],'baseline')
+        if artifact['plan']!=baseline or artifact['source_unchanged_after_run'] is not True:
+            raise ValueError('baseline window mismatch')
+        receipt=json.loads((lesson_root/(artifact['fingerprint']+'.receipt.json')).read_text())
+        if receipt['artifact']!=str(path) or receipt['sha256']!=file_sha256(path):
+            raise ValueError('baseline receipt mismatch')
+        _verify_evidence(artifact,lesson_root)
+        return artifact
+    except (KeyError,TypeError,OSError) as exc:
+        raise ValueError('baseline and comparison selection required') from exc
+
+
+def run_window(cfg,plan,*,runner=run_process_group,gate_fn=None,free_bytes=None,comparison_selection=None):
     gate_fn=gate_fn or (lambda:gate(cfg))
     if not gate_fn()['allowed']:return {'state':'blocked'}
     if plan!=window_plan(plan['lesson_id'],plan['window_index'],plan['config_id']):
@@ -76,6 +152,9 @@ def run_window(cfg,plan,*,runner=subprocess.run,gate_fn=None,free_bytes=None):
         except BlockingIOError:return {'state':'busy'}
         if not gate_fn()['allowed']:return {'state':'blocked'}
         root=cfg.state/'validation-2026-10-28/windows';root.mkdir(mode=0o700,parents=True,exist_ok=True)
+        baseline_artifact=None
+        if plan['config_id']!='baseline':
+            baseline_artifact=_comparison_gate(root,plan,comparison_selection)
         budget_path=root/'budget.json'
         budget=json.loads(budget_path.read_text()) if budget_path.exists() else {'windows':[],'limit':18}
         key=f"{plan['lesson_id']}:{plan['window_index']}"
@@ -122,6 +201,10 @@ def run_window(cfg,plan,*,runner=subprocess.run,gate_fn=None,free_bytes=None):
         provenance={'model_sha256':identity(cfg.model),'runtime_sha256':identity(cfg.binary),
                     'runtime_libraries':{p.name:identity(p) for p in sorted(cfg.binary.parent.glob('*.so*')) if p.is_file()},'plan':plan,
                     'audio_sha256':audio_entry['sha256'],'source_sha256':manifest['source_sha256']}
+        if baseline_artifact is not None:
+            if any(baseline_artifact[k]!=v for k,v in provenance.items() if k!='plan'):
+                raise ValueError('baseline provenance mismatch')
+            atomic_json(lesson_root/f"selection-{uuid.uuid4().hex}.json",comparison_selection)
         fingerprint=hashlib.sha256(json.dumps(provenance,sort_keys=True).encode()).hexdigest()
         receipt_path=lesson_root/f'{fingerprint}.receipt.json'
         if receipt_path.exists():
@@ -130,6 +213,7 @@ def run_window(cfg,plan,*,runner=subprocess.run,gate_fn=None,free_bytes=None):
             if old.is_symlink() or old.parent.resolve()!=lesson_root.resolve() or file_sha256(old)!=receipt['sha256']:
                 raise ValueError('cached comparison artifact integrity failed')
             artifact=json.loads(old.read_text())
+            _verify_evidence(artifact,lesson_root)
             if artifact['fingerprint']!=fingerprint or not artifact['source_unchanged_after_run']:
                 raise ValueError('cached comparison provenance failed')
             return {'state':'measured','artifact':str(old),'audio_sha256':audio_entry['sha256'],
@@ -157,8 +241,10 @@ def run_window(cfg,plan,*,runner=subprocess.run,gate_fn=None,free_bytes=None):
         raw=json.loads(raw_path.read_text());segments=parse_whisper(raw,plan['start_s'])
         unchanged=_source(cfg,plan)==source
         artifact={**provenance,'source_revision':source['revision'],'raw':raw,'segments':segments,
-                  'qa':qa_segments(segments,plan['start_s']+300),'wall_s':wall,'rtf':wall/300,
+                  'qa':qa_segments([{**s,'start':s['start']-plan['start_s'],'end':s['end']-plan['start_s']} for s in segments],300),'wall_s':wall,'rtf':wall/300,
                   'stdout':result.stdout,'stderr':result.stderr,'command':[str(x) for x in args],
+                  'raw_path':str(raw_path),'raw_path_sha256':file_sha256(raw_path),
+                  'resource_log_sha256':file_sha256(resource_path),
                   'resource_log':str(resource_path),'audio_path':str(audio),'fingerprint':fingerprint,
                   'synthetic':None,'human_gold':None,'acoustic_reviewed':False,'published':False,
                   'inference_invoked':True,'source_unchanged_after_run':unchanged,'created_at':time.time()}
@@ -173,6 +259,7 @@ def main(argv=None):
     parser.add_argument('--lesson-id',required=True)
     parser.add_argument('--window',required=True,type=int,choices=range(3))
     parser.add_argument('--config',required=True,choices=tuple(_CONFIGS))
+    parser.add_argument('--comparison-selection',type=Path,help='Private bounded exploratory selection JSON bound to a baseline artifact')
     args=parser.parse_args(argv)
     cfg=Config.from_env()
     # Refuse uncapped/non-VPS CLI execution, even if someone copies the gate.
@@ -187,7 +274,8 @@ def main(argv=None):
         tasks=int((cgroup/'pids.max').read_text().strip())
     except (OSError,ValueError):parser.error('finite CPU/memory/tasks limits required')
     if memory>12*1024**3 or quota/period>3 or tasks>128:parser.error('resource limits exceed pilot bounds')
-    result=run_window(cfg,window_plan(args.lesson_id,args.window,args.config))
+    result=run_window(cfg,window_plan(args.lesson_id,args.window,args.config),
+                      comparison_selection=json.loads(args.comparison_selection.read_text()) if args.comparison_selection else None)
     print(json.dumps(result),flush=True)
     return 0 if result['state']=='measured' else 3
 
