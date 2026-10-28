@@ -28,6 +28,7 @@ import uuid
 import zlib
 
 from .store import FOStore, ACCEPTED_CORPUS
+from .scheduler import choose, discipline, discipline_key
 from .transcription import AUTH_PHRASE, DEFAULT_AUTH_FILE, DEFAULT_PLATFORM_MARKER, TranscriptionQueue, qa_segments
 
 RESERVE=4*1024**3
@@ -72,6 +73,7 @@ class Config:
     beam_size:int=5
     temperature_fallback:bool=False
     review_only:bool=False
+    max_context:int=-1
 
     @classmethod
     def from_env(cls):
@@ -82,6 +84,7 @@ class Config:
                    Path(os.environ.get('STUDY_HUB_FO_TRANSCRIPTION_AUTH',DEFAULT_AUTH_FILE)),
                    Path(os.environ.get('STUDY_HUB_FO_PLATFORM_MARKER',DEFAULT_PLATFORM_MARKER)))
         config.model_sha256=MODEL_SHA256
+        config.max_context=int(os.environ.get('FO_ASR_MAX_CONTEXT','-1'))
         config.threads=int(os.environ.get('FO_ASR_THREADS','3'))
         config.beam_size=int(os.environ.get('FO_ASR_BEAM_SIZE','5'))
         config.temperature_fallback=os.environ.get('FO_ASR_TEMPERATURE_FALLBACK','false').lower()=='true'
@@ -92,7 +95,7 @@ class Config:
         return {'language':'pt','threads':self.threads,'beam_size':self.beam_size,
                 'temperature':0,'temperature_fallback':self.temperature_fallback,
                 'temperature_increment':0.2 if self.temperature_fallback else 0,
-                'best_of':5,'no_speech_threshold':0.6,'max_context':-1,
+                'best_of':5,'no_speech_threshold':0.6,'max_context':self.max_context,
                 'entropy_threshold':2.4,'logprob_threshold':-1.0,'vad':False,
                 'chunk_s':self.chunk_s,'overlap_s':self.overlap_s,'stitching_version':1,'checkpoint_version':1}
 
@@ -264,6 +267,9 @@ class Worker:
         if 'retry_at' not in {x[1] for x in self.c.execute('PRAGMA table_info(transcription_jobs)')}:
             self.c.execute('ALTER TABLE transcription_jobs ADD COLUMN retry_at REAL DEFAULT 0')
         self.c.execute('CREATE TABLE IF NOT EXISTS focused_reviews(lesson_id TEXT,version INTEGER,start REAL,end REAL,reason TEXT,state TEXT,PRIMARY KEY(lesson_id,version,start,end,reason))')
+        self.c.execute('CREATE TABLE IF NOT EXISTS transcription_rr_cursor(id INTEGER PRIMARY KEY CHECK(id=1),last_discipline TEXT,cycle INTEGER,updated_at REAL)')
+        self.c.execute('INSERT OR IGNORE INTO transcription_rr_cursor VALUES(1,NULL,0,0)')
+        self.c.execute('CREATE TABLE IF NOT EXISTS transcription_breaker(fingerprint TEXT PRIMARY KEY,consecutive_failures INTEGER,consecutive_reviews INTEGER,opened_at REAL,reason TEXT)')
         self.c.commit()
 
     def recover(self):
@@ -283,9 +289,14 @@ class Worker:
         try:
             self.c.execute("UPDATE transcription_jobs SET state='superseded' WHERE state='queued' AND EXISTS(SELECT 1 FROM lessons l WHERE l.lesson_id=transcription_jobs.lesson_id AND l.version!=transcription_jobs.version)")
             self.c.execute("UPDATE transcription_jobs SET state='done',progress=1 WHERE state='queued' AND EXISTS(SELECT 1 FROM transcripts t WHERE t.lesson_id=transcription_jobs.lesson_id AND t.version=transcription_jobs.version AND t.corpus=?)",(ACCEPTED_CORPUS,))
-            row=self.c.execute("SELECT j.* FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version JOIN lesson_video_sources s ON s.lesson_id=j.lesson_id WHERE j.state='queued' AND COALESCE(j.retry_at,0)<=? AND j.attempts<j.max_attempts AND l.present=1 AND s.available=1 AND CAST(j.version AS TEXT)=s.revision AND s.remote_path IS NOT NULL AND (? IS NULL OR j.lesson_id=?) ORDER BY j.created_at,j.lesson_id LIMIT 1",(now,lesson_id,lesson_id)).fetchone()
+            rows=self.c.execute("SELECT j.*,l.subject,l.front,l.module,l.title,s.remote_path,s.size FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version JOIN lesson_video_sources s ON s.lesson_id=j.lesson_id WHERE j.state='queued' AND COALESCE(j.retry_at,0)<=? AND j.attempts<j.max_attempts AND l.present=1 AND s.available=1 AND CAST(j.version AS TEXT)=s.revision AND s.remote_path IS NOT NULL AND (? IS NULL OR j.lesson_id=?) AND NOT EXISTS(SELECT 1 FROM transcription_jobs busy JOIN lesson_video_sources bs ON bs.lesson_id=busy.lesson_id WHERE busy.state='leased' AND bs.remote_path=s.remote_path)",(now,lesson_id,lesson_id)).fetchall()
+            cursor=self.c.execute('SELECT * FROM transcription_rr_cursor WHERE id=1').fetchone()
+            row=choose([dict(r) for r in rows],cursor['last_discipline'])
             if row is None:self.c.commit();return None
             self.c.execute("UPDATE transcription_jobs SET state='leased',attempts=attempts+1,lease_owner=?,lease_until=?,updated_at=? WHERE lesson_id=? AND version=?",(self.owner,now+7*86400,str(now),row['lesson_id'],row['version']))
+            name=discipline(row)
+            wrapped=cursor['last_discipline'] is not None and discipline_key(name)<=discipline_key(cursor['last_discipline'])
+            self.c.execute('UPDATE transcription_rr_cursor SET last_discipline=?,cycle=cycle+?,updated_at=? WHERE id=1',(name,int(wrapped),now))
             self.c.commit();return dict(row)
         except BaseException:self.c.rollback();raise
 
@@ -354,7 +365,7 @@ class Worker:
                 if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
                 self.command(['ffmpeg','-nostdin','-y','-threads','1','-ss',str(offset),'-i',video,'-t',str(length),'-ar','16000','-ac','1','-c:a','pcm_s16le','-threads','1',audio])
                 silence=self.command(['ffmpeg','-nostdin','-threads','1','-i',audio,'-af','silencedetect=noise=-40dB:d=1','-f','null','-'])
-                command=[cfg.binary,'-m',cfg.model,'-f',audio,'-l','pt','-t',str(cfg.threads),'-bs',str(cfg.beam_size),'-bo','5','-mc','-1','-tp','0','-tpi','0.2' if cfg.temperature_fallback else '0','-nth','0.6','-et','2.4','-lpt','-1','-ng','-ojf','-of',prefix]
+                command=[cfg.binary,'-m',cfg.model,'-f',audio,'-l','pt','-t',str(cfg.threads),'-bs',str(cfg.beam_size),'-bo','5','-mc',str(cfg.max_context),'-tp','0','-tpi','0.2' if cfg.temperature_fallback else '0','-nth','0.6','-et','2.4','-lpt','-1','-ng','-ojf','-of',prefix]
                 if not cfg.temperature_fallback:command.append('-nf')
                 decode_started=time.monotonic()
                 decoded=None;failure=None;raw_text=None
@@ -448,9 +459,37 @@ class Worker:
                     self.c.execute("INSERT OR IGNORE INTO focused_reviews VALUES(?,?,?,?,?,'pending_manual_review')",(job['lesson_id'],job['version'],start,end,flag['kind']))
         return status
 
+    def complete_aliases(self,job,status):
+        # Compare against the leased identity, not a newly discovered object.
+        _,source=self.current_source(job)
+        if source['remote_path']!=job['remote_path'] or source['size']!=job['size']:raise SourceChanged('source changed before alias completion')
+        aliases=self.c.execute("SELECT j.lesson_id,j.version FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version JOIN lesson_video_sources s ON s.lesson_id=j.lesson_id WHERE j.state='queued' AND l.present=1 AND s.available=1 AND s.revision=CAST(j.version AS TEXT) AND s.remote_path=? AND s.size=?",(job['remote_path'],job['size'])).fetchall()
+        transcript=self.c.execute('SELECT * FROM transcripts WHERE lesson_id=? AND version=?',(job['lesson_id'],job['version'])).fetchone()
+        segments=[dict(r) for r in self.c.execute('SELECT start,end,text FROM transcript_segments WHERE lesson_id=? AND version=? ORDER BY idx',(job['lesson_id'],job['version']))]
+        for alias in aliases:
+            if status=='validated':
+                if not transcript:continue
+                self.store.add_transcript(alias['lesson_id'],alias['version'],segments,transcript['model'],ACCEPTED_CORPUS,True,json.loads(transcript['qa_json']))
+            else:
+                with self.c:self.c.execute('INSERT OR IGNORE INTO focused_reviews SELECT ?,?,start,end,reason,state FROM focused_reviews WHERE lesson_id=? AND version=?',(alias['lesson_id'],alias['version'],job['lesson_id'],job['version']))
+            with self.c:self.c.execute("UPDATE transcription_jobs SET state=?,progress=1,lease_owner=NULL,lease_until=NULL,updated_at=? WHERE lesson_id=? AND version=? AND state='queued'",('done' if status=='validated' else 'review',str(time.time()),alias['lesson_id'],alias['version']))
+
+    def fingerprint(self):
+        return hashlib.sha256(json.dumps({'parameters':self.cfg.parameters(),'model_sha256':identity(self.cfg.model)},sort_keys=True).encode()).hexdigest()
+
+    def record_outcome(self,fingerprint,outcome):
+        row=self.c.execute('SELECT * FROM transcription_breaker WHERE fingerprint=?',(fingerprint,)).fetchone()
+        failures=(row['consecutive_failures'] if row else 0)+1 if outcome=='failure' else 0
+        reviews=(row['consecutive_reviews'] if row else 0)+1 if outcome=='review' else 0
+        reason='consecutive_failures' if failures>=max(1,int(os.environ.get('FO_ASR_BREAKER_FAILURES','3'))) else ('consecutive_reviews' if reviews>=max(1,int(os.environ.get('FO_ASR_BREAKER_REVIEWS','5'))) else None)
+        with self.c:self.c.execute('INSERT OR REPLACE INTO transcription_breaker VALUES(?,?,?,?,?)',(fingerprint,failures,reviews,time.time() if reason else None,reason))
+
     def run_once(self,lesson_id=None):
         g=self.gate_fn()
         if not g['allowed']:return {'state':'blocked','gate':g}
+        fingerprint=self.fingerprint()
+        breaker=self.c.execute('SELECT * FROM transcription_breaker WHERE fingerprint=?',(fingerprint,)).fetchone()
+        if breaker and breaker['opened_at'] is not None:return {'state':'breaker_open',**dict(breaker)}
         largest=self.c.execute('SELECT COALESCE(MAX(size),0) FROM lesson_video_sources WHERE available=1').fetchone()[0]
         if self.free_bytes()<RESERVE+largest+100*1024**2:
             return {'state':'paused_storage','reserve_bytes':RESERVE,'largest_source_bytes':largest}
@@ -462,38 +501,76 @@ class Worker:
                 (Path(folder)/'.worker-owned').write_text('study-hub-fo-worker')
                 status=self.pipeline(job,Path(folder))
             with self.c:self.c.execute("UPDATE transcription_jobs SET state=?,progress=1,lease_owner=NULL,lease_until=NULL,updated_at=? WHERE lesson_id=? AND version=? AND lease_owner=?",('done' if status=='validated' else 'review',str(time.time()),job['lesson_id'],job['version'],self.owner))
-            return {'state':status,'lesson_id':job['lesson_id'],'version':job['version']}
         except Exception as exc:
-            diagnostic_error=getattr(exc,'fo_evidence_error',None)
-            if isinstance(exc,(subprocess.CalledProcessError,subprocess.TimeoutExpired)):
-                # Full diagnostics may contain academic text or private paths.
-                # Preserve outside the publication allowlist, never in DB/logs.
-                def text(value):
-                    return value.decode('utf-8',errors='replace') if isinstance(value,bytes) else value
-                try:
-                    atomic_json(self.cfg.state/'transcripts/errors'/job['lesson_id']/
-                                f"v{job['version']}-{uuid.uuid4().hex}.json.gz",
-                                {'lesson_id':job['lesson_id'],'version':job['version'],
-                                 'error_type':type(exc).__name__,'created_at':time.time(),
-                                 'command':[str(x) for x in exc.cmd],
-                                 'returncode':getattr(exc,'returncode',None),
-                                 'stdout':text(exc.stdout),'stderr':text(exc.stderr)})
-                except Exception as diagnostic_exc:
-                    diagnostic_error=type(diagnostic_exc).__name__
-            current=self.c.execute('SELECT attempts,max_attempts FROM transcription_jobs WHERE lesson_id=? AND version=?',(job['lesson_id'],job['version'])).fetchone()
-            state='superseded' if isinstance(exc,SourceChanged) else ('failed' if current['attempts']>=current['max_attempts'] else 'queued')
-            with self.c:self.c.execute('UPDATE transcription_jobs SET state=?,retry_at=?,last_error=?,lease_owner=NULL,lease_until=NULL WHERE lesson_id=? AND version=?',(state,time.time()+min(86400,60*2**current['attempts']),type(exc).__name__,job['lesson_id'],job['version']))
-            result={'state':'retry' if state=='queued' else state,'error_type':type(exc).__name__,'lesson_id':job['lesson_id']}
-            if diagnostic_error:result['diagnostic_error_type']=diagnostic_error
-            return result
+            return self._failed(job,fingerprint,exc)
+        self.record_outcome(fingerprint,status)
+        result={'state':status,'lesson_id':job['lesson_id'],'version':job['version']}
+        try:
+            self.complete_aliases(job,status)
+        except Exception as exc:
+            # The leased job succeeded; queued aliases stay queued and later reuse
+            # the byte-identity evidence cache without a new decode.
+            result['alias_error_type']=type(exc).__name__
+        return result
+
+    def _failed(self,job,fingerprint,exc):
+        # Gate, storage and source-identity events are infrastructure, not ASR failures.
+        infrastructure=isinstance(exc,SourceChanged) or str(exc) in {'authorization revoked','storage reserve reached','storage budget or source size invalid'}
+        if not infrastructure:self.record_outcome(fingerprint,'failure')
+        diagnostic_error=getattr(exc,'fo_evidence_error',None)
+        if isinstance(exc,(subprocess.CalledProcessError,subprocess.TimeoutExpired)):
+            # Full diagnostics may contain academic text or private paths.
+            # Preserve outside the publication allowlist, never in DB/logs.
+            def text(value):
+                return value.decode('utf-8',errors='replace') if isinstance(value,bytes) else value
+            try:
+                atomic_json(self.cfg.state/'transcripts/errors'/job['lesson_id']/
+                            f"v{job['version']}-{uuid.uuid4().hex}.json.gz",
+                            {'lesson_id':job['lesson_id'],'version':job['version'],
+                             'error_type':type(exc).__name__,'created_at':time.time(),
+                             'command':[str(x) for x in exc.cmd],
+                             'returncode':getattr(exc,'returncode',None),
+                             'stdout':text(exc.stdout),'stderr':text(exc.stderr)})
+            except Exception as diagnostic_exc:
+                diagnostic_error=type(diagnostic_exc).__name__
+        current=self.c.execute('SELECT attempts,max_attempts FROM transcription_jobs WHERE lesson_id=? AND version=?',(job['lesson_id'],job['version'])).fetchone()
+        state='superseded' if isinstance(exc,SourceChanged) else ('failed' if current['attempts']>=current['max_attempts'] else 'queued')
+        with self.c:self.c.execute('UPDATE transcription_jobs SET state=?,retry_at=?,last_error=?,lease_owner=NULL,lease_until=NULL WHERE lesson_id=? AND version=?',(state,time.time()+min(86400,60*2**current['attempts']),type(exc).__name__,job['lesson_id'],job['version']))
+        result={'state':'retry' if state=='queued' else state,'error_type':type(exc).__name__,'lesson_id':job['lesson_id']}
+        if diagnostic_error:result['diagnostic_error_type']=diagnostic_error
+        return result
+
+
+def worker_status(cfg):
+    with closing(FOStore(cfg.db,readonly=True).conn) as c:
+        tables={r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        counts={r[0]:r[1] for r in c.execute('SELECT state,count(*) FROM transcription_jobs GROUP BY state')}
+        leased=[{**dict(r),'discipline':discipline(dict(r))} for r in c.execute("SELECT j.lesson_id,j.version,l.subject,l.front,l.module FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id WHERE j.state='leased' ORDER BY j.lesson_id")]
+        cursor=c.execute('SELECT last_discipline FROM transcription_rr_cursor WHERE id=1').fetchone() if 'transcription_rr_cursor' in tables else None
+        rows=[]
+        if 'lesson_video_sources' in tables:
+            retry='COALESCE(j.retry_at,0)' if 'retry_at' in {r[1] for r in c.execute('PRAGMA table_info(transcription_jobs)')} else '0'
+            rows=[dict(r) for r in c.execute(f"SELECT j.lesson_id,l.subject,l.front,l.module,l.title FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version JOIN lesson_video_sources s ON s.lesson_id=j.lesson_id WHERE j.state='queued' AND {retry}<=? AND j.attempts<j.max_attempts AND l.present=1 AND s.available=1 AND s.revision=CAST(j.version AS TEXT) AND s.remote_path IS NOT NULL AND NOT EXISTS(SELECT 1 FROM transcription_jobs busy JOIN lesson_video_sources bs ON bs.lesson_id=busy.lesson_id WHERE busy.state='leased' AND bs.remote_path=s.remote_path)",(time.time(),))]
+        next_job=choose(rows,cursor[0] if cursor else None)
+        breakers=[dict(r) for r in c.execute('SELECT * FROM transcription_breaker ORDER BY fingerprint')] if 'transcription_breaker' in tables else []
+    return {'leased':leased,'next_discipline':discipline(next_job) if next_job else None,'counts':counts,'breaker':breakers,'free_bytes':shutil.disk_usage(cfg.state).free}
 
 
 def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__);mode=p.add_mutually_exclusive_group(required=True)
     mode.add_argument('--check-only',action='store_true');mode.add_argument('--run',action='store_true')
+    mode.add_argument('--reset-breaker',action='store_true');mode.add_argument('--status',action='store_true')
     once=p.add_mutually_exclusive_group();once.add_argument('--once',action='store_true');once.add_argument('--loop',action='store_true')
     p.add_argument('--lesson-id',help='Restrict an authorized pilot to exactly this queued lesson')
-    a=p.parse_args(argv);cfg=Config.from_env();g=gate(cfg)
+    a=p.parse_args(argv);cfg=Config.from_env()
+    if a.status:
+        print(json.dumps(worker_status(cfg)));return 0
+    if a.reset_breaker:
+        with closing(FOStore(cfg.db).conn) as c:
+            if c.execute("SELECT 1 FROM sqlite_master WHERE name='transcription_breaker'").fetchone():
+                with c:c.execute('DELETE FROM transcription_breaker')
+        print(json.dumps({'state':'breaker_reset'}));return 0
+    g=gate(cfg)
     if a.lesson_id and a.loop:p.error('--lesson-id cannot be combined with --loop')
     if a.check_only:
         counts={}
@@ -513,6 +590,7 @@ def main(argv=None):
         worker=Worker(cfg);worker.recover()
         while True:
             result=worker.run_once(a.lesson_id);print(json.dumps(result),flush=True)
+            if result['state']=='breaker_open':return 5
             if result['state']=='blocked':return 3
             if not a.loop:return 0
             if result['state'] in ('idle','retry','failed','paused_storage'):time.sleep(60)
