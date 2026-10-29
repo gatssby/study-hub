@@ -155,12 +155,17 @@ def rows(db, table):
         return [dict(x) for x in c.execute('SELECT * FROM '+table)]
 
 
+def expected(action):
+    """Remote size/quickxor a receipt must match (equivalents point at different bytes)."""
+    return {'size':action.get('remote_size',action['size']),'quickxor':action.get('remote_quickxor',action['quickxor'])}
+
+
 def _pdf_sources(plan):
     """Planned originals with their manifest metadata, grouped by content identity."""
     from fo_hub.disciplines import discipline_for
     groups = {}
     for a in plan['actions']:
-        if a['action'] not in {'upload_missing_original', 'register_original'}: continue
+        if a['action'] not in {'upload_missing_original', 'register_original', 'register_equivalent'}: continue
         local = Path(a['local']); meta = {}
         for parent in local.parents:
             manifest = parent/'manifest.json'
@@ -176,7 +181,7 @@ def _pdf_sources(plan):
             subject=discipline_for(meta.get('output_subject') or front, front, meta.get('group')),
             front=front, module=meta.get('group'), title=Path(meta.get('file_name') or local.name).stem,
             relative_path=local.relative_to(Path(plan['state_root'])).as_posix(),
-            onedrive_path=a['remote'], quickxor=a['quickxor'], byte_sha256=a['sha256'], size=a['size']))
+            onedrive_path=a['remote'], quickxor=expected(a)['quickxor'], byte_sha256=a.get('remote_sha256',a['sha256']), size=expected(a)['size']))
     return groups
 
 
@@ -235,12 +240,31 @@ class Orchestrator:
                 result[full] = {'remote':full,'size':entry['Size'],'quickxor':q, 'id':entry.get('ID'), 'modtime':entry.get('ModTime')}
         return result
 
+    def remote_identity(self, remote, listing, cache, identity):
+        """Content identity of an existing remote object (bounded temp download, cached by size+quickxor)."""
+        key='remote:'+listing['size'].__str__()+':'+listing['quickxor']
+        if key in cache: return cache[key]
+        if shutil.disk_usage(self.state).free<2*listing['size']+2*1024**3: raise RuntimeError('disk reserve prevents remote identity')
+        temp=self.state/'tmp'/('rebuild-ident-'+self.generation); temp.mkdir(parents=True,exist_ok=True)
+        target=temp/'remote.pdf'
+        try:
+            self.remote.copyto_remote_to_local(remote,target)
+            got=file_identity(target)
+            if got['size']!=listing['size'] or got['quickxor']!=listing['quickxor']: raise RuntimeError('remote changed during identity: '+remote)
+            cache[key]={**identity(target),**got}
+        finally:
+            if target.exists(): guard_local(self.state,target).unlink()
+            temp.rmdir()
+        return cache[key]
+
     def valid_receipt(self, action, inventory):
         try: receipt = read_checked(self.receipt_path(action['key']))
         except (OSError,ValueError): return False
         current = inventory.get(receipt.get('remote'))
+        if 'size' not in receipt or 'quickxor' not in receipt: return False
         return bool(current and receipt.get('plan_checksum') == self.load_plan()['checksum'] and
-                    all(current.get(k)==receipt.get(k)==action.get(k) for k in ('size','quickxor')))
+                    receipt.get('remote')==action.get('remote') and receipt.get('key')==action.get('key') and
+                    all(current.get(k)==expected(receipt)[k]==expected(action)[k] for k in ('size','quickxor')))
 
     def load_plan(self): return read_checked(self.directory/'plan.json')
 
@@ -258,18 +282,26 @@ class Orchestrator:
         for path in sorted((self.state/'materials').rglob('*.pdf')):
             if any(part.startswith('.build_') for part in path.relative_to(self.state/'materials').parts): continue  # in-flight staging
             guard_local(self.state,path)
-            st=path.stat(); key=str(path)+':'+str(st.st_size)+':'+str(st.st_mtime_ns)
+            st=path.stat(); key=':'.join(map(str,(path,st.st_size,st.st_mtime_ns,st.st_ino,st.st_ctime_ns)))
             if key not in cache: cache[key]={**identity(path), **file_identity(path)}
             item=dict(cache[key],local=str(path),remote=ROOTS[1]+'/'+path.relative_to(self.state/'materials').as_posix())
             local.append(item)
             same=next((v for v in inventory.values() if v['remote'].startswith(ROOTS[1]+'/') and all(v[k]==item[k] for k in ('size','quickxor'))),None)
             if same: item['remote']=same['remote']
-            elif item['remote'] in inventory:
-                item['remote']=ROOTS[1]+'/_originals/'+item['sha256']+'.pdf'
-            action='register_original' if same else 'upload_missing_original'
+            equivalent=False
+            if not same and item['remote'] in inventory:
+                listing=inventory[item['remote']]
+                other=self.remote_identity(item['remote'],listing,cache,identity)
+                if other.get('content_sha256')==item['content_sha256'] and other.get('identity_version')==item.get('identity_version'):
+                    # Watermark-only re-download: the remote is a verified substitute.
+                    equivalent=True
+                    item.update(remote_size=listing['size'],remote_quickxor=listing['quickxor'],remote_sha256=other['sha256'])
+                else:
+                    item['remote']=ROOTS[1]+'/_originals/'+item['sha256']+'.pdf'
+            action='register_original' if same else 'register_equivalent' if equivalent else 'upload_missing_original'
             actions.append(dict(item,action=action,key=action+':'+str(path)))
             actions.append(dict(item,action='drop_local_copy',key='drop_local_copy:'+str(path)))
-            if not same: actions.append(dict(item,action='protect_unique',key='protect_unique:'+str(path)))
+            if not same and not equivalent: actions.append(dict(item,action='protect_unique',key='protect_unique:'+str(path)))
         write_checked(cache_path,{'entries':cache})
         groups={}
         for item in inventory.values():
@@ -308,11 +340,11 @@ class Orchestrator:
         if self.unit_check(): raise RuntimeError('FO units active')
         inventory=self.inventory(); transferred=0; done=0
         for action in plan['actions']:
-            if action['action'] not in {'upload_missing_original','register_original','register_video','drop_local_copy'}: continue
+            if action['action'] not in {'upload_missing_original','register_original','register_equivalent','register_video','drop_local_copy'}: continue
             if self.valid_receipt(action,inventory): continue
             if limit is not None and done>=limit: break
             current=inventory.get(action['remote'])
-            if not current or any(current[k]!=action[k] for k in ('size','quickxor')):
+            if not current or any(current[k]!=expected(action)[k] for k in ('size','quickxor')):
                 if action['action']!='upload_missing_original':
                     if action['action']=='drop_local_copy': continue
                     raise RuntimeError('remote changed: '+action['remote'])
@@ -321,12 +353,12 @@ class Orchestrator:
                 if any(file_identity(action['local'])[k]!=action[k] for k in ('size','quickxor','sha256')): raise RuntimeError('local changed')
                 self.remote.copyto(action['local'],action['remote']); transferred+=action['size']
                 inventory=self.inventory(); current=inventory.get(action['remote'])
-            if not current or any(current[k]!=action[k] for k in ('size','quickxor')): raise RuntimeError('upload verification failed')
+            if not current or any(current[k]!=expected(action)[k] for k in ('size','quickxor')): raise RuntimeError('upload verification failed')
             receipt=write_checked(self.receipt_path(action['key']),dict(action,plan_checksum=plan['checksum']))
             self.journal('stage',action['action'],action['key'],detail={'bytes':action['size'] if action['action']=='upload_missing_original' else 0})
             done+=1
             if rate_limit_s: time.sleep(rate_limit_s)
-        required=[a for a in plan['actions'] if a['action'] in {'upload_missing_original','register_original','register_video'}]
+        required=[a for a in plan['actions'] if a['action'] in {'upload_missing_original','register_original','register_equivalent','register_video'}]
         if not all(self.valid_receipt(a,inventory) for a in required): return {'complete':False,'bytes_transferred':transferred}
         for name in ('catalog','videos.json','remote-videos.json'):
             src=self.state/name; dst=self.directory/name
@@ -344,7 +376,7 @@ class Orchestrator:
         plan=self.load_plan()
         if not execute: return {'dry_run':True,'checks':['remote receipts','materials identity','lessons','queue','plugin queries']}
         inventory=self.inventory(); errors=[]
-        registered=[a for a in plan['actions'] if a['action'] in {'upload_missing_original','register_original','register_video'}]
+        registered=[a for a in plan['actions'] if a['action'] in {'upload_missing_original','register_original','register_equivalent','register_video'}]
         for a in registered:
             if not self.valid_receipt(a,inventory): errors.append('invalid receipt: '+a['key'])
         db=self.directory/'hub.sqlite3'
@@ -510,14 +542,14 @@ class Orchestrator:
 
     def status(self):
         plan=self.load_plan(); inventory=self.inventory()
-        eligible=[a for a in plan['actions'] if a['action'] in {'register_video','upload_missing_original','register_original'}]
+        eligible=[a for a in plan['actions'] if a['action'] in {'register_video','upload_missing_original','register_original','register_equivalent'}]
         good=[a for a in eligible if self.valid_receipt(a,inventory)]
         journal=[json.loads(line) for line in (self.directory/'journal.jsonl').read_text().splitlines()] if (self.directory/'journal.jsonl').exists() else []
         phases={x['phase']:x['status'] for x in journal if x['action']=='complete'}
         return {'generation':self.generation,'phases':phases,'lessons_discovered':plan['counts']['lessons_total'],
                 'videos_verified':sum(a['action']=='register_video' for a in good),'pdfs_verified':sum(a['action']!='register_video' for a in good),
                 'bytes_transferred':sum((x.get('detail') or {}).get('bytes',0) for x in journal if isinstance(x.get('detail'),dict)),
-                'reused':sum(a['action']=='register_original' for a in good),'new':sum(a['action']=='upload_missing_original' for a in good),
+                'reused':sum(a['action']=='register_original' for a in good),'equivalent':sum(a['action']=='register_equivalent' for a in good),'new':sum(a['action']=='upload_missing_original' for a in good),
                 'failures':sum(x['status']=='failed' for x in journal),'divergences':read_checked(self.directory/'verify.json').get('divergences',[]) if (self.directory/'verify.json').exists() else [],
                 'percent_complete':100*len(good)/len(eligible) if eligible else 100,
                 'local_space_used':sum(p.stat().st_size for p in self.directory.rglob('*') if p.is_file() and not p.is_symlink()),

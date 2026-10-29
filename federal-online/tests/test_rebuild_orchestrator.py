@@ -273,3 +273,53 @@ def test_plan_ignores_staging_build_trees(corpus):
     (staging/'b.pdf').write_bytes(b'staging')
     plan=o.plan()
     assert not any('/.build_' in a.get('local','') for a in plan['actions'])
+
+
+def _equiv_orchestrator(tmp_path, remote_bytes):
+    spec.loader.exec_module(m)
+    state=tmp_path/'state'; d=state/'materials/course/Biologia'; d.mkdir(parents=True)
+    pdf=d/'a.pdf'; pdf.write_bytes(b'%PDF-academic|wm-local')
+    remote=FakeRclone(tmp_path/'remote')
+    src=tmp_path/'src.pdf'; src.write_bytes(remote_bytes)
+    remote.copyto(src,'onedrive:Federal Online PDFs/course/Biologia/a.pdf'); remote.uploads=0
+    def identity(path):
+        data=Path(path).read_bytes()
+        return dict(m.file_identity(path),content_sha256=hashlib.sha256(data.split(b'|')[0]).hexdigest())
+    def builder(directory,plan):
+        from fo_hub.store import FOStore
+        FOStore(directory/'hub.sqlite3').conn.close()
+    from fo_hub.store import FOStore
+    FOStore(state/'hub.sqlite3').conn.close()
+    return m.Orchestrator(state,'gequiv',rclone=remote,unit_check=lambda:[],identity=identity,builder=builder),pdf,remote
+
+
+import hashlib
+
+
+def test_watermark_only_redownload_registers_equivalent_without_upload(tmp_path):
+    o,pdf,remote=_equiv_orchestrator(tmp_path,b'%PDF-academic|wm-remote')
+    plan=o.plan()
+    kinds={a['action'] for a in plan['actions']}
+    assert 'register_equivalent' in kinds and 'upload_missing_original' not in kinds and 'protect_unique' not in kinds
+    assert not list((o.state/'tmp').rglob('*.pdf'))
+    assert o.stage(True)['complete'] and remote.uploads==0
+    assert o.verify(True)['pass']
+    o.cutover(True); o.cleanup(True)
+    assert not pdf.exists()
+    assert remote.local('onedrive:Federal Online PDFs/course/Biologia/a.pdf').exists()
+
+
+def test_different_content_at_same_path_is_preserved_and_uploaded(tmp_path):
+    o,pdf,remote=_equiv_orchestrator(tmp_path,b'%PDF-edited|wm-remote')
+    plan=o.plan()
+    up=[a for a in plan['actions'] if a['action']=='upload_missing_original']
+    assert len(up)==1 and '/_originals/' in up[0]['remote']
+    assert o.stage(True)['complete'] and remote.uploads==1
+    assert remote.local('onedrive:Federal Online PDFs/course/Biologia/a.pdf').read_bytes()==b'%PDF-edited|wm-remote'
+
+
+def test_equivalent_local_modified_after_plan_is_not_deleted(tmp_path):
+    o,pdf,remote=_equiv_orchestrator(tmp_path,b'%PDF-academic|wm-remote')
+    o.plan(); o.stage(True); assert o.verify(True)['pass']; o.cutover(True)
+    pdf.write_bytes(b'%PDF-academic|wm-changed')
+    o.cleanup(True); assert pdf.exists()
