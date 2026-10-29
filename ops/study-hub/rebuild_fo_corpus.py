@@ -185,14 +185,33 @@ def _pdf_sources(plan):
     return groups
 
 
+PDF_TABLES = ('materials','pdf_pages','pdf_page_quality','pdf_source_observations','pdf_ocr_jobs','pdf_page_structure','material_originals')
+OPERATIONAL = {'focused_reviews':'1', 'transcripts':'1', 'transcript_segments':'1',
+               'transcription_jobs':"state NOT IN ('queued','superseded') OR attempts>0", 'lesson_revisions':'1'}
+
+
 def build_generation_db(generation_dir, plan):
     """Lessons/queue via ingest; PDFs only through the watermark-free extractor."""
     from fo_hub.ingest import ingest
     from fo_hub.pdf_extract import extract_document
     from fo_hub.pdf_index import build
     generation_dir = Path(generation_dir); db = generation_dir/'hub.sqlite3'
+    active = Path(plan['state_root'])/'hub.sqlite3'
+    if active.exists() and not db.exists():
+        # Start from a consistent snapshot of the active DB so queue history,
+        # focused reviews, transcripts and observations survive the rebuild.
+        tmp = db.with_name(db.name+'.partial')
+        if tmp.exists(): tmp.unlink()
+        src = sqlite3.connect(active.resolve().as_uri()+'?mode=ro', uri=True); dst = sqlite3.connect(tmp)
+        try: src.backup(dst)
+        finally: dst.close(); src.close()
+        os.replace(tmp, db)
+    with sqlite3.connect(db) as c:  # byte-keyed PDF rows are replaced by content identities
+        names = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        for table in PDF_TABLES:
+            if table in names: c.execute('DELETE FROM '+table)
     ingest(generation_dir, db, index_pdfs=False)
-    with sqlite3.connect(db) as c:  # byte-keyed rows from ingest are not content identities
+    with sqlite3.connect(db) as c:
         c.execute('DELETE FROM materials')
     groups = _pdf_sources(plan)
 
@@ -394,6 +413,13 @@ class Orchestrator:
             if mid in ids and ids[mid]!=content: errors.append('material id collision: '+mid)
             if content in content_ids and content_ids[content]!=mid: errors.append('content assigned multiple material IDs: '+str(content))
             ids[mid]=content; content_ids[content]=mid
+        for table,where in OPERATIONAL.items():
+            def count(path):
+                if not Path(path).exists(): return 0
+                with sqlite3.connect(Path(path).resolve().as_uri()+'?mode=ro',uri=True) as c:
+                    if not c.execute('SELECT 1 FROM sqlite_master WHERE name=?',(table,)).fetchone(): return 0
+                    return c.execute(f'SELECT count(*) FROM {table} WHERE {where}').fetchone()[0]
+            if count(db)<count(self.state/'hub.sqlite3'): errors.append('operational state lost: '+table)
         present={x['lesson_id'] for x in rows(db,'lessons') if x.get('present')}
         lost=set(plan['active_lessons'])-present-set(plan['explicit_missing_lessons'])
         if lost: errors.append('lost lessons: '+','.join(sorted(lost)))

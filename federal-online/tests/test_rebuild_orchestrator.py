@@ -323,3 +323,31 @@ def test_equivalent_local_modified_after_plan_is_not_deleted(tmp_path):
     o.plan(); o.stage(True); assert o.verify(True)['pass']; o.cutover(True)
     pdf.write_bytes(b'%PDF-academic|wm-changed')
     o.cleanup(True); assert pdf.exists()
+
+
+def test_generation_preserves_operational_state_from_active_db(tmp_path):
+    spec.loader.exec_module(m)
+    import json, sqlite3
+    from fo_hub.store import FOStore
+    from fo_hub.transcription import TranscriptionQueue
+    state = tmp_path/'state'; (state/'materials').mkdir(parents=True)
+    cat = state/'catalog/courses/c'; cat.mkdir(parents=True)
+    (cat/'aulas_index.json').write_text(json.dumps({'course_id':'c','aulas':[]}))
+    active = FOStore(state/'hub.sqlite3')
+    active.sync_lessons([dict(course_id='c',media_id='1',subject='Biologia',title='Aula 1',media_type='video')])
+    lid = active.conn.execute('SELECT lesson_id FROM lessons').fetchone()[0]
+    TranscriptionQueue(active).enqueue(lid,1)
+    with active.conn as c:
+        c.execute("UPDATE transcription_jobs SET state='review',attempts=1,last_error='x'")
+        c.execute('CREATE TABLE IF NOT EXISTS focused_reviews(lesson_id TEXT,version INTEGER,start REAL,end REAL,reason TEXT,state TEXT,PRIMARY KEY(lesson_id,version,start,end,reason))')
+        c.execute("INSERT INTO focused_reviews VALUES(?,1,0,10,'duplicate_segment','pending_manual_review')",(lid,))
+    active.conn.close()
+    remote = FakeRclone(tmp_path/'remote')
+    o = m.Orchestrator(state,'gops',rclone=remote,unit_check=lambda:[])
+    o.plan(); assert o.stage(True)['complete']
+    with sqlite3.connect(o.directory/'hub.sqlite3') as c:
+        assert c.execute('SELECT state,attempts FROM transcription_jobs WHERE lesson_id=?',(lid,)).fetchone()==('review',1)
+        assert c.execute('SELECT count(*) FROM focused_reviews').fetchone()[0]==1
+    # verify must flag lost operational state
+    with sqlite3.connect(o.directory/'hub.sqlite3') as c: c.execute('DELETE FROM focused_reviews')
+    assert any('operational state' in d for d in o.verify(True)['divergences'])
