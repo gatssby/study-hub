@@ -34,6 +34,9 @@ Somente após aprovação explícita e verificação dos pré-requisitos, editar
     STUDY_HUB_FO_DB=/home/ubuntu/study-hub-state/federal-online/hub.sqlite3
     WHISPER_CPP_BIN=/home/ubuntu/study-hub-models/whisper.cpp/build/bin/whisper-cli
     WHISPER_MODEL=/home/ubuntu/study-hub-models/ggml-large-v3.bin
+    FO_ASR_MAX_CONTEXT=0
+
+`FO_ASR_MAX_CONTEXT=0` (sem contexto entre janelas) eliminou os loops reais do piloto; ver `docs/research/2026-10-29-fo-full-rebuild-and-asr-activation.md`.
 
 Criar via `sudoedit /etc/study-hub/fo-transcription.authorized` uma única linha:
 
