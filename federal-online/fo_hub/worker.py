@@ -475,7 +475,7 @@ class Worker:
             with self.c:self.c.execute("UPDATE transcription_jobs SET state=?,progress=1,lease_owner=NULL,lease_until=NULL,updated_at=? WHERE lesson_id=? AND version=? AND state='queued'",('done' if status=='validated' else 'review',str(time.time()),alias['lesson_id'],alias['version']))
 
     def fingerprint(self):
-        return hashlib.sha256(json.dumps({'parameters':self.cfg.parameters(),'model_sha256':identity(self.cfg.model)},sort_keys=True).encode()).hexdigest()
+        return hashlib.sha256(json.dumps({'parameters':self.cfg.parameters(),'model_sha256':identity(self.cfg.model),'binary_sha256':identity(self.cfg.binary) if Path(self.cfg.binary).is_file() else None},sort_keys=True).encode()).hexdigest()
 
     def record_outcome(self,fingerprint,outcome):
         row=self.c.execute('SELECT * FROM transcription_breaker WHERE fingerprint=?',(fingerprint,)).fetchone()
