@@ -243,3 +243,19 @@ def test_alias_propagation_failure_after_success_is_atomic_and_not_breaker(tmp_p
     assert w.run_once()['state']=='validated'
     assert [r[0] for r in w.c.execute('SELECT state FROM transcription_jobs')]==['done','done']
     assert sum(c[0]==str(w.cfg.binary) for c in calls)==1
+
+
+def test_catalog_ordem_drives_order_not_title(tmp_path):
+    import json
+    store=FOStore(tmp_path/'hub.db')
+    titles=['Zoologia','Bioenergética','Citologia']
+    store.sync_lessons([dict(course_id='c',media_id=str(i),item_id=f'item-{i}',subject='Biologia - Teoria',title=t,media_type='video') for i,t in enumerate(titles)])
+    cat=tmp_path/'catalog/courses/c'; cat.mkdir(parents=True)
+    (cat/'aulas_index.json').write_text(json.dumps({'aulas':[{'item_id':'item-0','ordem':'1'},{'item_id':'item-2','ordem':'2'},{'item_id':'item-1','ordem':'3'}]}))
+    cfg=Config(tmp_path,tmp_path/'hub.db',tmp_path/'binary',tmp_path/'model')
+    w=Worker(cfg,store=store,gate_fn=lambda:{'allowed':True},free_bytes=lambda:20*1024**3,runner=lambda *a,**k:pytest.fail('no subprocess'))
+    for row in store.conn.execute('SELECT * FROM lessons').fetchall():
+        TranscriptionQueue(store).enqueue(row['lesson_id'],1)
+        store.conn.execute('INSERT INTO lesson_video_sources VALUES(?,?,?,?,?,?)',(row['lesson_id'],'onedrive:Federal Online/'+row['lesson_id'],'1',9,1,'now'))
+    store.conn.commit()
+    assert [w.store.get_lesson(w.lease()['lesson_id'])['title'] for _ in range(3)]==['Zoologia','Citologia','Bioenergética']

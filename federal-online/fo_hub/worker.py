@@ -272,6 +272,20 @@ class Worker:
         self.c.execute('CREATE TABLE IF NOT EXISTS transcription_breaker(fingerprint TEXT PRIMARY KEY,consecutive_failures INTEGER,consecutive_reviews INTEGER,opened_at REAL,reason TEXT)')
         self.c.commit()
 
+    def catalog_order(self):
+        """item_id -> portal 'ordem' from the current catalog (cached per mtime set)."""
+        files=sorted((self.cfg.state/'catalog/courses').glob('*/aulas_index.json')) if (self.cfg.state/'catalog/courses').is_dir() else []
+        key=tuple((str(f),f.stat().st_mtime_ns) for f in files)
+        if getattr(self,'_order_key',None)!=key:
+            order={}
+            for f in files:
+                try:items=json.loads(f.read_text()).get('aulas',[])
+                except (OSError,ValueError):continue
+                for x in items:
+                    if x.get('item_id') and str(x.get('ordem','')).isdigit():order[x['item_id']]=int(x['ordem'])
+            self._order,self._order_key=order,key
+        return self._order
+
     def recover(self):
         # Caller must hold the process lock. A dead predecessor cannot retain work.
         temporary=self.cfg.state/'tmp/transcription'
@@ -289,9 +303,9 @@ class Worker:
         try:
             self.c.execute("UPDATE transcription_jobs SET state='superseded' WHERE state='queued' AND EXISTS(SELECT 1 FROM lessons l WHERE l.lesson_id=transcription_jobs.lesson_id AND l.version!=transcription_jobs.version)")
             self.c.execute("UPDATE transcription_jobs SET state='done',progress=1 WHERE state='queued' AND EXISTS(SELECT 1 FROM transcripts t WHERE t.lesson_id=transcription_jobs.lesson_id AND t.version=transcription_jobs.version AND t.corpus=?)",(ACCEPTED_CORPUS,))
-            rows=self.c.execute("SELECT j.*,l.subject,l.front,l.module,l.title,s.remote_path,s.size FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version JOIN lesson_video_sources s ON s.lesson_id=j.lesson_id WHERE j.state='queued' AND COALESCE(j.retry_at,0)<=? AND j.attempts<j.max_attempts AND l.present=1 AND s.available=1 AND CAST(j.version AS TEXT)=s.revision AND s.remote_path IS NOT NULL AND (? IS NULL OR j.lesson_id=?) AND NOT EXISTS(SELECT 1 FROM transcription_jobs busy JOIN lesson_video_sources bs ON bs.lesson_id=busy.lesson_id WHERE busy.state='leased' AND bs.remote_path=s.remote_path)",(now,lesson_id,lesson_id)).fetchall()
+            rows=self.c.execute("SELECT j.*,l.subject,l.front,l.module,l.title,l.item_id,s.remote_path,s.size FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version JOIN lesson_video_sources s ON s.lesson_id=j.lesson_id WHERE j.state='queued' AND COALESCE(j.retry_at,0)<=? AND j.attempts<j.max_attempts AND l.present=1 AND s.available=1 AND CAST(j.version AS TEXT)=s.revision AND s.remote_path IS NOT NULL AND (? IS NULL OR j.lesson_id=?) AND NOT EXISTS(SELECT 1 FROM transcription_jobs busy JOIN lesson_video_sources bs ON bs.lesson_id=busy.lesson_id WHERE busy.state='leased' AND bs.remote_path=s.remote_path)",(now,lesson_id,lesson_id)).fetchall()
             cursor=self.c.execute('SELECT * FROM transcription_rr_cursor WHERE id=1').fetchone()
-            row=choose([dict(r) for r in rows],cursor['last_discipline'])
+            row=choose([dict(r,ordem=self.catalog_order().get(r['item_id'])) for r in rows],cursor['last_discipline'])
             if row is None:self.c.commit();return None
             self.c.execute("UPDATE transcription_jobs SET state='leased',attempts=attempts+1,lease_owner=?,lease_until=?,updated_at=? WHERE lesson_id=? AND version=?",(self.owner,now+7*86400,str(now),row['lesson_id'],row['version']))
             name=discipline(row)
