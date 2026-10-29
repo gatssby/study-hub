@@ -285,7 +285,12 @@ class Orchestrator:
                     receipt.get('remote')==action.get('remote') and receipt.get('key')==action.get('key') and
                     all(current.get(k)==expected(receipt)[k]==expected(action)[k] for k in ('size','quickxor')))
 
-    def load_plan(self): return read_checked(self.directory/'plan.json')
+    def load_plan(self):
+        # Re-validate the checksum whenever the file changes; avoid re-reading
+        # a multi-MB plan once per action inside receipt checks.
+        path=self.directory/'plan.json'; st=path.stat(); key=(st.st_size,st.st_mtime_ns,st.st_ino)
+        if getattr(self,'_plan_key',None)!=key: self._plan,self._plan_key=read_checked(path),key
+        return self._plan
 
     def plan(self):
         inventory = self.inventory()
