@@ -92,4 +92,8 @@ def pedagogical_key(row: Mapping[str, Any]) -> tuple:
         seq = (0, int(number.group(1)))
     else:
         seq = (1, 0)
-    return (level, _norm(row.get('module')), seq, title, str(row.get('lesson_id') or ''))
+    module = _norm(row.get('module'))
+    # Same lesson slot: theory first, then its exercise resolution.
+    kind = 1 if _has(module, 'exercicios') or _has(subject, 'exercicios') else 0
+    track = re.sub(r'\b(teoria|exercicios)\b', '', module).strip(' ->')
+    return (level, track, seq, kind, title, str(row.get('lesson_id') or ''))

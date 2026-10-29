@@ -49,3 +49,10 @@ def test_pedagogical_key_orders_levels_then_lesson_numbers():
     ]
     ordered = sorted(rows, key=pedagogical_key)
     assert [r['title'] for r in ordered] == ['Aula 2 - A', 'Aula 10 - C', 'Aula extra - Z', 'Aula 02 - B']
+
+
+def test_theory_precedes_exercises_at_same_ordem():
+    rows = [dict(subject='Biologia - Exercícios', module='Aulas > Biologia > Biologia - Exercícios', ordem=1, title='Bioquímica', lesson_id='b'),
+            dict(subject='Biologia - Teoria', module='Aulas > Biologia > Biologia - Teoria', ordem=1, title='Bioquímica', lesson_id='a'),
+            dict(subject='Biologia - Teoria', module='Aulas > Biologia > Biologia - Teoria', ordem=2, title='Membrana', lesson_id='c')]
+    assert [r['lesson_id'] for r in sorted(rows, key=pedagogical_key)] == ['a', 'b', 'c']
