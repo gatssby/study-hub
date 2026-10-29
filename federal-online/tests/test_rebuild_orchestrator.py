@@ -351,3 +351,26 @@ def test_generation_preserves_operational_state_from_active_db(tmp_path):
     # verify must flag lost operational state
     with sqlite3.connect(o.directory/'hub.sqlite3') as c: c.execute('DELETE FROM focused_reviews')
     assert any('operational state' in d for d in o.verify(True)['divergences'])
+
+
+def test_verify_tolerates_explicitly_unavailable_source_but_not_unverified_available(tmp_path):
+    spec.loader.exec_module(m)
+    import json, sqlite3
+    from fo_hub.store import FOStore
+    from fo_hub.transcription import TranscriptionQueue
+    state = tmp_path/'state'; (state/'materials').mkdir(parents=True)
+    cat = state/'catalog/courses/c'; cat.mkdir(parents=True)
+    (cat/'aulas_index.json').write_text(json.dumps({'course_id':'c','aulas':[]}))
+    active = FOStore(state/'hub.sqlite3')
+    active.sync_lessons([dict(course_id='c',media_id='1',subject='Biologia',title='Aula 1',media_type='video')])
+    lid = active.conn.execute('SELECT lesson_id FROM lessons').fetchone()[0]
+    TranscriptionQueue(active).enqueue(lid,1)
+    active.conn.execute('CREATE TABLE IF NOT EXISTS lesson_video_sources(lesson_id TEXT PRIMARY KEY,remote_path TEXT,revision TEXT,size INTEGER,available INTEGER,checked_at TEXT)')
+    active.conn.execute('INSERT INTO lesson_video_sources VALUES(?,NULL,NULL,NULL,0,?)',(lid,'now'))
+    active.conn.commit(); active.conn.close()
+    o = m.Orchestrator(state,'gsrc',rclone=FakeRclone(tmp_path/'remote'),unit_check=lambda:[])
+    o.plan(); assert o.stage(True)['complete']
+    assert o.verify(True)['pass']
+    with sqlite3.connect(o.directory/'hub.sqlite3') as c:
+        c.execute("UPDATE lesson_video_sources SET available=1,remote_path='onedrive:Federal Online/ghost.mp4'")
+    assert any('queue without verified source' in d for d in o.verify(True)['divergences'])

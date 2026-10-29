@@ -432,8 +432,11 @@ class Orchestrator:
         verified={a['remote'] for a in registered if a['action']=='register_video' and self.valid_receipt(a,inventory)}
         for job in rows(db,'transcription_jobs'):
             if job['state'] not in {'queued','running','leased'}: continue
-            source=sources.get(job['lesson_id'],{})
-            if not source.get('available') or source.get('remote_path') not in verified: errors.append('queue without verified source: '+job['lesson_id'])
+            source=sources.get(job['lesson_id'])
+            # Explicitly unavailable sources are never leased by the worker
+            # (lease requires available=1); they are reported, not divergences.
+            if source is not None and not source.get('available') and source.get('remote_path') is None: continue
+            if not source or source.get('remote_path') not in verified: errors.append('queue without verified source: '+job['lesson_id'])
         if db.exists():
             try:
                 from fo_hub.store import FOStore
