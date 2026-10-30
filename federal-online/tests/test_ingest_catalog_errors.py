@@ -86,3 +86,31 @@ def test_definitive_catalog_statuses_are_not_filtered_as_transient_errors(tmp_pa
     store = FOStore(db)
     assert store.conn.execute("SELECT media_type,present FROM lessons").fetchone()[:] == (status, 1)
     store.conn.close()
+
+
+def test_ok_observation_without_stream_url_never_erases_known_media(tmp_path):
+    """Regression: 20 present videos lost their verified OneDrive source after a
+    later 'ok' catalog pass failed to capture video_stream_url."""
+    state = tmp_path / "state"
+    (state / "catalog").mkdir(parents=True)
+    good = entry(C26, "ok", "42")
+    good.update(video_stream_url="https://example.invalid/valid.m3u8", duracao_segundos=600,
+                captured_at="2026-10-27T00:00:00Z")
+    blind = {**good, "video_stream_url": None, "captured_at": "2026-10-28T00:00:00Z"}
+    db = tmp_path / "hub.sqlite3"
+    (state / "catalog/aulas_index_a.json").write_text(json.dumps({"aulas": [good]}))
+    ingest(state, db, index_pdfs=False)
+    # Newer blind observation in another catalog: the URL-bearing one wins.
+    (state / "catalog/aulas_index_b.json").write_text(json.dumps({"aulas": [blind]}))
+    ingest(state, db, index_pdfs=False)
+    # Only the blind observation remains: DB URL is retained, version unchanged.
+    (state / "catalog/aulas_index_a.json").unlink()
+    ingest(state, db, index_pdfs=False)
+    store = FOStore(db)
+    assert [tuple(r) for r in store.conn.execute("SELECT version,video_url FROM lessons")] == [
+        (1, "https://example.invalid/valid.m3u8")]
+    # A real duration change is still a media revision.
+    (state / "catalog/aulas_index_b.json").write_text(json.dumps({"aulas": [{**blind, "duracao_segundos": 700}]}))
+    ingest(state, db, index_pdfs=False)
+    assert store.conn.execute("SELECT version,video_url FROM lessons").fetchone()[:] == (2, None)
+    store.conn.close()

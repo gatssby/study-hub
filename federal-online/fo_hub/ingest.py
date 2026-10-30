@@ -127,8 +127,20 @@ def ingest(state,db_path,index_pdfs=True):
             row={'course_id':course_key(item.get('course_url') or payload.get('course_url','')),'source_url':item.get('course_url') or payload.get('course_url',''),'media_id':item.get('media_id'),'item_id':item.get('item_id'),'subject':item.get('disciplina') or item.get('portal_subject'),'front':item.get('portal_subject'),'module':item.get('source_ref'),'title':item.get('nome_real_aula') or item.get('titulo_original'),'media_type':'video' if item.get('status')=='ok' else item.get('status','unknown'),'video_url':item.get('video_stream_url'),'duration_s':item.get('duracao_segundos')}
             lid=lesson_id_for(row['course_id'],row['media_id'],row['item_id'])
             at=str(item.get('captured_at') or payload.get('generated_at') or '')
-            if lid not in candidates or at>=candidates[lid][0]:candidates[lid]=(at,row)
+            # An 'ok' observation whose stream URL was not captured is collector
+            # evidence, not proof the media changed: it must not erase a known
+            # URL (which would bump the version and orphan the verified original).
+            rank=(row['media_type']!='video' or bool(row['video_url']),at)
+            if lid not in candidates or rank>=candidates[lid][0]:candidates[lid]=(rank,row)
     rows=[x[1] for x in candidates.values()]
+    for row in rows:
+        # Same rule against the DB: a missing URL with unchanged duration keeps
+        # the last known URL instead of minting a media revision without one.
+        if row['media_type']=='video' and not row['video_url']:
+            known=c.execute('SELECT video_url,duration_s FROM lessons WHERE lesson_id=?',
+                            (lesson_id_for(row['course_id'],row['media_id'],row['item_id']),)).fetchone()
+            if known and known['video_url'] and known['duration_s']==(float(row['duration_s']) if row['duration_s'] not in (None,'') else None):
+                row['video_url']=known['video_url']
     summary=store.sync_lessons(rows,authoritative=False) if rows else {'created':0}
     queue=TranscriptionQueue(store)
     inventory_path=state/'remote-videos.json'
