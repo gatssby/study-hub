@@ -13,6 +13,30 @@ def _tokens(text):
             for m in _WORD.finditer(text)]
 
 
+_NEVER_SKIP = {"não", "nao", "nem", "nunca", "jamais", "sem", "tampouco", "nenhum", "nenhuma"}
+
+
+def _fold(token):
+    return "".join(c for c in unicodedata.normalize("NFD", token) if not unicodedata.combining(c))
+
+
+def _truncation_echo(skipped, counterpart):
+    """True only when ``skipped`` plausibly mis-hears the tail of ``counterpart``.
+
+    A chunk cut mid-word yields only the word's ending ("-tina" of
+    "queratina" heard as "proteína"): require a shared accent-folded ending of
+    at least three letters. Negations/quantifiers are never skippable, and
+    numbers/operators never match, so conflicting content stays flagged.
+    """
+    if skipped in _NEVER_SKIP or not skipped.isalpha() or not counterpart.isalpha():
+        return False
+    a, b = _fold(skipped), _fold(counterpart)
+    common = 0
+    while common < min(len(a), len(b)) and a[-1 - common] == b[-1 - common]:
+        common += 1
+    return common >= 3
+
+
 def stitch_chunks(chunks):
     """Return ``segments``, ``flags`` and auditable boundary ``decisions``.
 
@@ -46,6 +70,21 @@ def stitch_chunks(chunks):
                 matches = [n for n in range(1, min(len(lt), len(rt)) + 1)
                            if [t[0][0] for t in lt[-n:]] == [t[0][0] for t in rt[:n]]]
                 n = max(matches, default=0)
+                skipped = left_counterpart = None
+                if n < 3 and right and len(rt) > 1 and abs(incoming[0]["start"] - chunk["offset_s"]) <= 0.3:
+                    # A chunk starting mid-word decodes a truncated first token
+                    # ("-tina" -> "proteína"). Skip exactly that one token only
+                    # when the remainder is an unambiguous >=3-token match.
+                    lead = [n2 for n2 in range(1, min(len(lt), len(rt) - 1) + 1)
+                            if [t[0][0] for t in lt[-n2:]] == [t[0][0] for t in rt[1:n2 + 1]]]
+                    n2 = max(lead, default=0)
+                    # The left chunk must hold a token right before the matched
+                    # suffix: that is the complete word the truncated token echoes.
+                    if (n2 >= 3 and len(lt) > n2 and len(lead) == 1
+                            and len({t[0][0] for t in rt[1:n2 + 1]}) >= 3
+                            and _truncation_echo(rt[0][0][0], lt[-n2 - 1][0][0])):
+                        left_counterpart = lt[-n2 - 1][0][0]
+                        skipped, rt, n, matches = rt[0], rt[1:], n2, [n2]
                 left_matched = output[lt[-n][1]:] if n else [output[left[-1]]] if left else []
                 right_matched = incoming[:rt[n - 1][1] + 1] if n else incoming[:1]
                 temporal_match = bool(left_matched and right_matched and
@@ -95,6 +134,11 @@ def stitch_chunks(chunks):
                                       "matched_tokens": n, "left_segment_idx": first,
                                       "right_segment_count": last + 1,
                                       "timestamp_policy": "original_segment_envelope"})
+                    if skipped is not None:
+                        # Auditable: the truncated duplicate token inside the
+                        # acoustic overlap; the left chunk retains the full word.
+                        decisions[-1]["skipped_leading_token"] = skipped[0][0]
+                        decisions[-1]["left_counterpart_token"] = left_counterpart
                 elif left and right:
                     flags.append({"chunk_idx": index, "kind": "ambiguous_overlap",
                                   "start": overlap_start, "end": overlap_end,

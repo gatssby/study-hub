@@ -134,3 +134,59 @@ def test_boundary_drift_does_not_invent_duplicate_match_or_change_scientific_sig
                             chunk(8, 10, seg(12, 14, "cai para 5 graus hoje"))])
     assert len(result["segments"]) == 2
     assert not result["flags"]
+
+
+def test_truncated_leading_word_at_chunk_start_merges_real_bioquimica_boundary():
+    """Regression: fo_135c415d8080927f 1794-1796 s. The right chunk starts mid
+    'queratina' and decodes the fragment as 'proteína'; isolated re-decode of
+    1793.4-1796.1 hears the sentence once. The full left word is retained."""
+    from fo_hub.stitching import stitch_chunks
+    left = seg(1793.52, 1796.0, "a queratina do cabelo é uma proteína.")
+    right = seg(1794.0, 1800.76, "proteína do cabelo é uma proteína né então o colágeno é uma proteína agora tem algumas")
+    chunks = [chunk(1196, 600, seg(1790.0, 1793.42, "mas os anticorpos são proteínas,"), left),
+              chunk(1794, 354.284, right, seg(1800.76, 1806.66, "proteínas que são mais especiais"))]
+    original = copy.deepcopy(chunks)
+    result = stitch_chunks(chunks)
+    assert chunks == original
+    assert result["flags"] == []
+    merged = result["segments"][1]
+    assert merged["start"] == 1793.52 and merged["end"] == 1800.76
+    assert merged["text"].startswith("a queratina do cabelo é uma proteína.")
+    assert merged["text"].count("cabelo") == 1 and "colágeno" in merged["text"]
+    decision = result["decisions"][0]
+    assert decision["action"] == "merge_overlap" and decision["matched_tokens"] == 5
+    assert decision["skipped_leading_token"] == "proteína"
+    assert decision["left_counterpart_token"] == "queratina"
+    assert qa_segments(result["segments"])["passed"]
+
+
+@pytest.mark.parametrize("right_start,right_text", [
+    # Not at the chunk start: a real word, never skipped.
+    (1795.0, "proteína do cabelo é uma proteína né"),
+    # Remainder too short to be unequivocal.
+    (1794.0, "proteína uma proteína né então"),
+    # Remainder repeats: ambiguous alignment.
+    (1794.0, "x é é é é né"),
+])
+def test_leading_token_skip_requires_chunk_start_and_unequivocal_remainder(right_start, right_text):
+    from fo_hub.stitching import stitch_chunks
+    left_text = "a queratina do cabelo é uma proteína" if "x" not in right_text else "a é é é é"
+    chunks = [chunk(1196, 600, seg(1793.52, 1796.0, left_text)),
+              chunk(1794, 354.284, seg(right_start, 1800.76, right_text))]
+    result = stitch_chunks(chunks)
+    assert result["segments"] == chunks[0]["segments"] + chunks[1]["segments"]
+    assert all("skipped_leading_token" not in d for d in result["decisions"])
+
+
+@pytest.mark.parametrize("lead", ["não", "nunca", "42", "insulina"])
+def test_conflicting_leading_word_is_never_skipped(lead):
+    """Review finding: skipping must require a truncation echo, so a negation
+    or unrelated word at a chunk start can never be silently dropped."""
+    from fo_hub.stitching import stitch_chunks
+    left = chunk(0, 10, seg(8.0, 10.0, "A glicose aumenta a pressão arterial."))
+    right = chunk(8, 10, seg(8.0, 12.0, f"{lead} aumenta a pressão arterial. Agora seguimos."))
+    out = stitch_chunks([left, right])
+    text = " ".join(s["text"] for s in out["segments"])
+    assert lead in text
+    assert any(f["kind"] == "ambiguous_overlap" for f in out["flags"])
+    assert not any(d.get("skipped_leading_token") for d in out["decisions"])
