@@ -187,6 +187,7 @@ def decoder_command(cfg,audio,prefix):
 _VERIFY_TOKEN=re.compile(r'[+−-]?\d+(?:[.,]\d+)?|\w[\w\u0300-\u036f]*',re.UNICODE)
 REPETITION_VERIFY_MAX=8
 REPETITION_VERIFY_WINDOW_S=2.6
+_FILLERS={'então','entendeu','exatamente','beleza','certinho','pessoal','galera','obrigado','obrigada','legenda','legendas'}
 
 
 def _verify_tokens(text):
@@ -218,8 +219,16 @@ def confirmable_repetitions(segments,qa,limit=REPETITION_VERIFY_MAX):
     for flag in qa['flags']:
         if flag['kind']!='duplicate_segment' or flag.get('origin')!='stitched_text':continue
         i=flag['idx']
-        # Single words/fillers ("Né?") cannot be located reliably: stay in review.
-        if not 1<=i<len(segments) or len(_verify_tokens(segments[i]['text']))<2:return []
+        if not 1<=i<len(segments):return []
+        words=_verify_tokens(segments[i]['text'])
+        # Fillers/short words ("Né?") cannot be located reliably: stay in review.
+        # A single long content word ("Glicerídeo.") is eligible only when the
+        # occurrences are far enough apart that the two windows share no audio.
+        if not words:return []
+        if len(words)==1:
+            w=words[0]
+            if (not w.isalpha() or len(w)<6 or w in _FILLERS
+                    or segments[i]['start']-segments[i-1]['end']<REPETITION_VERIFY_WINDOW_S):return []
         if (i+1<len(segments) and norm(i+1)==norm(i)) or (i>=2 and norm(i-2)==norm(i)):return []
         if segments[i]['start']<segments[i-1]['end']-0.05:return []
         pairs.append(i)

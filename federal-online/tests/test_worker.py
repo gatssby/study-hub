@@ -247,3 +247,16 @@ def test_single_word_repetition_is_never_acoustically_waived():
     seg=lambda a,b,t:{'start':a,'end':b,'text':t}
     rows=[seg(0,1,'Né?'),seg(2,3,'Né?')]
     assert confirmable_repetitions(rows,{'flags':[{'kind':'duplicate_segment','idx':1,'origin':'stitched_text'}]})==[]
+
+
+def test_single_content_word_is_eligible_only_when_occurrences_are_far_apart():
+    """Real Bioquímica case: 'Glicerídeo.' written on the board at 1160.6 s and
+    again at 1169.6 s. Far apart -> eligible for acoustic check; adjacent
+    single words or fillers stay in review."""
+    from fo_hub.worker import confirmable_repetitions
+    seg=lambda a,b,t:{'start':a,'end':b,'text':t}
+    flag={'kind':'duplicate_segment','idx':1,'origin':'stitched_text'}
+    assert confirmable_repetitions([seg(1160.62,1161.22,'Glicerídeo.'),seg(1169.56,1170.16,'Glicerídeo.')],{'flags':[flag]})==[1]
+    assert confirmable_repetitions([seg(10,10.6,'Glicerídeo.'),seg(11,11.6,'Glicerídeo.')],{'flags':[flag]})==[]
+    assert confirmable_repetitions([seg(0,1,'Então.'),seg(9,10,'Então.')],{'flags':[flag]})==[]
+    assert confirmable_repetitions([seg(0,1,'42'),seg(9,10,'42')],{'flags':[flag]})==[]
