@@ -73,3 +73,52 @@ def test_ocr_rejects_source_outside_private_material_tree(tmp_path):
         raise AssertionError("must not extract")
     result = process_pending(state, store, extractor=forbidden, available_bytes=10**10)
     assert result["errors"] == 1
+
+
+def seed_remote(tmp_path, quality="ocr_needed"):
+    """Production shape: the local original was removed after OneDrive receipt."""
+    state, store = seed(tmp_path)
+    (state / "materials/a.pdf").unlink()
+    with store.conn:
+        store.conn.execute("UPDATE pdf_page_quality SET quality=?", (quality,))
+        store.conn.execute("CREATE TABLE IF NOT EXISTS material_originals(material_id TEXT NOT NULL,course_id TEXT,"
+                           "relative_path TEXT,onedrive_path TEXT NOT NULL,byte_sha256 TEXT,quickxor TEXT,size INTEGER,"
+                           "observed_at TEXT,PRIMARY KEY(material_id,onedrive_path))")
+        store.conn.execute("INSERT INTO material_originals VALUES('m','c','materials/a.pdf',"
+                           "'onedrive:Federal Online PDFs/a.pdf','abc',NULL,1,'now')")
+    return state, store
+
+
+def test_ocr_needed_page_uses_verified_transient_onedrive_original(tmp_path):
+    from fo_hub.ocr import process_pending
+    state, store = seed_remote(tmp_path)
+    fetched, seen = [], []
+    def fetch(remote, sha, dest):
+        fetched.append((remote, sha))
+        dest.write_bytes(b"%PDF-synthetic")
+        return dest
+    def extract(path, page, temp):
+        seen.append(path)
+        assert path.is_file()
+        return "Texto didatico reconhecido em imagem sintetica."
+    result = process_pending(state, store, extractor=extract, fetcher=fetch, available_bytes=10**10)
+    assert result["processed"] == 1 and fetched == [("onedrive:Federal Online PDFs/a.pdf", "abc")]
+    assert store.get_pdf_text("m")["pages"][0]["quality"] == "ocr_review"
+    # Original only on OneDrive: the transient copy is gone, nothing under materials/.
+    assert not seen[0].exists()
+    assert not list((state / "tmp/ocr").iterdir())
+    assert not (state / "materials/a.pdf").exists()
+
+
+def test_ocr_failed_fetch_backs_off_without_local_copy(tmp_path):
+    from fo_hub.ocr import process_pending
+    state, store = seed_remote(tmp_path)
+    def bad(remote, sha, dest):
+        dest.write_bytes(b"tampered")
+        raise ValueError("original checksum mismatch")
+    def forbidden(*args):
+        raise AssertionError("must not extract")
+    result = process_pending(state, store, extractor=forbidden, fetcher=bad, available_bytes=10**10)
+    assert result["errors"] == 1
+    assert tuple(store.conn.execute("SELECT attempts,last_error FROM pdf_ocr_jobs").fetchone()) == (1, "ValueError")
+    assert not list((state / "tmp/ocr").iterdir())
