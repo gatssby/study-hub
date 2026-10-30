@@ -78,7 +78,7 @@ def test_fake_pipeline_publishes_only_passed_current_version_and_cleans_temps(tm
     assert artifact['chunks'][0]['decoding']['wall_s']>=0
     assert artifact['chunks'][0]['decoding']['stderr']==''
     assert artifact['chunks'][0]['qa']['metrics']['repetition']['candidate_tokens']==0
-    assert artifact['qa_policy_version']==2
+    assert artifact['qa_policy_version']==3
     assert not list((tmp_path/'tmp/transcription').glob('*'))
     assert any(cmd[0]==str(cfg.binary) for cmd in calls)
     download=next(cmd for cmd in calls if cmd[0]=='rclone')
@@ -164,3 +164,86 @@ def test_subprocess_failure_retains_private_diagnostics_not_public_error(tmp_pat
     assert detail['stderr']=='private synthetic source details'
     assert detail['returncode']==7
     assert not (tmp_path/'transcripts/generated_v2').exists()
+
+
+def _repetition_run(cfg,decoded,calls):
+    """Fake pipeline: one 30 s chunk with a phrase said twice (rows 1 and 2)."""
+    rows=[{'offsets':{'from':0,'to':3000},'text':'Dois monossacarídeos, dissacarídeos.'},
+          {'offsets':{'from':3000,'to':6000},'text':'Vários monossacarídeos, polissacarídeos.'},
+          {'offsets':{'from':6000,'to':9000},'text':'Vários monossacarídeos, polissacarídeos.'},
+          {'offsets':{'from':9000,'to':30000},'text':'Separa pela função os polissacarídeos.'}]
+    def run(cmd,**kwargs):
+        calls.append(cmd)
+        if cmd[0]=='rclone':Path(cmd[3]).write_bytes(b'fakevideo')
+        elif cmd[0]=='ffprobe':return SimpleNamespace(stdout=json.dumps({'format':{'duration':'30'}}),stderr='')
+        elif cmd[0]=='ffmpeg' and cmd[-1].endswith('.wav'):Path(cmd[-1]).write_bytes(b'fakewav')
+        elif cmd[0]==str(cfg.binary):
+            prefix=cmd[cmd.index('-of')+1]
+            if prefix.endswith('verify'):
+                text=decoded.pop(0)
+                payload={'transcription':[{'offsets':{'from':0,'to':2000},'text':text}] if text else []}
+            else:payload={'transcription':rows}
+            Path(prefix+'.json').write_text(json.dumps(payload))
+        return SimpleNamespace(stdout='',stderr='')
+    return run
+
+
+@pytest.mark.parametrize('decoded,expected',[
+    (['Vários monossacarídeos, polissacarídeos.','Vários monossacarídeos. Polissacarídeos.'],'validated'),
+    # The second window does not hear the phrase: possible decoder duplicate.
+    (['Vários monossacarídeos, polissacarídeos.','Separa pela função.'],'review'),
+    (['Vários monossacarídeos, polissacarídeos.',''],'review'),
+])
+def test_isolated_repetition_needs_independent_acoustic_confirmation(tmp_path,decoded,expected):
+    from fo_hub.worker import Worker
+    store,lesson,cfg=setup(tmp_path)
+    calls=[]
+    w=Worker(cfg,store=store,runner=_repetition_run(cfg,list(decoded),calls),gate_fn=lambda:{'allowed':True},free_bytes=lambda:20*1024**3)
+    store.conn.execute('insert into lesson_video_sources values(?,?,?,?,?,?)',(lesson['lesson_id'],'onedrive:Federal Online/a.mp4','1',9,1,'now'));store.conn.commit()
+    assert w.run_once()['state']==expected
+    verify=[c for c in calls if c[0]=='ffmpeg' and c[-1].endswith('verify.wav')]
+    # Each window is bounded by the other occurrence: never hears both.
+    assert [(float(c[c.index('-ss')+1]),round(float(c[c.index('-ss')+1])+float(c[c.index('-t')+1]),3)) for c in verify]==[(3.0,6.0),(6.0,9.0)]
+    assert all('-mc' in c and c[c.index('-mc')+1]==str(cfg.max_context) for c in calls if c[0]==str(cfg.binary))
+    folder='private' if expected=='validated' else 'review'
+    artifact=json.loads(gzip.decompress(next((tmp_path/'transcripts'/folder).rglob('*.json.gz')).read_bytes()))
+    # Text is never removed, whatever the outcome.
+    assert [s['text'] for s in artifact['segments']].count('Vários monossacarídeos, polissacarídeos.')==2
+    checks=[o for o in artifact['qa']['observations'] if o['kind']=='acoustic_repetition_check']
+    assert len(checks)==1 and checks[0]['confirmed']==(expected=='validated')
+    assert not list((tmp_path/'tmp/transcription').glob('*'))
+
+
+def test_repetition_runs_and_overlaps_are_never_acoustically_waived():
+    from fo_hub.worker import confirmable_repetitions
+    seg=lambda a,b,t:{'start':a,'end':b,'text':t}
+    loop=[seg(0,1,'Placentário.'),seg(1,2,'Placentário.'),seg(2,3,'Placentário.')]
+    qa={'flags':[{'kind':'duplicate_segment','idx':1,'origin':'stitched_text'},{'kind':'duplicate_segment','idx':2,'origin':'stitched_text'}]}
+    assert confirmable_repetitions(loop,qa)==[]
+    overlap=[seg(0,3,'a função renal'),seg(2,4,'a função renal')]
+    assert confirmable_repetitions(overlap,{'flags':[{'kind':'duplicate_segment','idx':1,'origin':'stitched_text'}]})==[]
+    many=[s for k in range(10) for s in (seg(10*k,10*k+1,f'frase {k}'),seg(10*k+2,10*k+3,f'frase {k}'))]
+    flags=[{'kind':'duplicate_segment','idx':2*k+1,'origin':'stitched_text'} for k in range(10)]
+    assert confirmable_repetitions(many,{'flags':flags})==[]
+    assert confirmable_repetitions(many,{'flags':flags[:2]})==[1,3]
+
+
+def test_heard_at_requires_contiguous_phrase_inside_target_occurrence():
+    from fo_hub.worker import _heard_at,_verify_tokens
+    want=_verify_tokens('aumenta a pressão')
+    target={'start':10.0,'end':12.0}
+    row=lambda a,b,t:{'start':a,'end':b,'text':t}
+    assert _heard_at(want,[row(10.1,11.9,'Aumenta a pressão.')],target)
+    # Words present but interleaved: not the phrase.
+    assert not _heard_at(want,[row(10,12,'aumenta muito a pressão')],target)
+    # Phrase only in the padding neighbour, not at the flagged occurrence.
+    assert not _heard_at(want,[row(8.0,9.5,'aumenta a pressão'),row(10,12,'outra coisa')],target)
+    # Ambiguous: heard twice inside one window.
+    assert not _heard_at(want,[row(10,11,'aumenta a pressão'),row(11,12,'aumenta a pressão')],target)
+
+
+def test_single_word_repetition_is_never_acoustically_waived():
+    from fo_hub.worker import confirmable_repetitions
+    seg=lambda a,b,t:{'start':a,'end':b,'text':t}
+    rows=[seg(0,1,'Né?'),seg(2,3,'Né?')]
+    assert confirmable_repetitions(rows,{'flags':[{'kind':'duplicate_segment','idx':1,'origin':'stitched_text'}]})==[]

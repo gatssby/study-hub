@@ -178,6 +178,54 @@ def silence_intervals(log,duration):
     return intervals
 
 
+def decoder_command(cfg,audio,prefix):
+    command=[cfg.binary,'-m',cfg.model,'-f',audio,'-l','pt','-t',str(cfg.threads),'-bs',str(cfg.beam_size),'-bo','5','-mc',str(cfg.max_context),'-tp','0','-tpi','0.2' if cfg.temperature_fallback else '0','-nth','0.6','-et','2.4','-lpt','-1','-ng','-ojf','-of',prefix]
+    if not cfg.temperature_fallback:command.append('-nf')
+    return command
+
+
+_VERIFY_TOKEN=re.compile(r'[+−-]?\d+(?:[.,]\d+)?|\w[\w\u0300-\u036f]*',re.UNICODE)
+REPETITION_VERIFY_MAX=8
+REPETITION_VERIFY_WINDOW_S=2.6
+
+
+def _verify_tokens(text):
+    import unicodedata
+    return _VERIFY_TOKEN.findall(unicodedata.normalize('NFC',text).casefold())
+
+
+def _heard_at(wanted,rows,target,tolerance=0.3):
+    """Exactly one contiguous occurrence of ``wanted`` whose decoder rows
+    overlap the target occurrence's own time span (absolute seconds)."""
+    tokens=[(w,i) for i,row in enumerate(rows) for w in _verify_tokens(row['text'])]
+    words=[w for w,_ in tokens];n=len(wanted)
+    hits=[p for p in range(len(words)-n+1) if words[p:p+n]==wanted]
+    if len(hits)!=1:return False
+    used={tokens[k][1] for k in range(hits[0],hits[0]+n)}
+    start=min(rows[i]['start'] for i in used);end=max(rows[i]['end'] for i in used)
+    return start<target['end']+tolerance and end>target['start']-tolerance
+
+
+def confirmable_repetitions(segments,qa,limit=REPETITION_VERIFY_MAX):
+    """Isolated adjacent exact repeats that an acoustic check may confirm.
+
+    Runs of three or more identical rows are loop candidates and never
+    eligible; neither are overlapping rows (not separately audible) nor
+    lessons with more candidates than ``limit`` (systematic decoder issue).
+    """
+    def norm(i):return segments[i]['text'].strip().casefold()
+    pairs=[]
+    for flag in qa['flags']:
+        if flag['kind']!='duplicate_segment' or flag.get('origin')!='stitched_text':continue
+        i=flag['idx']
+        # Single words/fillers ("Né?") cannot be located reliably: stay in review.
+        if not 1<=i<len(segments) or len(_verify_tokens(segments[i]['text']))<2:return []
+        if (i+1<len(segments) and norm(i+1)==norm(i)) or (i>=2 and norm(i-2)==norm(i)):return []
+        if segments[i]['start']<segments[i-1]['end']-0.05:return []
+        pairs.append(i)
+    return pairs if len(pairs)<=limit else []
+
+
 def reconcile_silent_gaps(qa,segments,chunks,duration):
     intervals=sorted((c['offset_s']+start,c['offset_s']+end)
                      for c in chunks for start,end in c['silence'])
@@ -379,8 +427,7 @@ class Worker:
                 if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
                 self.command(['ffmpeg','-nostdin','-y','-threads','1','-ss',str(offset),'-i',video,'-t',str(length),'-ar','16000','-ac','1','-c:a','pcm_s16le','-threads','1',audio])
                 silence=self.command(['ffmpeg','-nostdin','-threads','1','-i',audio,'-af','silencedetect=noise=-40dB:d=1','-f','null','-'])
-                command=[cfg.binary,'-m',cfg.model,'-f',audio,'-l','pt','-t',str(cfg.threads),'-bs',str(cfg.beam_size),'-bo','5','-mc',str(cfg.max_context),'-tp','0','-tpi','0.2' if cfg.temperature_fallback else '0','-nth','0.6','-et','2.4','-lpt','-1','-ng','-ojf','-of',prefix]
-                if not cfg.temperature_fallback:command.append('-nf')
+                command=decoder_command(cfg,audio,prefix)
                 decode_started=time.monotonic()
                 decoded=None;failure=None;raw_text=None
                 try:
@@ -445,6 +492,7 @@ class Worker:
         qa['flags'].extend({**flag,'origin':'stitching'} for flag in stitched['flags'])
         qa['flags'].extend(raw_flags)
         qa['flags'].extend(acoustic_flags)
+        self.verify_repetitions(video,work,segments,qa,chunks)
         if not segments:qa['flags'].append({'kind':'empty_output'})
         if cfg.review_only:qa['flags'].append({'kind':'pilot_manual_review_required','start':0,'end':duration})
         qa['passed']=not qa['flags'];qa['metrics']['flag_count']=len(qa['flags'])
@@ -452,7 +500,7 @@ class Worker:
         if any(latest[k]!=source[k] for k in ('remote_path','revision','size','available')):raise SourceChanged('source changed during inference')
         artifact={'lesson_id':job['lesson_id'],'version':job['version'],'model':'whisper-large-v3','model_path':str(cfg.model),'runtime_path':str(cfg.binary),**provenance,'source_size':size,'source_sha256':source_sha256,'source_revision':source['revision'],'source_remote_path':source['remote_path'],'duration_s':duration,'created_at':time.time(),'elapsed_s':time.time()-started,'corpus':ACCEPTED_CORPUS,'qa':qa,'chunks':chunks,'segments':segments,'stitching':stitched.get('decisions',[])}
         status='validated' if qa['passed'] else 'review'
-        artifact['qa_policy_version']=2
+        artifact['qa_policy_version']=3
         path=cfg.state/'transcripts'/('private' if qa['passed'] else 'review')/job['lesson_id']/f"v{job['version']}.json.gz"
         atomic_json(path,artifact)
         if qa['passed']:
@@ -472,6 +520,55 @@ class Worker:
                     start=max(0,float(flag.get('start',seg['start']))-2);end=min(duration,float(flag.get('end',seg['end']))+2)
                     self.c.execute("INSERT OR IGNORE INTO focused_reviews VALUES(?,?,?,?,?,'pending_manual_review')",(job['lesson_id'],job['version'],start,end,flag['kind']))
         return status
+
+    def verify_repetitions(self,video,work,segments,qa,chunks):
+        """Resolve isolated duplicate rows only with independent acoustic proof.
+
+        Each occurrence is re-decoded alone, without context, in a window that
+        never reaches the other occurrence. Only when BOTH windows hear every
+        word of the phrase is the pair recorded as a confirmed repetition and
+        its duplicate flags (stitched and decoder origin) moved to
+        observations. Text is never removed; anything else stays flagged.
+        """
+        pairs=confirmable_repetitions(segments,qa)
+        if not pairs:return
+        cfg=self.cfg;confirmed=[]
+        qa.setdefault('observations',[])
+        for i in pairs:
+            first,second=segments[i-1],segments[i]
+            wanted=_verify_tokens(second['text'])
+            heard=[]
+            for row,low,high in ((first,0.0,second['start']),(second,first['end'],float('inf'))):
+                pad=max(0.0,(REPETITION_VERIFY_WINDOW_S-(row['end']-row['start']))/2)
+                start=max(low,row['start']-pad,0.0);end=min(high,row['end']+pad)
+                if end-start<0.3:heard.append(None);continue
+                if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
+                audio=work/'verify.wav';prefix=work/'verify'
+                self.command(['ffmpeg','-nostdin','-y','-threads','1','-ss',f'{start:.3f}','-i',video,'-t',f'{end-start:.3f}','-ar','16000','-ac','1','-c:a','pcm_s16le','-threads','1',audio])
+                self.command(decoder_command(cfg,audio,prefix),timeout=3600)
+                rows=parse_whisper(json.loads(prefix.with_suffix('.json').read_text()),offset=start)
+                audio.unlink(missing_ok=True);prefix.with_suffix('.json').unlink(missing_ok=True)
+                heard.append({'start':start,'end':end,'rows':rows,
+                              'located':_heard_at(wanted,rows,row)})
+            ok=all(h is not None and h['located'] for h in heard)
+            qa['observations'].append({'kind':'acoustic_repetition_check','idx':i,'confirmed':ok,
+                                       'phrase':second['text'],'windows':heard,'config':'isolated_no_context'})
+            if ok:confirmed.append(i)
+        def same(a,b):
+            return (a['text'].strip().casefold()==b['text'].strip().casefold()
+                    and abs(a['start']-b['start'])<=0.3 and abs(a['end']-b['end'])<=0.3)
+        def covered(flag):
+            if flag['kind']!='duplicate_segment':return False
+            if flag.get('origin')=='stitched_text':return flag['idx'] in confirmed
+            if flag.get('origin')=='decoder':
+                # Only the decoder pair whose BOTH original rows are the
+                # verified occurrences (text and time); anything else stays.
+                try:rows=chunks[flag['chunk_idx']]['segments'];j=flag['idx']
+                except (KeyError,IndexError,TypeError):return False
+                if not 1<=j<len(rows):return False
+                return any(same(rows[j-1],segments[i-1]) and same(rows[j],segments[i]) for i in confirmed)
+            return False
+        qa['flags']=[f for f in qa['flags'] if not covered(f)]
 
     def complete_aliases(self,job,status):
         # Compare against the leased identity, not a newly discovered object.
