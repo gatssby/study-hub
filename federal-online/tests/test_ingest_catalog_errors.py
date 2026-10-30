@@ -114,3 +114,32 @@ def test_ok_observation_without_stream_url_never_erases_known_media(tmp_path):
     ingest(state, db, index_pdfs=False)
     assert store.conn.execute("SELECT version,video_url FROM lessons").fetchone()[:] == (2, None)
     store.conn.close()
+
+
+def test_lesson_already_degraded_by_blind_pass_recovers_last_known_url(tmp_path):
+    """Production state: an older ingest minted v2 without URL. The next ingest
+    must restore the URL-bearing media (same duration) instead of leaving the
+    lesson without source forever; a real duration change must not be undone."""
+    state = tmp_path / "state"
+    (state / "catalog").mkdir(parents=True)
+    good = entry(C26, "ok", "42")
+    good.update(video_stream_url="https://example.invalid/valid.m3u8", duracao_segundos=600)
+    db = tmp_path / "hub.sqlite3"
+    (state / "catalog/aulas_index.json").write_text(json.dumps({"aulas": [good]}))
+    ingest(state, db, index_pdfs=False)
+    store = FOStore(db)
+    lid = store.conn.execute("SELECT lesson_id,course_id,media_id,item_id,subject,front,module,title FROM lessons").fetchone()
+    row = {k: lid[k] for k in ("course_id", "media_id", "item_id", "subject", "front", "module", "title")}
+    # Simulate the legacy degradation directly in the store.
+    store.sync_lessons([{**row, "media_type": "video", "video_url": None, "duration_s": 600}], authoritative=False)
+    assert store.conn.execute("SELECT version,video_url FROM lessons").fetchone()[:] == (2, None)
+    blind = {**good, "video_stream_url": None}
+    (state / "catalog/aulas_index.json").write_text(json.dumps({"aulas": [blind]}))
+    ingest(state, db, index_pdfs=False)
+    assert store.conn.execute("SELECT video_url FROM lessons").fetchone()[0] == "https://example.invalid/valid.m3u8"
+    # Degraded with a different duration: never restored.
+    store.sync_lessons([{**row, "media_type": "video", "video_url": None, "duration_s": 700}], authoritative=False)
+    (state / "catalog/aulas_index.json").write_text(json.dumps({"aulas": [{**blind, "duracao_segundos": 700}]}))
+    ingest(state, db, index_pdfs=False)
+    assert store.conn.execute("SELECT video_url,duration_s FROM lessons").fetchone()[:] == (None, 700)
+    store.conn.close()

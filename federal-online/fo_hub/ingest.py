@@ -137,9 +137,19 @@ def ingest(state,db_path,index_pdfs=True):
         # Same rule against the DB: a missing URL with unchanged duration keeps
         # the last known URL instead of minting a media revision without one.
         if row['media_type']=='video' and not row['video_url']:
-            known=c.execute('SELECT video_url,duration_s FROM lessons WHERE lesson_id=?',
-                            (lesson_id_for(row['course_id'],row['media_id'],row['item_id']),)).fetchone()
-            if known and known['video_url'] and known['duration_s']==(float(row['duration_s']) if row['duration_s'] not in (None,'') else None):
+            lid=lesson_id_for(row['course_id'],row['media_id'],row['item_id'])
+            duration=float(row['duration_s']) if row['duration_s'] not in (None,'') else None
+            known=c.execute('SELECT video_url,duration_s FROM lessons WHERE lesson_id=?',(lid,)).fetchone()
+            if known and not known['video_url'] and known['duration_s']==duration:
+                # Already degraded by an earlier blind pass: recover the last
+                # URL-bearing revision, only if nothing but the URL changed since.
+                known=c.execute('SELECT video_url,duration_s FROM lesson_revisions WHERE lesson_id=? '
+                                'AND video_url IS NOT NULL ORDER BY version DESC,id DESC LIMIT 1',(lid,)).fetchone()
+                later=known and c.execute('SELECT COUNT(*) FROM lesson_revisions WHERE lesson_id=? AND video_url IS NULL '
+                                          'AND (duration_s IS NOT ? ) AND id>(SELECT MAX(id) FROM lesson_revisions '
+                                          'WHERE lesson_id=? AND video_url IS NOT NULL)',(lid,duration,lid)).fetchone()[0]
+                if later:known=None
+            if known and known['video_url'] and known['duration_s']==duration:
                 row['video_url']=known['video_url']
     summary=store.sync_lessons(rows,authoritative=False) if rows else {'created':0}
     queue=TranscriptionQueue(store)
