@@ -19,10 +19,11 @@ import re
 import shutil
 import socket
 import sqlite3
-from contextlib import closing
+from contextlib import closing, contextmanager
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 import zlib
@@ -32,6 +33,7 @@ from .scheduler import choose, discipline, discipline_key
 from .transcription import AUTH_PHRASE, DEFAULT_AUTH_FILE, DEFAULT_PLATFORM_MARKER, TranscriptionQueue, qa_segments
 
 RESERVE=4*1024**3
+HEARTBEAT_INTERVAL_S=60
 MODEL_SHA256='64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2'
 
 
@@ -84,7 +86,7 @@ class Config:
                    Path(os.environ.get('STUDY_HUB_FO_TRANSCRIPTION_AUTH',DEFAULT_AUTH_FILE)),
                    Path(os.environ.get('STUDY_HUB_FO_PLATFORM_MARKER',DEFAULT_PLATFORM_MARKER)))
         config.model_sha256=MODEL_SHA256
-        config.max_context=int(os.environ.get('FO_ASR_MAX_CONTEXT','-1'))
+        config.max_context=int(os.environ.get('FO_ASR_MAX_CONTEXT','0'))
         config.threads=int(os.environ.get('FO_ASR_THREADS','3'))
         config.beam_size=int(os.environ.get('FO_ASR_BEAM_SIZE','5'))
         config.temperature_fallback=os.environ.get('FO_ASR_TEMPERATURE_FALLBACK','false').lower()=='true'
@@ -375,6 +377,34 @@ class Worker:
         # Raw stderr/command arguments stay private; no signed URLs in logs.
         return self.runner([str(x) for x in cmd],check=True,capture_output=True,text=True,timeout=timeout)
 
+    @contextmanager
+    def heartbeat(self,job):
+        """Renew only our live lease while a long decoder/download is running.
+
+        Use a separate bounded SQLite connection, never the main thread's
+        connection. A busy DB cannot trap shutdown or steal another owner.
+        Chunk progress remains the last durable checkpoint, not fabricated work.
+        """
+        stopped=threading.Event()
+        def renew():
+            while not stopped.wait(HEARTBEAT_INTERVAL_S):
+                try:
+                    with closing(sqlite3.connect(str(self.cfg.db),timeout=1)) as connection:
+                        now=time.time()
+                        with connection:
+                            connection.execute("UPDATE transcription_jobs SET lease_until=?,updated_at=? "
+                                               "WHERE lesson_id=? AND version=? AND state='leased' AND lease_owner=?",
+                                               (now+7*86400,str(now),job['lesson_id'],job['version'],self.owner))
+                except (OSError,sqlite3.Error):
+                    # Normal chunk commits still validate ownership and renew.
+                    continue
+        thread=threading.Thread(target=renew,name='fo-lease-heartbeat',daemon=True)
+        thread.start()
+        try:yield
+        finally:
+            stopped.set()
+            thread.join()
+
     def current_source(self,job):
         lesson=self.store.get_lesson(job['lesson_id'])
         source=self.c.execute('SELECT * FROM lesson_video_sources WHERE lesson_id=?',(job['lesson_id'],)).fetchone()
@@ -617,7 +647,7 @@ class Worker:
         if job is None:return {'state':'idle'}
         temp=self.cfg.state/'tmp/transcription';temp.mkdir(parents=True,exist_ok=True)
         try:
-            with tempfile.TemporaryDirectory(prefix='job-',dir=temp) as folder:
+            with self.heartbeat(job), tempfile.TemporaryDirectory(prefix='job-',dir=temp) as folder:
                 (Path(folder)/'.worker-owned').write_text('study-hub-fo-worker')
                 status=self.pipeline(job,Path(folder))
             with self.c:self.c.execute("UPDATE transcription_jobs SET state=?,progress=1,lease_owner=NULL,lease_until=NULL,updated_at=? WHERE lesson_id=? AND version=? AND lease_owner=?",('done' if status=='validated' else 'review',str(time.time()),job['lesson_id'],job['version'],self.owner))

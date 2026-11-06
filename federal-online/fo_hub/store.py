@@ -370,17 +370,27 @@ class FOStore:
                 "AND CASE WHEN json_valid(t.qa_json) THEN "
                 "json_type(t.qa_json,'$.passed')='true' ELSE 0 END" + source_guard)
 
+    @staticmethod
+    def _transcript_citation(lesson_id, title, version, segment=None):
+        citation = {'id': lesson_id, 'name': title, 'version': version}
+        if segment is not None:
+            citation.update(segment=segment['idx'], start_s=segment['start'], end_s=segment['end'])
+        return citation
+
     def get_transcript(self, lesson_id: str) -> dict | None:
         t = self.conn.execute(
-            f"SELECT t.* FROM transcripts t {self._CURRENT} WHERE t.lesson_id=?",
+            f"SELECT t.*,l.title FROM transcripts t {self._CURRENT} WHERE t.lesson_id=?",
             (lesson_id,)).fetchone()
         if t is None:
             return None
         segs = [dict(r) for r in self.conn.execute(
             "SELECT idx,start,end,text FROM transcript_segments WHERE lesson_id=? AND version=? "
             "ORDER BY idx", (lesson_id, t["version"]))]
+        for segment in segs:
+            segment['citation'] = self._transcript_citation(lesson_id, t['title'], t['version'], segment)
         return {"lesson_id": lesson_id, "version": t["version"], "model": t["model"],
-                "qa": json.loads(t["qa_json"] or "{}"), "segments": segs}
+                "qa": json.loads(t["qa_json"] or "{}"), "segments": segs,
+                "citation": self._transcript_citation(lesson_id, t['title'], t['version'])}
 
     def search_transcripts(self, query: str, subject: str | None = None,
                            limit: int = 50) -> list[dict]:
@@ -393,7 +403,12 @@ class FOStore:
             sql += " AND l.subject = ? COLLATE NOCASE"
             args.append(subject)
         sql += " ORDER BY l.title, s.idx LIMIT ?"
-        return [dict(r) for r in self.conn.execute(sql, (*args, limit))]
+        results = []
+        for row in self.conn.execute(sql, (*args, limit)):
+            item = dict(row)
+            item['citation'] = self._transcript_citation(item['lesson_id'], item['title'], item['version'], item)
+            results.append(item)
+        return results
 
     # ---------- status ----------
     def sync_status(self) -> dict:

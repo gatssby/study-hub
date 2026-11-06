@@ -71,6 +71,9 @@ WantedBy=multi-user.target
     (directory/'study-hub-fo-transcription.service').write_text(f'''[Unit]
 Description=Study Hub transcription - explicit manual authorization required
 After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=900
+StartLimitBurst=3
 ConditionPathExists=/etc/study-hub/fo-transcription.authorized
 ConditionPathExists=/etc/study-hub/fo-vps.marker
 [Service]
@@ -81,8 +84,10 @@ EnvironmentFile=/home/ubuntu/.config/study-hub/transcription.env
 Environment=PYTHONUNBUFFERED=1
 ExecStart={PY} -m fo_hub.worker --run --loop
 Restart=on-failure
-RestartPreventExitStatus=3
+RestartPreventExitStatus=3 5
 RestartSec=60
+TimeoutStopSec=90
+KillMode=control-group
 CPUQuota=300%
 MemoryMax=12G
 TasksMax=128
