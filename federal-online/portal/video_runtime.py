@@ -79,6 +79,8 @@ def discard_recoverable_partial(tmp_dir: Path, key: str, logger: core.Logger, re
 def rows_from_catalog():
     paths = sorted((STATE/'catalog').rglob('aulas_index*.json'))
     paths += sorted((STATE/'catalogs').rglob('aulas_index*.json'))
+    # Only published observations may schedule a download/upload.
+    paths = [p for p in paths if not any(part.startswith('.') for part in p.relative_to(STATE).parts)]
     by_id = {}
     for path in paths:
         data=json.loads(path.read_text())

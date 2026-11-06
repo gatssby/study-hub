@@ -75,7 +75,7 @@ class Config:
     beam_size:int=5
     temperature_fallback:bool=False
     review_only:bool=False
-    max_context:int=-1
+    max_context:int=0
 
     @classmethod
     def from_env(cls):

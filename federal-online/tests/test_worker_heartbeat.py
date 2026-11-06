@@ -10,6 +10,10 @@ def test_default_runtime_uses_homologated_no_context(monkeypatch):
     assert Config.from_env().max_context == 0
 
 
+def test_direct_config_has_the_same_safe_context_default(tmp_path):
+    assert Config(tmp_path, tmp_path/'test.db', tmp_path/'binary', tmp_path/'model').max_context == 0
+
+
 def test_long_pipeline_renews_owned_lease_before_first_chunk(tmp_path, monkeypatch):
     import fo_hub.worker as module
     monkeypatch.setattr(module, 'HEARTBEAT_INTERVAL_S', 0.02, raising=False)

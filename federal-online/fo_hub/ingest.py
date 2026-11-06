@@ -115,6 +115,9 @@ def ingest(state,db_path,index_pdfs=True):
     candidates={}
     paths=sorted((state/'catalog').rglob('aulas_index*.json'))
     paths+=sorted((state/'catalogs').rglob('aulas_index*.json'))
+    # Atomic publishers build beside the live file. Never ingest an unfinished
+    # hidden generation, even when it contains syntactically valid JSON.
+    paths=[p for p in paths if not any(part.startswith('.') for part in p.relative_to(state).parts)]
     # Also accept dynamic runner per-course output below catalog/.
     for path in paths:
         payload=read_json(path,{})
