@@ -140,6 +140,14 @@ class SessionExpiredDuringCollection(RuntimeError):
     pass
 
 
+class CollectedEntries(list):
+    """List-compatible observations with explicit traversal/empty evidence."""
+    def __init__(self, entries=(), *, traversal_errors=(), empty_evidence=None):
+        super().__init__(entries)
+        self.traversal_errors = list(traversal_errors)
+        self.empty_evidence = empty_evidence
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Coleta e normaliza o indice semanal de videoaulas do Federal Online."
@@ -984,7 +992,9 @@ def extract_item_info(item: Any) -> dict[str, str | None]:
 
             const rawText = (el.innerText || '').replace(/\\s+/g, ' ').trim();
             const clickedText = rawText.replace(/^Marcar como visto\\s*/i, '').trim();
-            const clickable = el.matches('[onclick]') ? el : el.querySelector('[onclick]');
+            // A seen-checkbox must not hide a sibling media action.
+            const clickable = el.matches('[onclick*="openMedia4"]')
+                ? el : el.querySelector('[onclick*="openMedia4"]');
             const onclick = clickable?.getAttribute('onclick') || el.getAttribute('onclick') || '';
             const parsed = parseOpenMedia4(onclick);
             const videoNode = el.querySelector('[data-video]') || clickable?.querySelector('[data-video]');
@@ -1017,6 +1027,28 @@ def extract_item_info(item: Any) -> dict[str, str | None]:
         }
         """
     )
+
+
+def empty_catalog_evidence(root: Any) -> dict:
+    """Prove no native video from a nonempty, fully classified item tree.
+
+    U/D/A remain links/documents/actions, not unavailable videos. This does
+    not certify the contents behind external links.
+    """
+    nodes = root.locator('.body-list li')
+    counts, seen, unknown = Counter(), set(), 0
+    for idx in range(nodes.count()):
+        item = extract_item_info(nodes.nth(idx))
+        key, kind = item.get('itemId'), item.get('mediaType')
+        if not key or kind not in {'V', 'U', 'D', 'A'}:
+            unknown += 1
+            continue
+        if key not in seen:
+            counts[kind] += 1
+            seen.add(key)
+    return {'verified_no_native_video': bool(seen) and not unknown and not counts.get('V'),
+            'media_type_counts': dict(counts), 'unknown_items': unknown,
+            'scope': 'native_portal_video_items_only'}
 
 
 def wait_for_selected_video(
@@ -1308,7 +1340,10 @@ def walk_cards(
     seen_keys: set[tuple[str, str]],
     checkpoint_writer: Any,
     limit: int | None,
+    traversal_errors: list | None = None,
 ) -> bool:
+    if traversal_errors is None:
+        traversal_errors = []
     path_label = " > ".join(breadcrumbs) if breadcrumbs else "(raiz)"
     try:
         wait_for_child_cards_stable(page, container, logger, path_label)
@@ -1319,6 +1354,7 @@ def walk_cards(
             ) from exc
         if should_tolerate_branch_exception(path_label, exc):
             log_tolerated_branch_timeout(logger, path_label, "listar_blocos", exc)
+            traversal_errors.append({'phase': 'list_cards', 'error_type': type(exc).__name__})
             return False
         raise
 
@@ -1344,6 +1380,7 @@ def walk_cards(
                     f"Redirecionado para login ao abrir bloco {path_label}."
                 ) from exc
             logger.log(f"[warn] bloco ignorado path={path_label} detalhe={summarize_exception(exc)}")
+            traversal_errors.append({'phase': 'expand_card', 'error_type': type(exc).__name__})
             continue
 
         if path_filter_allows_collect(path_label, path_filters):
@@ -1367,6 +1404,7 @@ def walk_cards(
                     ) from exc
                 if should_tolerate_branch_exception(path_label, exc):
                     log_tolerated_branch_timeout(logger, path_label, "coletar_videos", exc)
+                    traversal_errors.append({'phase': 'collect_items', 'error_type': type(exc).__name__})
                     continue
                 raise
             if should_stop:
@@ -1385,6 +1423,7 @@ def walk_cards(
                 seen_keys=seen_keys,
                 checkpoint_writer=checkpoint_writer,
                 limit=limit,
+                traversal_errors=traversal_errors,
             )
         except Exception as exc:
             if page_requires_login(page):
@@ -1393,6 +1432,7 @@ def walk_cards(
                 ) from exc
             if should_tolerate_branch_exception(path_label, exc):
                 log_tolerated_branch_timeout(logger, path_label, "percorrer_subblocos", exc)
+                traversal_errors.append({'phase': 'walk_children', 'error_type': type(exc).__name__})
                 continue
             raise
         if should_stop:
@@ -1692,6 +1732,7 @@ def collect_index(
             return entries
 
         session_refreshes = 0
+        traversal_errors = []
         while True:
             try:
                 root = resolve_collection_root(page, config, logger)
@@ -1707,6 +1748,7 @@ def collect_index(
                     seen_keys=seen_keys,
                     checkpoint_writer=checkpoint_writer,
                     limit=args.limit,
+                    traversal_errors=traversal_errors,
                 )
                 break
             except SessionExpiredDuringCollection as exc:
@@ -1729,7 +1771,8 @@ def collect_index(
                     "[auth] coleta sera retomada do inicio da arvore; "
                     f"entradas_ja_coletadas={len(entries)}"
                 )
-        return entries
+        proof = empty_catalog_evidence(root) if not entries and not traversal_errors else None
+        return CollectedEntries(entries, traversal_errors=traversal_errors, empty_evidence=proof)
     finally:
         # A disconnected/crashed context may raise on close. Still release the
         # browser and driver, without masking the original collection failure.

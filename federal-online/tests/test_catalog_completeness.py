@@ -64,3 +64,25 @@ def test_auth_expired_course_does_not_advance_last_ok_or_remove_checkpoint(tmp_p
     assert after['status'] == 'error' and after['last_ok_at'] == old
     assert cp.read_text() == 'durable synthetic checkpoint'
 
+
+def test_empty_native_catalog_needs_structural_evidence(tmp_path):
+    args = ns(tmp_path, 'catalog')
+    proof = {'verified_no_native_video': True, 'media_type_counts': {'D': 4, 'U': 5, 'A': 2},
+             'unknown_items': 0, 'scope': 'native_portal_video_items_only'}
+    result = collector.CollectedEntries([], empty_evidence=proof)
+    assert runtime.catalog(args, discover=lambda: [C26], collect=lambda *a: result, log=lambda _: None) == 0
+    course = json.loads(runtime.Paths(tmp_path).courses_json.read_text())['courses'][0]
+    assert course['status'] == 'ok'
+    assert course['last_summary']['empty_verified'] is True
+
+
+def test_skipped_branch_cannot_claim_full_course_success(tmp_path):
+    args = ns(tmp_path, 'catalog')
+    rows = collector.CollectedEntries([entry(C26, 'ok', 'one')],
+                                      traversal_errors=[{'phase':'expand_card','error_type':'TimeoutError'}])
+    assert runtime.catalog(args, discover=lambda: [C26], collect=lambda *a: rows, log=lambda _: None) == 1
+    course = json.loads(runtime.Paths(tmp_path).courses_json.read_text())['courses'][0]
+    assert course['status'] == 'incomplete'
+    assert 'last_ok_at' not in course
+    assert course['last_summary']['traversal_errors'] == 1
+

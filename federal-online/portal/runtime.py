@@ -200,6 +200,10 @@ def run_catalog_course(
     checkpoint = out / collector.CHECKPOINT_FILENAME
     resume = mode != "weekly" or checkpoint.exists()
     entries = collect(course, checkpoint, resume)
+    traversal_errors = getattr(entries, 'traversal_errors', [])
+    empty_evidence = getattr(entries, 'empty_evidence', None)
+    empty_verified = (not limited and not traversal_errors and isinstance(empty_evidence, dict)
+                      and empty_evidence.get('verified_no_native_video') is True)
     pending, _ = collector.load_checkpoint(
         checkpoint, course_url=course["url"], path_filters=[],
         logger=_Log(lambda _: None), resume_enabled=True)
@@ -220,13 +224,15 @@ def run_catalog_course(
         "total": len(entries),
         "status_counts": status_counts,
         "aulas": entries,
+        "collection_evidence": {"traversal_errors": traversal_errors, "empty": empty_evidence},
     }
     # An empty observation cannot retire a previously published catalog.
     # Preserve the previous valid artifact for ingest while the registry reports
     # this attempted traversal as incomplete and keeps its checkpoint.
     previous = read_json(out / "aulas_index.json", {})
     if not entries and previous.get("aulas"):
-        return {"total": 0, "status_counts": {}, "unknown_branches": 0}
+        return {"total": 0, "status_counts": {}, "unknown_branches": 0,
+                "traversal_errors": len(traversal_errors), "empty_verified": False}
     build = out / f"{collector.BUILD_PREFIX}{os.getpid()}"
     if build.exists():
         import shutil
@@ -238,9 +244,10 @@ def run_catalog_course(
     atomic_write_json(out / "branches.json", {"generated_at": at, "unknown_branches": branches})
     # No error rows is not proof of traversal completeness. Empty portal
     # pages and explicitly bounded collectors require another observation.
-    if entries and not limited and not status_counts.get("error", 0):
+    if (entries or empty_verified) and not limited and not traversal_errors and not status_counts.get("error", 0):
         checkpoint.unlink(missing_ok=True)
-    return {"total": len(entries), "status_counts": status_counts, "unknown_branches": len(branches)}
+    return {"total": len(entries), "status_counts": status_counts, "unknown_branches": len(branches),
+            "traversal_errors": len(traversal_errors), "empty_verified": empty_verified}
 
 
 def catalog(args: argparse.Namespace, *, discover: Callable[[], list[dict[str, str]]] | None = None,
@@ -272,9 +279,10 @@ def catalog(args: argparse.Namespace, *, discover: Callable[[], list[dict[str, s
                         update = {"status": "error", "last_summary": summary,
                                   "last_error": f"catalog item errors: {errors}; checkpoint preserved"}
                         log(f"[catalog] curso={course['course_id']} parcial: {errors} erros")
-                    elif limited or summary["total"] == 0:
+                    elif limited or summary.get('traversal_errors') or (summary["total"] == 0 and not summary.get('empty_verified')):
                         failures += 1
-                        reason = "bounded collector" if limited else "empty catalog not independently verified"
+                        reason = ("bounded collector" if limited else "incomplete branch traversal"
+                                  if summary.get('traversal_errors') else "empty catalog not independently verified")
                         update = {"status": "incomplete", "last_summary": summary, "last_error": reason}
                         log(f"[catalog] curso={course['course_id']} incompleto: {reason}")
                     else:
