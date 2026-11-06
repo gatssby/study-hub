@@ -190,6 +190,7 @@ def run_catalog_course(
     paths: Paths,
     collect: Callable[[dict[str, Any], Path, bool], list[dict[str, Any]]],
     mode: str,
+    *, limited: bool = False,
 ) -> dict[str, Any]:
     """Collect one course into catalog/courses/<id>/ with a per-course checkpoint."""
     import fo_collect_aulas_index as collector
@@ -220,6 +221,12 @@ def run_catalog_course(
         "status_counts": status_counts,
         "aulas": entries,
     }
+    # An empty observation cannot retire a previously published catalog.
+    # Preserve the previous valid artifact for ingest while the registry reports
+    # this attempted traversal as incomplete and keeps its checkpoint.
+    previous = read_json(out / "aulas_index.json", {})
+    if not entries and previous.get("aulas"):
+        return {"total": 0, "status_counts": {}, "unknown_branches": 0}
     build = out / f"{collector.BUILD_PREFIX}{os.getpid()}"
     if build.exists():
         import shutil
@@ -229,7 +236,9 @@ def run_catalog_course(
     build.rmdir()
     branches = unknown_branches(entries, collector.ACADEMIC_ROOT_AREAS)
     atomic_write_json(out / "branches.json", {"generated_at": at, "unknown_branches": branches})
-    if not status_counts.get("error", 0):
+    # No error rows is not proof of traversal completeness. Empty portal
+    # pages and explicitly bounded collectors require another observation.
+    if entries and not limited and not status_counts.get("error", 0):
         checkpoint.unlink(missing_ok=True)
     return {"total": len(entries), "status_counts": status_counts, "unknown_branches": len(branches)}
 
@@ -255,13 +264,19 @@ def catalog(args: argparse.Namespace, *, discover: Callable[[], list[dict[str, s
             failures = 0
             for course in due:
                 try:
-                    summary = run_catalog_course(course, paths, collect, args.mode)
+                    limited = args.limit is not None
+                    summary = run_catalog_course(course, paths, collect, args.mode, limited=limited)
                     errors = summary["status_counts"].get("error", 0)
                     if errors:
                         failures += 1
                         update = {"status": "error", "last_summary": summary,
                                   "last_error": f"catalog item errors: {errors}; checkpoint preserved"}
                         log(f"[catalog] curso={course['course_id']} parcial: {errors} erros")
+                    elif limited or summary["total"] == 0:
+                        failures += 1
+                        reason = "bounded collector" if limited else "empty catalog not independently verified"
+                        update = {"status": "incomplete", "last_summary": summary, "last_error": reason}
+                        log(f"[catalog] curso={course['course_id']} incompleto: {reason}")
                     else:
                         update = {"status": "ok", "last_ok_at": now_iso(), "last_summary": summary, "last_error": ""}
                 except Exception as exc:  # per-course isolation; checkpoint keeps progress
