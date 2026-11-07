@@ -85,6 +85,7 @@ def rows_from_catalog():
     for path in paths:
         data=json.loads(path.read_text())
         for row in data.get('aulas',[]):
+            if row.get('catalog_observation') == 'retained_previous_not_observed':continue
             if row.get('status')!='ok' or not row.get('video_stream_url'):continue
             row=dict(row,course_url=row.get('course_url') or data.get('course_url',''))
             try:key=identity(row)

@@ -36,3 +36,18 @@ def test_catalog_readers_ignore_unpublished_trees(tmp_path, monkeypatch, root_na
     finally:
         c.close()
     assert len(video_runtime.rows_from_catalog()) == 1
+
+
+@pytest.mark.parametrize('root_name', ['catalog', 'catalogs'])
+def test_retained_previous_rows_are_not_new_observations(tmp_path, monkeypatch, root_name):
+    state = tmp_path/'state';published = state/root_name/'published';published.mkdir(parents=True)
+    row = {'media_id':'42','item_id':'stable','course_url':'https://example.test/produto-pacote/course',
+           'status':'ok','video_stream_url':'https://example.test/video.m3u8','duracao_segundos':100,
+           'catalog_observation':'retained_previous_not_observed'}
+    (published/'aulas_index.json').write_text(json.dumps({'aulas':[row]}))
+    monkeypatch.setattr(video_runtime, 'STATE', state)
+    db=state/'test.sqlite3';ingest(state,db,index_pdfs=False)
+    c=FOStore(db,readonly=True).conn
+    try:assert c.execute('SELECT count(*) FROM lessons').fetchone()[0] == 0
+    finally:c.close()
+    assert video_runtime.rows_from_catalog() == []

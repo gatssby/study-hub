@@ -122,6 +122,7 @@ def ingest(state,db_path,index_pdfs=True):
     for path in paths:
         payload=read_json(path,{})
         for item in payload.get('aulas',[]):
+            if item.get('catalog_observation') == 'retained_previous_not_observed':continue
             # A failed observation is retry evidence, not a media revision.
             # Keep it in the catalog/checkpoint, never overwrite known metadata
             # (or outrank a valid candidate from another catalog) with an error.

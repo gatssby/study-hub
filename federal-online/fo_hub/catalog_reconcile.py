@@ -129,10 +129,15 @@ def reconcile(state_root):
     for path in sorted((state / 'catalog/courses').glob('*/aulas_index.json')):
         payload = read(path, {})
         entries = payload.get('aulas', [])
+        evidence = payload.get('collection_evidence', {})
         cid = path.parent.name
-        current_entries[cid] = entries
+        current_entries[cid] = [x for x in entries if x.get('catalog_observation') != 'retained_previous_not_observed'] + evidence.get('pending_errors', [])
         catalogs.append({'course_id': cid, 'db_course_id': public_course_id(course_key(payload.get('course_url'))), 'course_title': payload.get('course_title'), 'total': len(entries),
                          'status_counts': dict(Counter(x.get('status', 'unknown') for x in entries)),
+                         'observed_total': evidence.get('observed_total', len(entries)),
+                         'observed_status_counts': evidence.get('observed_status_counts', dict(Counter(x.get('status', 'unknown') for x in entries))),
+                         'retained_previous': evidence.get('retained_previous', 0),
+                         'traversal_errors': len(evidence.get('traversal_errors', [])),
                          'generated_at': payload.get('generated_at'),
                          'empty_classification': 'empty_catalog_not_live_verified' if not entries else None})
     historical = []

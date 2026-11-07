@@ -86,3 +86,48 @@ def test_skipped_branch_cannot_claim_full_course_success(tmp_path):
     assert 'last_ok_at' not in course
     assert course['last_summary']['traversal_errors'] == 1
 
+
+@pytest.mark.parametrize('failure', ['limited', 'traversal', 'item_error'])
+def test_nonempty_partial_preserves_known_good_entries_without_faking_observation(tmp_path, failure):
+    paths = runtime.Paths(tmp_path)
+    course = {**C26, 'course_id': runtime.course_id_for(C26['url'])}
+    old = [entry(course, 'ok', item) for item in ('one', 'two')]
+    for row in old:
+        row['video_stream_url'] = 'https://example.test/' + row['item_id'] + '.m3u8'
+    runtime.run_catalog_course(course, paths, lambda *a: old, 'incremental')
+    current = entry(course, 'error' if failure == 'item_error' else 'ok', 'one')
+    if failure != 'item_error': current['video_stream_url'] = old[0]['video_stream_url']
+    rows = collector.CollectedEntries([current], traversal_errors=[{'phase':'expand_card'}] if failure == 'traversal' else [])
+    summary = runtime.run_catalog_course(course, paths, lambda *a: rows, 'incremental', limited=failure == 'limited')
+    payload = json.loads((paths.course_dir(course['course_id'])/'aulas_index.json').read_text())
+    assert summary['total'] == 1
+    assert summary['retained_previous'] == (2 if failure == 'item_error' else 1)
+    assert summary['status_counts'].get('error', 0) == int(failure == 'item_error')
+    by_item = {r['item_id']:r for r in payload['aulas']}
+    assert set(by_item) == {'one','two'}
+    assert by_item['two']['catalog_observation'] == 'retained_previous_not_observed'
+    assert by_item['two']['video_stream_url'] == old[1]['video_stream_url']
+    if failure == 'item_error':
+        assert by_item['one']['video_stream_url'] == old[0]['video_stream_url']
+        assert payload['collection_evidence']['pending_errors'][0]['item_id'] == 'one'
+    # A later complete observation is authoritative for the published artifact,
+    # not an ever-growing union; historical rows remain in the SQLite store.
+    runtime.run_catalog_course(course, paths, lambda *a: [old[0]], 'incremental')
+    assert len(json.loads((paths.course_dir(course['course_id'])/'aulas_index.json').read_text())['aulas']) == 1
+
+
+def test_empty_live_collection_with_checkpoint_errors_cannot_replace_good_catalog(tmp_path):
+    paths = runtime.Paths(tmp_path)
+    course = {**C26, 'course_id':runtime.course_id_for(C26['url'])}
+    runtime.run_catalog_course(course, paths, lambda *a:[entry(course,'ok',item) for item in ('one','two')], 'incremental')
+    cp = paths.course_dir(course['course_id'])/'checkpoint.json'
+    collector.write_checkpoint(cp, course_url=course['url'], path_filters=[], entries=[entry(course,'error','one')],
+                               seen_keys=set(), logger=runtime._Log(lambda _:None))
+    before = cp.read_bytes()
+    summary = runtime.run_catalog_course(course, paths, lambda *a:[], 'incremental')
+    published = json.loads((cp.parent/'aulas_index.json').read_text())
+    assert summary['status_counts'] == {'error':1}
+    assert {row['item_id'] for row in published['aulas']} == {'one','two'}
+    assert all(row['catalog_observation'] == 'retained_previous_not_observed' for row in published['aulas'])
+    assert cp.read_bytes() == before
+

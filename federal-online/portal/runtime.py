@@ -215,6 +215,33 @@ def run_catalog_course(
     from collections import Counter
 
     status_counts = dict(Counter(str(e.get("status") or "") for e in entries))
+    observed_total = len(entries)
+    previous = read_json(out / "aulas_index.json", {})
+    retained_previous = 0
+    pending_errors = []
+    if entries and (limited or traversal_errors or status_counts.get("error", 0)):
+        # Preserve known metadata across a nonempty partial traversal too.
+        # Retained rows are explicitly not observations: consumers must not
+        # resurrect retired identities or download from stale URLs using them.
+        known = {collector.checkpoint_seen_key_from_entry(e): e for e in previous.get("aulas", [])
+                 if e.get("status") != "error" and collector.checkpoint_seen_key_from_entry(e)}
+        published, seen = [], set()
+        for row in entries:
+            key = collector.checkpoint_seen_key_from_entry(row)
+            seen.add(key)
+            if row.get("status") == "error" and key in known:
+                pending_errors.append(row)
+                row = dict(known[key], catalog_observation="retained_previous_not_observed")
+                row.setdefault("retained_from_generated_at", previous.get("generated_at"))
+                retained_previous += 1
+            published.append(row)
+        for key, row in known.items():
+            if key not in seen:
+                row = dict(row, catalog_observation="retained_previous_not_observed")
+                row.setdefault("retained_from_generated_at", previous.get("generated_at"))
+                published.append(row)
+                retained_previous += 1
+        entries = published
     payload = {
         "schema_version": collector.SCHEMA_VERSION,
         "generated_at": at,
@@ -222,14 +249,15 @@ def run_catalog_course(
         "course_title": course.get("title", ""),
         "path_filters": [],
         "total": len(entries),
-        "status_counts": status_counts,
+        "status_counts": dict(Counter(str(e.get("status") or "") for e in entries)),
         "aulas": entries,
-        "collection_evidence": {"traversal_errors": traversal_errors, "empty": empty_evidence},
+        "collection_evidence": {"traversal_errors": traversal_errors, "empty": empty_evidence,
+                                "observed_status_counts": status_counts, "observed_total": observed_total,
+                                "retained_previous": retained_previous, "pending_errors": pending_errors},
     }
     # An empty observation cannot retire a previously published catalog.
     # Preserve the previous valid artifact for ingest while the registry reports
     # this attempted traversal as incomplete and keeps its checkpoint.
-    previous = read_json(out / "aulas_index.json", {})
     if not entries and previous.get("aulas"):
         return {"total": 0, "status_counts": {}, "unknown_branches": 0,
                 "traversal_errors": len(traversal_errors), "empty_verified": False}
@@ -246,7 +274,8 @@ def run_catalog_course(
     # pages and explicitly bounded collectors require another observation.
     if (entries or empty_verified) and not limited and not traversal_errors and not status_counts.get("error", 0):
         checkpoint.unlink(missing_ok=True)
-    return {"total": len(entries), "status_counts": status_counts, "unknown_branches": len(branches),
+    return {"total": observed_total, "published_total": len(entries), "retained_previous": retained_previous,
+            "status_counts": status_counts, "unknown_branches": len(branches),
             "traversal_errors": len(traversal_errors), "empty_verified": empty_verified}
 
 

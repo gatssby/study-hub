@@ -47,7 +47,11 @@ def test_transient_catalog_error_preserves_current_lesson_source_and_job(tmp_pat
         assert after[field] == before[field]
     assert tuple(c.execute("SELECT remote_path,revision,size,available FROM lesson_video_sources WHERE lesson_id=?", (lid,)).fetchone()) == source
     assert [tuple(r) for r in c.execute("SELECT version,state FROM transcription_jobs WHERE lesson_id=?", (lid,))] == jobs
-    assert json.loads((paths.course_dir(course["course_id"]) / "aulas_index.json").read_text())["status_counts"] == {"error": 1}
+    published = json.loads((paths.course_dir(course["course_id"]) / "aulas_index.json").read_text())
+    assert published["collection_evidence"]["observed_status_counts"] == {"error": 1}
+    assert published["collection_evidence"]["pending_errors"][0]["item_id"] == "42"
+    assert published["aulas"][0]["catalog_observation"] == "retained_previous_not_observed"
+    assert published["aulas"][0]["video_stream_url"] == good["video_stream_url"]
 
     revised = {**good, "duracao_segundos": 700}
     publish(revised)
