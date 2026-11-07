@@ -18,20 +18,20 @@ Começar pela **Visão geral operacional** (read-only) e, em seguida, criar Bibl
 - [x] Criar ops/study-hub/fo_monitor.py, dependente apenas de Python e SSH, consulta somente leitura ao FO API, SQLite mode=ro e systemd; atualização periódica.
 - [x] Exibir barras de transcrições aprovadas, progresso da aula corrente e páginas PDF liberadas; mostrar fila, revisões, fontes/objetos, serviços e disco.
 - [x] Não inventar % de download; distinguir fontes, jobs e arquivos físicos.
-- [ ] Incorporar as métricas ao dashboard web, sem acesso SSH direto do navegador.
+- [x] Incorporar as métricas ao dashboard web, sem acesso SSH direto do navegador (Sprint 2).
 
 Comando: cd "$HOME/Workspace/Study Hub" && python3 ops/study-hub/fo_monitor.py --interval 20.
 
-## M1 — Dashboard web operacional (P0; próxima implementação)
+## M1 — Dashboard web operacional (P0; publicado na Sprint 2 em https://study.gatssby.com.br)
 
-- [ ] Aplicação isolada, inicialmente read-only e acessível somente via localhost/túnel SSH; autenticação/TLS/permissões antes de exposição pública.
-- [ ] Layout: sidebar Visão geral, Biblioteca, Transcrições, PDFs, Sincronização, Configurações; topo com hora do último snapshot e saúde dos serviços.
+- [x] Aplicação isolada read-only, publicada com TLS próprio + Basic Auth no subdomínio study; observer loopback 3401.
+- [~] Sem sidebar (fiel ao Figma original); IA futura: Início, Biblioteca, Aula, PDFs, Sistema. Layout: sidebar Visão geral, Biblioteca, Transcrições, PDFs, Sincronização, Configurações; topo com hora do último snapshot e saúde dos serviços.
 - [ ] Cards: aula em processamento (nome, disciplina, versão, percentual e chunks), fila (done, queued, leased, review, deferred), PDFs (aprovados/bloqueados), fontes e disponibilidade, status de timers e disco.
-- [ ] Poll a cada 15–30 segundos, renderizar estados offline/stale com horário; carga de consulta baixa e read-only; evitar locks de escrita.
-- [ ] Instrumentar eventos de download/sync reais com estado, bytes concluídos/totais quando disponíveis, horário e destino (vídeo, PDF, OneDrive). Etapas: discovered, queued, downloading, uploaded, verified, deferred, failed. Apenas com telemetria suficiente, mostrar barra de download e velocidade; não usar 2.252/3.001 como progresso.
-- [ ] Série temporal (24 h/7 dias), taxa real de transcrições e downloads e histórico de falhas. ETA só quando mensurável; nunca inventar prazo para 3 mil aulas.
-- [ ] API agregada autenticada de monitoramento, separada das sete rotas FO/MCP; não expor URLs assinadas, nomes pessoais, PDFs brutos, dados privados de review ou segredos.
-- [ ] Smoke no cliente real: normal, sem conexão, partial/incomplete, job que muda de estado, review fail-closed, privacidade.
+- [x] Poll a cada 15–30 segundos, renderizar estados offline/stale com horário; carga de consulta baixa e read-only; evitar locks de escrita.
+- [~] Recibos de estado final de vídeos/OneDrive exibidos (verificados/erro/indisponível); bytes/velocidade em tempo real pendentes. Instrumentar eventos de download/sync reais com estado, bytes concluídos/totais quando disponíveis, horário e destino (vídeo, PDF, OneDrive). Etapas: discovered, queued, downloading, uploaded, verified, deferred, failed. Apenas com telemetria suficiente, mostrar barra de download e velocidade; não usar 2.252/3.001 como progresso.
+- [~] Ritmo mediano, aulas/áudio 24 h e ETA com faixa interquartil entregues; série temporal 7 dias pendente. Série temporal (24 h/7 dias), taxa real de transcrições e downloads e histórico de falhas. ETA só quando mensurável; nunca inventar prazo para 3 mil aulas.
+- [x] API agregada autenticada de monitoramento, separada das sete rotas FO/MCP; não expor URLs assinadas, nomes pessoais, PDFs brutos, dados privados de review ou segredos.
+- [x] Smoke no cliente real: normal, sem conexão, partial/incomplete, job que muda de estado, review fail-closed, privacidade.
 
 ## M2 — Biblioteca e aula (P1)
 

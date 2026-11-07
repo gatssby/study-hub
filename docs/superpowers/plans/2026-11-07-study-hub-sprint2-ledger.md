@@ -21,3 +21,10 @@ Storage audit:
 - previous-hub contains3245 material IDs/147693 pages absent from live: preserve.
 - pre-bioq-rerun has178 historical focused review keys absent from live: preserve pending relevance classification.
 - pre-index-cycle, pre-ocr and pre-catalog: every primary key exists in live; immutable materials/transcript/segments/revision payloads covered. PDF text differences exclusively empty historical text now nonempty (523/523/520), current structural metadata and originals identical. Final guards pending before deletion.
+- Final guards passed; pre-index-cycle, pre-ocr and pre-catalog removed (1,918,894,080 B). Residual staging PDF removed after remote download SHA256 equality (15,451,322 B).
+
+Deployment 2026-11-07 ~20:20–20:30 UTC:
+- FO worker/scheduler/ocr replaced only after predecessor-hash checks (b18823f). Exclusion rows written for exact Inglês/Espanhol; running worker untouched; one-shot watcher restarts it after the in-flight Espanhol lesson finishes.
+- Ruling: one controlled worker restart, after the in-flight job completes, is required for the owner-requested exclusion to take effect; this is the narrowest safe activation (no interruption, no job rewrite).
+- Observer unit, storage timer, static release, ACME/HTTPS vhost, dedicated cert and htpasswd installed. Graceful nginx reloads only. Post-checks equal baseline.
+- Final report: docs/research/2026-11-07-study-hub-sprint2-report.md.
