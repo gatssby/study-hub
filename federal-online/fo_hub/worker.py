@@ -609,20 +609,6 @@ class Worker:
             return False
         qa['flags']=[f for f in qa['flags'] if not covered(f)]
 
-    def complete_aliases(self,job,status):
-        # Compare against the leased identity, not a newly discovered object.
-        _,source=self.current_source(job)
-        if source['remote_path']!=job['remote_path'] or source['size']!=job['size']:raise SourceChanged('source changed before alias completion')
-        aliases=self.c.execute("SELECT j.lesson_id,j.version FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version JOIN lesson_video_sources s ON s.lesson_id=j.lesson_id WHERE j.state='queued' AND l.present=1 AND s.available=1 AND s.revision=CAST(j.version AS TEXT) AND s.remote_path=? AND s.size=?",(job['remote_path'],job['size'])).fetchall()
-        transcript=self.c.execute('SELECT * FROM transcripts WHERE lesson_id=? AND version=?',(job['lesson_id'],job['version'])).fetchone()
-        segments=[dict(r) for r in self.c.execute('SELECT start,end,text FROM transcript_segments WHERE lesson_id=? AND version=? ORDER BY idx',(job['lesson_id'],job['version']))]
-        for alias in aliases:
-            if status=='validated':
-                if not transcript:continue
-                self.store.add_transcript(alias['lesson_id'],alias['version'],segments,transcript['model'],ACCEPTED_CORPUS,True,json.loads(transcript['qa_json']))
-            else:
-                with self.c:self.c.execute('INSERT OR IGNORE INTO focused_reviews SELECT ?,?,start,end,reason,state FROM focused_reviews WHERE lesson_id=? AND version=?',(alias['lesson_id'],alias['version'],job['lesson_id'],job['version']))
-            with self.c:self.c.execute("UPDATE transcription_jobs SET state=?,progress=1,lease_owner=NULL,lease_until=NULL,updated_at=? WHERE lesson_id=? AND version=? AND state='queued'",('done' if status=='validated' else 'review',str(time.time()),alias['lesson_id'],alias['version']))
 
     def fingerprint(self):
         return hashlib.sha256(json.dumps({'parameters':self.cfg.parameters(),'model_sha256':identity(self.cfg.model),'binary_sha256':identity(self.cfg.binary) if Path(self.cfg.binary).is_file() else None},sort_keys=True).encode()).hexdigest()
@@ -654,14 +640,10 @@ class Worker:
         except Exception as exc:
             return self._failed(job,fingerprint,exc)
         self.record_outcome(fingerprint,status)
-        result={'state':status,'lesson_id':job['lesson_id'],'version':job['version']}
-        try:
-            self.complete_aliases(job,status)
-        except Exception as exc:
-            # The leased job succeeded; queued aliases stay queued and later reuse
-            # the byte-identity evidence cache without a new decode.
-            result['alias_error_type']=type(exc).__name__
-        return result
+        # Path/size equality cannot approve another lesson's transcript. Aliases
+        # remain queued until their own bounded download proves SHA256 identity;
+        # pipeline() then reuses matching raw checkpoints without another decode.
+        return {'state':status,'lesson_id':job['lesson_id'],'version':job['version']}
 
     def _failed(self,job,fingerprint,exc):
         # Gate, storage and source-identity events are infrastructure, not ASR failures.

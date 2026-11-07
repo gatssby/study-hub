@@ -84,7 +84,7 @@ EnvironmentFile=/home/ubuntu/.config/study-hub/transcription.env
 Environment=PYTHONUNBUFFERED=1
 ExecStart={PY} -m fo_hub.worker --run --loop
 Restart=on-failure
-RestartPreventExitStatus=3 5
+RestartPreventExitStatus=3 4 5
 RestartSec=60
 TimeoutStopSec=90
 KillMode=control-group

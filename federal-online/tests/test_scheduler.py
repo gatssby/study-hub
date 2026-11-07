@@ -52,7 +52,7 @@ def test_max_context(monkeypatch):
 
 
 @pytest.mark.parametrize('outcome',['validated','review'])
-def test_alias_completion(tmp_path,outcome):
+def test_alias_waits_for_its_own_pipeline_before_completion(tmp_path,outcome):
     from fo_hub.store import ACCEPTED_CORPUS
     w=worker(tmp_path,['Biologia','Física'])
     w.c.execute("UPDATE lesson_video_sources SET remote_path='onedrive:Federal Online/shared'");w.c.commit()
@@ -64,6 +64,10 @@ def test_alias_completion(tmp_path,outcome):
         assert w.lease() is None
         return outcome
     w.pipeline=pipeline
+    assert w.run_once()['state']==outcome
+    expected = ['done','queued'] if outcome=='validated' else ['queued','review']
+    assert sorted(r[0] for r in w.c.execute('SELECT state FROM transcription_jobs')) == expected
+    assert w.c.execute('SELECT COUNT(*) FROM '+('transcripts' if outcome=='validated' else 'focused_reviews')).fetchone()[0] == 1
     assert w.run_once()['state']==outcome
     assert [r[0] for r in w.c.execute('SELECT state FROM transcription_jobs')]==['done' if outcome=='validated' else 'review']*2
     assert w.c.execute('SELECT COUNT(*) FROM '+('transcripts' if outcome=='validated' else 'focused_reviews')).fetchone()[0]==2
@@ -189,8 +193,9 @@ def test_fake_decoder_max_context_and_alias_segments(tmp_path):
         return SimpleNamespace(stdout='',stderr='')
     w.runner=run
     assert w.run_once()['state']=='validated'
+    assert w.run_once()['state']=='validated'
     assert w.run_once()['state']=='idle'
-    assert sum(c[0]=='rclone' for c in calls)==1
+    assert sum(c[0]=='rclone' for c in calls)==2
     assert sum(c[0]==str(w.cfg.binary) for c in calls)==1
     assert [r[0] for r in w.c.execute('SELECT text FROM transcript_segments')]==['Conteúdo científico legítimo.']*2
 
@@ -221,6 +226,20 @@ def test_identical_bytes_at_different_paths_decode_once(tmp_path):
     assert w.run_once()['state']=='validated'
     assert sum(c[0]==str(w.cfg.binary) for c in calls)==1
     assert w.c.execute('SELECT COUNT(DISTINCT lesson_id) FROM transcript_segments').fetchone()[0]==2
+
+
+def test_same_path_and_size_different_bytes_never_share_transcript(tmp_path):
+    import gzip,json
+    w=worker(tmp_path,['Biologia','Física'])
+    with w.c:w.c.execute("UPDATE lesson_video_sources SET remote_path='onedrive:Federal Online/shared'")
+    calls=[];w.runner=fake_runner(w,calls,data=b'fakevideo')
+    assert w.run_once()['state']=='validated'
+    w.runner=fake_runner(w,calls,data=b'nextvideo')
+    assert w.run_once()['state']=='validated'
+    assert sum(c[0]=='rclone' for c in calls)==2
+    assert sum(c[0]==str(w.cfg.binary) for c in calls)==2
+    evidence=[json.loads(gzip.decompress(p.read_bytes())) for p in (tmp_path/'transcripts/private').glob('*/v1.json.gz')]
+    assert len(evidence)==2 and len({x['source_sha256'] for x in evidence})==2
 
 
 def test_alias_propagation_failure_after_success_is_atomic_and_not_breaker(tmp_path):

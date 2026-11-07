@@ -16,7 +16,7 @@ def test_rendered_units_allow_private_rclone_refresh_without_auto_asr(tmp_path):
     asr=(tmp_path/'study-hub-fo-transcription.service').read_text()
     assert 'ConditionPathExists=/etc/study-hub/fo-transcription.authorized' in asr
     assert 'RestartPreventExitStatus=3' in asr
-    assert 'RestartPreventExitStatus=3 5' in asr
+    assert 'RestartPreventExitStatus=3 4 5' in asr
     assert 'StartLimitBurst=3' in asr
     assert 'StartLimitIntervalSec=900' in asr
     assert 'KillMode=control-group' in asr
