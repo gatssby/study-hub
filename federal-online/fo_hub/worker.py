@@ -551,6 +551,11 @@ class Worker:
         self.verify_repetitions(video,work,segments,qa,chunks)
         if not segments:qa['flags'].append({'kind':'empty_output'})
         if cfg.review_only:qa['flags'].append({'kind':'pilot_manual_review_required','start':0,'end':duration})
+        # Real focal evidence found likely PT/ES code-switch damage under the
+        # forced-PT decoder. Subject is a risk signal, NOT an audio language
+        # assignment: retain raw speech, do not force ES or publish blindly.
+        if discipline(lesson)=='Espanhol':
+            qa['flags'].append({'kind':'mixed_language_configuration_unverified','start':0,'end':duration})
         classify_qa(qa,segments,duration)
         _,latest=self.current_source(job)
         if any(latest[k]!=source[k] for k in ('remote_path','revision','size','available')):raise SourceChanged('source changed during inference')
@@ -629,6 +634,8 @@ class Worker:
             if not any(f['kind']==flag['kind'] and f.get('idx')==flag.get('idx') for f in qa['flags']):
                 qa['flags'].append({**flag,'origin':'stitched_text'})
         qa['flags'].extend(deepcopy(list(extra_flags)))
+        if discipline(lesson)=='Espanhol':
+            qa['flags'].append({'kind':'mixed_language_configuration_unverified','start':0,'end':duration})
         classify_qa(qa,segments,duration)
         artifact.update(qa=qa,qa_policy_version=QA_POLICY_VERSION,
                         reassessment={'input_sha256':hashlib.sha256(content).hexdigest(),'at':time.time()})

@@ -1,0 +1,35 @@
+{
+ "lesson_id": "fo_4cc5e44ffb6dc603",
+ "source_sha256_verified_against": "review v1 source_sha256",
+ "review_artifact_sha256": "b8f422a568da83163f9a1c65a28390d103acaf0a5b9c03169e58db2e10fbc6cc",
+ "window": {
+  "offset_s": 0,
+  "duration_s": 40,
+  "window_sha256_prefix": "519762caab31"
+ },
+ "decodes_executed": 2,
+ "runner": "systemd-run transient study-hub-fo-langprobe-20261107, CPUQuota=300% MemoryMax=12G TasksMax=128 RuntimeMaxSec=1500 KillMode=control-group, session-group kill on timeout, transcription.lock held",
+ "pre_run": "no whisper-cli/worker process; study-hub-fo-transcription inactive/disabled",
+ "post_run": "exit 0, wall 4m01s, maxRSS ~3.8 GiB, no decoder alive, temp video dir removed",
+ "config": "large-v3 f16, beam5/best-of5, T=0, fallback off, -mc 0, VAD off; only -l changed",
+ "results": {
+  "auto": {
+   "detected": "pt",
+   "p": 0.839107,
+   "rows": 10,
+   "wall_s": 132.2,
+   "artifact_sha256": "33448d353b8d7c481af4ce86f7aadebb08d19072dd49a3dd763a62e81e895743"
+  },
+  "es": {
+   "rows": 4,
+   "wall_s": 97.0,
+   "artifact_sha256": "6abe5a1e73b4c9520780f4912e7b0a1839f0d28a12301cfe580b289cd5ad2efa"
+  }
+ },
+ "prior_focal_reused": [
+  "588/32 pt",
+  "1186/36 pt (missão 2026-11-06)"
+ ],
+ "inference": "Insuficiente para fixar idioma único. Detector auto (primeiros 30 s) = pt p=0,84, decode auto ≈ idêntico ao pt forçado. Decode es produz espanhol fluente e idiomático para o mesmo áudio; marcadores lexicais da saída pt (saudação e fórmulas de abertura) são calques típicos de espanhol. 588/32 pt: explicação em português natural seguida de leitura de texto espanhol que o decoder manteve em espanhol e depois verteu para português no meio da frase (sinal de corrupção pelo pt forçado). 1186/36: português coerente. Hipótese: aula mista (explicação pt/leitura es, abertura possivelmente es). Concordância entre decoders não é prova humana; sem gold.",
+ "suggestion": "Manter fo_4cc5e44ffb6dc603 em review (não publicar, não retranscrever com es global). Não mapear disciplina=idioma. Próximo aprimoramento: escuta curta 0-12 s e 603-620 s ou tratamento de code-switch validado. Não é bloqueador global do MVP e não exige nova confirmação rotineira dentro do escopo autorizado. A configuração atual de português forçado continua sob revisão para aulas de Espanhol; a disciplina é indicador de risco, não atribuição de idioma."
+}

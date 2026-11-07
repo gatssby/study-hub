@@ -86,7 +86,8 @@ def test_invalid_timestamp_stays_blocking():
     assert any(f['kind'] == 'bad_timestamp' for f in report['blockers'])
 
 
-def test_pipeline_publishes_small_overlap_with_persisted_warnings(tmp_path):
+@pytest.mark.parametrize('subject,expected', [('Biologia', 'validated'), ('Espanhol - Teoria', 'review')])
+def test_pipeline_publishes_small_overlap_with_persisted_warnings(tmp_path, subject, expected):
     import gzip
     import json
     from types import SimpleNamespace
@@ -94,6 +95,8 @@ def test_pipeline_publishes_small_overlap_with_persisted_warnings(tmp_path):
     from fo_hub.worker import Worker
 
     store, lesson, cfg = setup(tmp_path)
+    store.conn.execute('UPDATE lessons SET subject=?,front=?,module=?', (subject, subject, subject))
+    store.conn.commit()
     def run(cmd, **kwargs):
         if cmd[0] == 'rclone':
             Path(cmd[3]).write_bytes(b'fakevideo')
@@ -111,8 +114,13 @@ def test_pipeline_publishes_small_overlap_with_persisted_warnings(tmp_path):
     store.conn.execute('INSERT INTO lesson_video_sources VALUES(?,?,?,?,?,?)',
                        (lesson['lesson_id'], 'onedrive:Federal Online/a.mp4', '1', 9, 1, 'now'))
     store.conn.commit()
-    assert worker.run_once()['state'] == 'validated'
+    assert worker.run_once()['state'] == expected
     transcript = store.get_transcript(lesson['lesson_id'])
+    if expected == 'review':
+        assert transcript is None
+        private = json.loads(gzip.decompress((tmp_path/'transcripts/review'/lesson['lesson_id']/'v1.json.gz').read_bytes()))
+        assert any(f['kind'] == 'mixed_language_configuration_unverified' for f in private['qa']['blockers'])
+        return
     assert transcript['qa']['warnings'] and not transcript['qa']['blockers']
     public = json.loads((tmp_path/'transcripts/generated_v2'/lesson['lesson_id']/'v1.json').read_text())
     assert set(public) == {'lesson_id', 'version', 'corpus', 'qa', 'segments'}
