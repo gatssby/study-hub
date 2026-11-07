@@ -150,7 +150,8 @@ def qa_segments(segments: Sequence[Mapping[str, Any]], duration_s: float | None 
         if not finite or end < start or start < 0 or (duration_s is not None and end > duration_s + 1):
             flags.append({"idx": i, "kind": "bad_timestamp"})
         if i and start < prev_end - 0.05:
-            flags.append({"idx": i, "kind": "non_monotonic"})
+            flags.append({"idx": i, "kind": "non_monotonic",
+                          "overlap_s": round(prev_end - start, 6)})
         if start - prev_end > silence_gap_s:
             flags.append({"idx": i, "kind": "silence_gap", "gap_s": round(start - prev_end, 2)})
         words = [w.lower() for w in _WORD.findall(text)]
@@ -171,6 +172,84 @@ def qa_segments(segments: Sequence[Mapping[str, Any]], duration_s: float | None 
                "covered_until_s": prev_end, "flag_count": len(flags)}
     return {"passed": not any(f["kind"] != "silence_gap" for f in flags), "flags": flags, "metrics": metrics,
             "segments": [dict(s) for s in segments]}
+
+
+QA_POLICY_VERSION = 4
+
+
+def classify_qa(qa: dict, segments: Sequence[Mapping[str, Any]], duration_s: float) -> dict:
+    """Assign risk without editing speech or timestamps; unknown checks block.
+
+    Small boundary defects (<=2.5s each, <=1%/5s total) and at most three
+    isolated short, nonoverlapping didactic repeats are MVP warnings. These
+    are operational tolerances, not an acoustic accuracy measurement.
+    Unexplained coverage gaps must first be reconciled with measured silence.
+    """
+    import math
+
+    budget = max(5.0, duration_s * 0.01)
+    previous_end = 0.0
+    overlap_total = 0.0
+    repeat_pairs = []
+    for i, row in enumerate(segments):
+        start, end = float(row['start']), float(row['end'])
+        if math.isfinite(start) and math.isfinite(end) and end >= start >= 0:
+            if i:
+                overlap_total += max(0.0, previous_end - start)
+            previous_end = max(previous_end, end)
+        if i and str(row.get('text', '')).strip().casefold() == str(segments[i-1].get('text', '')).strip().casefold():
+            repeat_pairs.append(i)
+    isolated_repeats = bool(repeat_pairs) and len(repeat_pairs) <= 3
+    for i in repeat_pairs:
+        row, prev = segments[i], segments[i-1]
+        isolated_repeats = isolated_repeats and (
+            i-1 not in repeat_pairs and i+1 not in repeat_pairs
+            and 0 <= float(row['start']) - float(prev['end']) <= 20
+            and float(row['end']) - float(row['start']) <= 5
+            and float(prev['end']) - float(prev['start']) <= 5
+            and 0 < len(_WORD.findall(str(row.get('text', '')))) <= 12)
+    boundary_intervals = sorted({(float(f['start']), float(f['end'])) for f in qa['flags']
+                                if f['kind'] in {'ambiguous_overlap', 'boundary_timestamp_drift'}
+                                and 'start' in f and 'end' in f})
+    boundary_total = sum(max(0.0, end-start) for start, end in boundary_intervals)
+    # A failed independent check of an entire phrase is stronger evidence than
+    # a text-only repetition candidate; retain it for review. Single scientific
+    # words cannot be reliably located by these short windows.
+    for observation in qa.get('observations', []):
+        if (observation.get('kind') == 'acoustic_repetition_check'
+                and observation.get('confirmed') is False
+                and len(_WORD.findall(str(observation.get('phrase', '')))) >= 3):
+            flag = {'kind': 'acoustic_repetition_unconfirmed', 'idx': observation['idx']}
+            if not any(f['kind'] == flag['kind'] and f.get('idx') == flag['idx'] for f in qa['flags']):
+                qa['flags'].append(flag)
+    warnings, blockers = [], []
+    for flag in qa['flags']:
+        kind = flag['kind']
+        warning = False
+        reason = 'substantial_or_unverified_defect'
+        if kind == 'non_monotonic':
+            overlap = flag.get('overlap_s')
+            if overlap is None and flag.get('origin') != 'decoder':
+                i = int(flag.get('idx', -1))
+                if 0 < i < len(segments):
+                    overlap = max(float(s['end']) for s in segments[:i]) - float(segments[i]['start'])
+            warning = overlap is not None and 0 <= overlap <= 2.5 and overlap_total <= budget
+            reason = 'bounded_timestamp_overlap' if warning else 'significant_timestamp_overlap'
+        elif kind in {'ambiguous_overlap', 'boundary_timestamp_drift'}:
+            span = float(flag.get('end', math.inf)) - float(flag.get('start', 0))
+            warning = 0 <= span <= 2.5 and boundary_total <= budget and overlap_total <= budget
+            reason = 'bounded_preserved_boundary' if warning else 'significant_boundary_uncertainty'
+        elif kind == 'duplicate_segment':
+            warning = isolated_repeats
+            reason = 'isolated_didactic_repeat_candidate' if warning else 'systematic_or_long_repetition'
+        flag.update(severity='warning' if warning else 'blocking', policy_reason=reason)
+        (warnings if warning else blockers).append(dict(flag))
+    qa.update(passed=not blockers, warnings=warnings, blockers=blockers,
+              policy_version=QA_POLICY_VERSION)
+    qa.setdefault('metrics', {}).update(flag_count=len(qa['flags']), warning_count=len(warnings),
+                                       blocker_count=len(blockers), overlap_total_s=overlap_total,
+                                       boundary_total_s=boundary_total, local_defect_budget_s=budget)
+    return qa
 
 
 def main(argv: Sequence[str] | None = None) -> int:

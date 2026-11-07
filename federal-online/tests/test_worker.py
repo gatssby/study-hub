@@ -78,7 +78,7 @@ def test_fake_pipeline_publishes_only_passed_current_version_and_cleans_temps(tm
     assert artifact['chunks'][0]['decoding']['wall_s']>=0
     assert artifact['chunks'][0]['decoding']['stderr']==''
     assert artifact['chunks'][0]['qa']['metrics']['repetition']['candidate_tokens']==0
-    assert artifact['qa_policy_version']==3
+    assert artifact['qa_policy_version']==4
     assert not list((tmp_path/'tmp/transcription').glob('*'))
     assert any(cmd[0]==str(cfg.binary) for cmd in calls)
     download=next(cmd for cmd in calls if cmd[0]=='rclone')

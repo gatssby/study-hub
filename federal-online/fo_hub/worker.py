@@ -30,7 +30,7 @@ import zlib
 
 from .store import FOStore, ACCEPTED_CORPUS
 from .scheduler import choose, discipline, discipline_key
-from .transcription import AUTH_PHRASE, DEFAULT_AUTH_FILE, DEFAULT_PLATFORM_MARKER, TranscriptionQueue, qa_segments
+from .transcription import AUTH_PHRASE, DEFAULT_AUTH_FILE, DEFAULT_PLATFORM_MARKER, TranscriptionQueue, qa_segments, classify_qa, QA_POLICY_VERSION
 
 RESERVE=4*1024**3
 HEARTBEAT_INTERVAL_S=60
@@ -57,6 +57,10 @@ def identity(path):
 
 
 class SourceChanged(RuntimeError):
+    pass
+
+
+class SourceUnavailable(RuntimeError):
     pass
 
 
@@ -329,6 +333,7 @@ class Worker:
         self.c.execute('CREATE TABLE IF NOT EXISTS transcription_rr_cursor(id INTEGER PRIMARY KEY CHECK(id=1),last_discipline TEXT,cycle INTEGER,updated_at REAL)')
         self.c.execute('INSERT OR IGNORE INTO transcription_rr_cursor VALUES(1,NULL,0,0)')
         self.c.execute('CREATE TABLE IF NOT EXISTS transcription_breaker(fingerprint TEXT PRIMARY KEY,consecutive_failures INTEGER,consecutive_reviews INTEGER,opened_at REAL,reason TEXT)')
+        self.c.execute('CREATE TABLE IF NOT EXISTS transcription_source_deferrals(lesson_id TEXT,version INTEGER,remote_path TEXT,size INTEGER,reason TEXT,retry_after REAL,observed_at REAL,PRIMARY KEY(lesson_id,version))')
         self.c.commit()
 
     def catalog_order(self):
@@ -364,6 +369,8 @@ class Worker:
             self.c.execute("UPDATE transcription_jobs SET state='done',progress=1 WHERE state='queued' AND EXISTS(SELECT 1 FROM transcripts t WHERE t.lesson_id=transcription_jobs.lesson_id AND t.version=transcription_jobs.version AND t.corpus=?)",(ACCEPTED_CORPUS,))
             rows=self.c.execute("SELECT j.*,l.subject,l.front,l.module,l.title,l.item_id,s.remote_path,s.size FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version JOIN lesson_video_sources s ON s.lesson_id=j.lesson_id WHERE j.state='queued' AND COALESCE(j.retry_at,0)<=? AND j.attempts<j.max_attempts AND l.present=1 AND s.available=1 AND CAST(j.version AS TEXT)=s.revision AND s.remote_path IS NOT NULL AND (? IS NULL OR j.lesson_id=?) AND NOT EXISTS(SELECT 1 FROM transcription_jobs busy JOIN lesson_video_sources bs ON bs.lesson_id=busy.lesson_id WHERE busy.state='leased' AND bs.remote_path=s.remote_path)",(now,lesson_id,lesson_id)).fetchall()
             cursor=self.c.execute('SELECT * FROM transcription_rr_cursor WHERE id=1').fetchone()
+            deferred={(r['lesson_id'],r['version'],r['remote_path'],r['size']) for r in self.c.execute('SELECT * FROM transcription_source_deferrals WHERE retry_after>?',(now,))}
+            rows=[r for r in rows if (r['lesson_id'],r['version'],r['remote_path'],r['size']) not in deferred]
             row=choose([dict(r,ordem=self.catalog_order().get(r['item_id'])) for r in rows],cursor['last_discipline'])
             if row is None:self.c.commit();return None
             self.c.execute("UPDATE transcription_jobs SET state='leased',attempts=attempts+1,lease_owner=?,lease_until=?,updated_at=? WHERE lesson_id=? AND version=?",(self.owner,now+7*86400,str(now),row['lesson_id'],row['version']))
@@ -427,15 +434,25 @@ class Worker:
         size=int(source.get('size') or 0)
         if size<=0 or self.free_bytes()<RESERVE+size+100*1024**2:raise RuntimeError('storage budget or source size invalid')
         video=work/'source.mp4'
-        self.command(['rclone','copyto',source['remote_path'],video,'--retries','3','--transfers','1',
-                      '--max-transfer',f'{size+1024**2}B','--cutoff-mode','HARD'])
+        try:
+            self.command(['rclone','copyto',source['remote_path'],video,'--retries','3','--transfers','1',
+                          '--max-transfer',f'{size+1024**2}B','--cutoff-mode','HARD'])
+        except subprocess.CalledProcessError as exc:
+            detail=str(exc.stderr or '').casefold()
+            missing=any(x in detail for x in ('object not found','directory not found','file not found','404 not found'))
+            denied=any(x in detail for x in ('unauthorized','forbidden','token','401','403'))
+            if missing and not denied:raise SourceUnavailable('remote_object_not_found') from exc
+            raise
         if video.stat().st_size!=size:raise RuntimeError('source download size mismatch')
         source_sha256=file_sha256(video)
         probe=self.command(['ffprobe','-v','error','-show_entries','format=duration','-of','json',video],timeout=60)
         duration=float(json.loads(probe.stdout)['format']['duration'])
         if not math.isfinite(duration) or duration<=0 or duration>24*3600:raise ValueError('invalid source duration')
         expected=lesson.get('duration_s')
-        if expected and abs(duration-float(expected))>max(5,float(expected)*0.05):raise ValueError('source duration mismatch')
+        if expected and abs(duration-float(expected))>max(5,float(expected)*0.05):
+            atomic_json(cfg.state/'transcripts/errors'/job['lesson_id']/f"v{job['version']}-source-duration-{uuid.uuid4().hex}.json.gz",
+                        {'expected_s':float(expected),'observed_s':duration,'source_sha256':source_sha256,'at':time.time()})
+            raise SourceUnavailable('source_duration_mismatch')
         chunks=[];acoustic_flags=[];raw_flags=[];offset=0.0
         # Reuse only after byte identity, never a shared title, size or remote path.
         # The video is still downloaded to prove identity; no persistent video cache.
@@ -534,12 +551,12 @@ class Worker:
         self.verify_repetitions(video,work,segments,qa,chunks)
         if not segments:qa['flags'].append({'kind':'empty_output'})
         if cfg.review_only:qa['flags'].append({'kind':'pilot_manual_review_required','start':0,'end':duration})
-        qa['passed']=not qa['flags'];qa['metrics']['flag_count']=len(qa['flags'])
+        classify_qa(qa,segments,duration)
         _,latest=self.current_source(job)
         if any(latest[k]!=source[k] for k in ('remote_path','revision','size','available')):raise SourceChanged('source changed during inference')
         artifact={'lesson_id':job['lesson_id'],'version':job['version'],'model':'whisper-large-v3','model_path':str(cfg.model),'runtime_path':str(cfg.binary),**provenance,'source_size':size,'source_sha256':source_sha256,'source_revision':source['revision'],'source_remote_path':source['remote_path'],'duration_s':duration,'created_at':time.time(),'elapsed_s':time.time()-started,'corpus':ACCEPTED_CORPUS,'qa':qa,'chunks':chunks,'segments':segments,'stitching':stitched.get('decisions',[])}
         status='validated' if qa['passed'] else 'review'
-        artifact['qa_policy_version']=3
+        artifact['qa_policy_version']=QA_POLICY_VERSION
         path=cfg.state/'transcripts'/('private' if qa['passed'] else 'review')/job['lesson_id']/f"v{job['version']}.json.gz"
         atomic_json(path,artifact)
         if qa['passed']:
@@ -559,6 +576,81 @@ class Worker:
                     start=max(0,float(flag.get('start',seg['start']))-2);end=min(duration,float(flag.get('end',seg['end']))+2)
                     self.c.execute("INSERT OR IGNORE INTO focused_reviews VALUES(?,?,?,?,?,'pending_manual_review')",(job['lesson_id'],job['version'],start,end,flag['kind']))
         return status
+
+    def reassess_review(self,lesson_id,extra_flags=()):
+        """Reapply QA to intact saved evidence, never redownload or decode.
+
+        Caller holds transcription.lock, just like run_once. Original review
+        bytes remain immutable; the new receipt links their SHA256.
+        """
+        from copy import deepcopy
+        from .stitching import stitch_chunks
+
+        if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
+        if not re.fullmatch(r'fo_[0-9a-f]{16}',lesson_id):raise ValueError('invalid lesson ID')
+        lesson=self.store.get_lesson(lesson_id)
+        if not lesson:raise ValueError('lesson missing')
+        job={'lesson_id':lesson_id,'version':lesson['version']}
+        _,source=self.current_source(job)
+        state=self.c.execute('SELECT state FROM transcription_jobs WHERE lesson_id=? AND version=?',(lesson_id,job['version'])).fetchone()
+        if state and state[0]=='done' and self.store.get_transcript(lesson_id):
+            return {'state':'already_validated','lesson_id':lesson_id,'version':job['version']}
+        if not state or state[0]!='review':raise ValueError('not a current review job')
+        original=self.cfg.state/'transcripts/review'/lesson_id/f"v{job['version']}.json.gz"
+        if original.is_symlink():raise ValueError('review symlink refused')
+        content=original.read_bytes();artifact=json.loads(gzip.decompress(content))
+        expected={'lesson_id':lesson_id,'version':job['version'],'corpus':ACCEPTED_CORPUS,
+                  'source_revision':source['revision'],'source_size':source['size'],
+                  'source_remote_path':source['remote_path']}
+        if any(artifact.get(k)!=v for k,v in expected.items()):raise ValueError('review source identity mismatch')
+        if not re.fullmatch('[0-9a-f]{64}',str(artifact.get('source_sha256',''))):raise ValueError('missing byte identity')
+        duration=float(artifact['duration_s'])
+        if not math.isfinite(duration) or duration<=0:raise ValueError('invalid saved duration')
+        chunks=artifact['chunks'];segments=artifact['segments']
+        if not chunks or not segments:raise ValueError('incomplete saved inference')
+        covered=0.0
+        for chunk in chunks:
+            offset,length=float(chunk['offset_s']),float(chunk['duration_s'])
+            if not 0<=offset<=covered or not 0<length<=600 or offset+length>duration+0.01:
+                raise ValueError('incomplete saved chunk coverage')
+            if parse_whisper(chunk['raw'],offset)!=chunk['segments']:raise ValueError('saved raw/segment mismatch')
+            covered=max(covered,offset+length)
+        if abs(covered-duration)>0.01:raise ValueError('incomplete saved chunk tail')
+        if stitch_chunks(chunks)['segments']!=segments:raise ValueError('saved stitching mismatch')
+        qa=deepcopy(artifact['qa'])
+        # Recompute structural checks while retaining all original detector
+        # evidence and confirmed acoustic observations (including measured silence).
+        fresh=qa_segments(segments,duration)
+        reconcile_silent_gaps(fresh,segments,chunks,duration)
+        confirmed={o.get('idx') for o in qa.get('observations',[])
+                   if o.get('kind')=='acoustic_repetition_check' and o.get('confirmed') is True}
+        for flag in fresh['flags']:
+            if flag['kind']=='duplicate_segment' and flag.get('idx') in confirmed:continue
+            if not any(f['kind']==flag['kind'] and f.get('idx')==flag.get('idx') for f in qa['flags']):
+                qa['flags'].append({**flag,'origin':'stitched_text'})
+        qa['flags'].extend(deepcopy(list(extra_flags)))
+        classify_qa(qa,segments,duration)
+        artifact.update(qa=qa,qa_policy_version=QA_POLICY_VERSION,
+                        reassessment={'input_sha256':hashlib.sha256(content).hexdigest(),'at':time.time()})
+        status='validated' if qa['passed'] else 'review'
+        path=self.cfg.state/'transcripts'/('private' if qa['passed'] else 'review')/lesson_id/f"v{job['version']}.qa-v{QA_POLICY_VERSION}.json.gz"
+        atomic_json(path,artifact)
+        if qa['passed']:
+            lock=self.cfg.state/'locks/transcript-publication.lock';lock.parent.mkdir(parents=True,exist_ok=True)
+            with lock.open('a+') as handle:
+                fcntl.flock(handle,fcntl.LOCK_EX)
+                _,latest=self.current_source(job)
+                if any(latest[k]!=source[k] for k in ('remote_path','revision','size','available')):raise SourceChanged('source changed during reassessment')
+                public={k:artifact[k] for k in ('lesson_id','version','corpus','segments')}
+                public['qa']={'passed':True}
+                atomic_json(self.cfg.state/'transcripts/generated_v2'/lesson_id/f"v{job['version']}.json",public)
+                self.store.add_transcript(lesson_id,job['version'],segments,artifact['model'],ACCEPTED_CORPUS,True,qa)
+                with self.c:
+                    self.c.execute("UPDATE transcription_jobs SET state='done',progress=1,lease_owner=NULL,lease_until=NULL,updated_at=? WHERE lesson_id=? AND version=? AND state='review'",(str(time.time()),lesson_id,job['version']))
+                    self.c.execute("UPDATE focused_reviews SET state='accepted_mvp_warning' WHERE lesson_id=? AND version=? AND state='pending_manual_review'",(lesson_id,job['version']))
+        return {'state':status,'lesson_id':lesson_id,'version':job['version'],
+                'input_sha256':artifact['reassessment']['input_sha256'],'artifact':str(path),
+                'warnings':len(qa['warnings']),'blockers':len(qa['blockers'])}
 
     def verify_repetitions(self,video,work,segments,qa,chunks):
         """Resolve isolated duplicate rows only with independent acoustic proof.
@@ -646,6 +738,18 @@ class Worker:
         return {'state':status,'lesson_id':job['lesson_id'],'version':job['version']}
 
     def _failed(self,job,fingerprint,exc):
+        if isinstance(exc,SourceUnavailable):
+            now=time.time()
+            cause=exc.__cause__
+            if isinstance(cause,subprocess.CalledProcessError):
+                atomic_json(self.cfg.state/'transcripts/errors'/job['lesson_id']/f"v{job['version']}-unavailable-{uuid.uuid4().hex}.json.gz",
+                            {'reason':str(exc),'returncode':cause.returncode,'stderr':str(cause.stderr or ''),'at':now})
+            with self.c:
+                self.c.execute('INSERT OR REPLACE INTO transcription_source_deferrals VALUES(?,?,?,?,?,?,?)',
+                               (job['lesson_id'],job['version'],job['remote_path'],job['size'],str(exc),now+86400,now))
+                self.c.execute("UPDATE transcription_jobs SET state='queued',attempts=MAX(0,attempts-1),last_error=?,lease_owner=NULL,lease_until=NULL,updated_at=? WHERE lesson_id=? AND version=? AND lease_owner=?",
+                               (str(exc),str(now),job['lesson_id'],job['version'],self.owner))
+            return {'state':'deferred_source','lesson_id':job['lesson_id'],'reason':str(exc),'retry_after':now+86400}
         # Gate, storage and source-identity events are infrastructure, not ASR failures.
         infrastructure=isinstance(exc,SourceChanged) or str(exc) in {'authorization revoked','storage reserve reached','storage budget or source size invalid'}
         if not infrastructure:self.record_outcome(fingerprint,'failure')
