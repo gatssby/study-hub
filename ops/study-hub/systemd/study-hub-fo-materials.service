@@ -20,8 +20,7 @@ CPUQuota=100%
 MemoryMax=2G
 TasksMax=512
 Type=oneshot
-ExecStart=/usr/bin/flock -n /home/ubuntu/study-hub-state/federal-online/locks/materials.lock /home/ubuntu/study-hub-venv/bin/python portal/runtime.py materials
-TimeoutStartSec=12h
-Restart=on-failure
-RestartSec=900
-RestartPreventExitStatus=2
+ExecStart=/home/ubuntu/study-hub-venv/bin/python -m fo_hub.materials_cycle --state /home/ubuntu/study-hub-state/federal-online --env-file /home/ubuntu/.config/study-hub/federal_online.env --upload
+TimeoutStartSec=75min
+KillMode=control-group
+# No Restart: failed invocation evidence blocks new acquisition until reviewed.

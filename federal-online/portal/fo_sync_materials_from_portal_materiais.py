@@ -1233,7 +1233,7 @@ def apply_filters_for_subject(
     validate_filtered_results(page, logger, portal_subject)
 
 
-def collect_material_rows(page: Any, logger: Logger, portal_subject: str) -> list[PortalRow]:
+def collect_material_rows(page: Any, logger: Logger, portal_subject: str, *, include_slides: bool = False) -> list[PortalRow]:
     raw_rows = page.evaluate(
         """
         () => {
@@ -1369,6 +1369,8 @@ def collect_material_rows(page: Any, logger: Logger, portal_subject: str) -> lis
         f"[{portal_subject}] linhas_coletadas={json.dumps([row.row_text[:240] for row in rows], ensure_ascii=False)}"
     )
     subject_rows = [row for row in rows if normalize_text(row.subject_text) == normalize_text(portal_subject)]
+    if include_slides:
+        return subject_rows
     if len(subject_rows) != len(rows):
         logger.log(
             f"[{portal_subject}] linhas_descartadas_por_disciplina="
