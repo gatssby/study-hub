@@ -1,88 +1,79 @@
-# ATIVAÇÃO DAS TRANSCRIÇÕES — PILOTOS AUTORIZADOS, PRODUÇÃO CONDICIONADA A GATES
+# Federal Online — operação ASR do MVP / QA v4
 
-Estado verificado na missão de 06/11/2026 (fechamento 07/11, 03:00 UTC): `TRANSCRIPTION_ENABLED=false` no ambiente persistente e na API; unit `study-hub-fo-transcription.service` desabilitada/inativa, sem timer e sem decoder. O arquivo de autorização existe, e o usuário autorizou explicitamente pilotos reais e produção somente após os gates. O lote RR transitório Física→Geografia **concluiu com dois resultados review**, sem publicação. Restart e reúso de chunks foram verificados, mas a qualidade falhou: não habilitar o serviço persistente. Cinco recortes focais reais não são gold humano; WER/CER continuam não medidos. Ver `docs/research/2026-11-07-fo-production-closure.md` e `2026-11-07-fo-qa-evidence.json` para decisões/evidências. Datas isoladas continuam não sendo autorização.
+A decisão AFK de 07/11/2026 autoriza deploy, serviço persistente e boot após homologação prática. Cursos incompletos, recursos inacessíveis, WER/CER/gold humano e pequenas imperfeições não são gates globais. Integridade, privacidade e bloqueio de transcrições gravemente comprometidas continuam obrigatórios. Isto substitui os gates operacionais históricos, preservados nos relatórios anteriores.
 
-## O que está preparado
+Produção verificada em 07/11/2026: serviço persistente active/enabled, gate ASR/API true, História concluída/publicada pela unit, restart controlado e próxima disciplina em processamento. Quatro reviews históricas publicadas com warnings, Espanhol privado; seis transcrições aprovadas no total. O relatório `docs/research/2026-11-07-fo-mvp-activation.md` e seu readback registram a evidência. Comandos abaixo não substituem readback.
 
-Worker `fo_hub.worker`, whisper.cpp e large-v3-f16 na VPS. Modelo é candidato, não vencedor de benchmark. Fila e sources versionadas em SQLite próprio. CLI `--check-only` não abre áudio nem toma lease: lê SQLite/modelo e executa somente consultas de versão/help dos binários. `--run --once` e `--run --loop` exigem gates e preflight aprovados.
+## Contrato de produção
 
-Cada fonte deve estar disponível no OneDrive e ter revisão igual ao job e à aula atual. Fontes ausentes/stale não são consumidas. Um lock exclusivo protege o processo; leases recuperam interrupção; retry tem backoff e três tentativas. Sem orçamento de disco, `paused_storage` preserva a fila e não consome tentativas. Exigem-se fonte máxima + 100 MiB temporários além da reserva de 4 GiB. Extração em WAV PCM s16le mono 16 kHz, chunks de 600 s com 2 s de overlap; três threads, FFmpeg com uma thread e serviço limitado a 300% CPU/12 GiB/128 tasks. Não se guardam vídeos persistentes.
+- VPS somente; um processo/decoder por vez sob `locks/transcription.lock`.
+- Large-v3 FP16, três threads, beam/best-of 5, contexto 0, temperatura 0, fallback/VAD off. Não trocar modelo sem evidência; não alegar vencedor de benchmark.
+- Unit `study-hub-fo-transcription.service`: CPUQuota=300%, MemoryMax=12G, TasksMax=128, Restart=on-failure, KillMode=control-group. Saídas 3/4/5 (gate/lock/breaker) não geram restart infinito.
+- Reserva 4 GiB + maior fonte + 100 MiB. Backpressure antes de lease não consome tentativas. Nenhum vídeo permanente na VPS.
+- Fila versionada SQLite, Round Robin por disciplina/ordem pedagógica, três tentativas, retry limitado, heartbeat e chunks persistentes.
+- Três falhas técnicas ou cinco reviews graves consecutivas abrem breaker. Não resetar automaticamente para fabricar saúde.
+- Ausente/stale não é selecionado. 404/duração incompatível têm motivo/backoff de 24 h sem consumir tentativas ASR. Mudança efetiva de revisão/path/size permite nova seleção. Auth/erros desconhecidos continuam erros reais.
 
-Stitching reconcilia somente correspondências textuais inequívocas nas janelas temporalmente sobrepostas. Preserva continuação de frases, sinais científicos, texto bruto e envelopes de timestamps originais; não inventa alinhamento por palavra. Fronteiras conflitantes/curtas/repetitivas permanecem completas em review. Frase coincidente cuja marca temporal deriva para fora da janela recebe `boundary_timestamp_drift`, preservando ambas as versões sem duplicação silenciosa. Regressões internas de cada chunk continuam sendo verificadas antes do stitching. Lacunas totalmente cobertas por silêncio medido viram observação, não revisão; cobertura sem explicação acústica e texto em silêncio medido ficam bloqueados. Há QA de repetição de tokens/frases e timestamps inválidos/não finitos.
+## QA proporcional v4
 
-Evidências e checkpoints brutos são JSON gzip sem perda em `transcripts/evidence/<sha-video>/<fingerprint>/`; artefatos completos aprovados em `transcripts/private/<aula>/vN.json.gz`; suspeitos em `transcripts/review/<aula>/vN.json.gz`. Cada chunk guarda o JSON integral do decoder e o comando exato no checkpoint, com checksum, schema/limites e data verificados antes do reúso. Checkpoint inválido é preservado em irmão `.rejected-<uuid>` e a rejeição registrada; qualquer nova decodificação exige gate. Texto do decoder é guardado antes do parsing, inclusive JSON malformado. Artefatos privados preservam configuração efetiva, hash do vídeo/modelo/binário/bibliotecas, commit do runtime, offsets e decisões. Mesmo vídeo por SHA-256 e mesma configuração reutilizam chunks sem nova inferência, mantendo aula/revisão/proveniência independentes. O download ainda ocorre para provar identidade; tamanho/título/caminho não provam bytes iguais.
+Flags permanecem em `qa.flags`, com severity/policy_reason, e em `qa.warnings`/`qa.blockers`. Nunca apagar falas ou inventar timestamps para aprovar.
 
-Somente o JSON público mínimo (`lesson_id`, `version`, `corpus`, `qa.passed=true`, `segments`) entra em `transcripts/generated_v2/<aula>/vN.json`. Publicação e cópia usam lock exclusivo/compartilhado comum. OneDrive usa allowlist `--files-from` confrontada com segmentos aprovados no banco e aula/source atuais; não envia raw, temporários, private, review ou revisão antiga. O MCP serve apenas aulas presentes, QA aprovada e revisão/fonte atuais. Spans de revisão focal ficam em `focused_reviews`, `pending_manual_review`; aprovação manual e retranscrição focal automática não fazem parte desta preparação.
+Warnings: sobreposição/fronteira local <=2,5 s cada, com orçamento agregado de 1% da duração (piso 5 s), sem defeito sistemático; até três pares de repetições curtas isoladas e não sobrepostas. São tolerâncias operacionais, não medidas de acurácia.
 
-## Pré-requisitos para liberação depois dos gates
+Blockers: timestamps inválidos/não finitos, sobreposição substancial/sistemática, loops, lacunas sem silêncio medido, texto em silêncio medido, vazio/incompletude, checks desconhecidos e evidência acústica negativa significativa. Review não publica e não impede a próxima aula; somente falhas consecutivas acionam breaker.
 
-A missão de 06/11 já autorizou pilotos, produção persistente e boot **condicionados aos gates**. Não é necessária uma nova confirmação rotineira dentro desse escopo; é necessária evidência de qualidade/segurança. Os comandos históricos abaixo não são autorização nem comprovação de aceite, e não devem ser executados enquanto a qualidade continuar bloqueada.
+Espanhol: dois decodes focais adicionais não resolveram a mistura PT/ES. Não forçar ES para a aula inteira nem atribuir idioma por disciplina. A disciplina sinaliza risco da configuração PT atual; esses resultados vão a review até validar code-switch. Não bloqueia outras disciplinas.
 
-1. Entrar na VPS com `ssh oracle-vps`. Nunca executar inferência no Mac.
-2. Revisar `transcription/benchmark-selection-2026-10-27.json`, `benchmark-matrix.json` e `benchmark-evaluation.md`. Há seis aulas elegíveis de seis disciplinas e 18 janelas propostas, sem escuta. Faltam identificar pelo menos dois professores, confirmar ruído/música/silêncio, obter 90 minutos de gold, dois trechos sem fala de 3 min, probes curtos/fronteiras, glossário, timestamps e revisão por segundo anotador de 20%. O scorer WER/CER/termos/alucinação/timestamps/recursos/IC95 está implementado; nenhuma métrica de modelo foi medida. Executar benchmark somente se a nova autorização cobrir essa inferência.
-3. Confirmar espaço livre, fontes, pesos e binários. O preflight abaixo é seguro e pode continuar sendo usado antes da autorização:
+## Evidência e publicação
 
-    cd /home/ubuntu/study-hub/federal-online
-    TRANSCRIPTION_ENABLED=false FO_STATE_ROOT=/home/ubuntu/study-hub-state/federal-online STUDY_HUB_FO_DB=/home/ubuntu/study-hub-state/federal-online/hub.sqlite3 WHISPER_CPP_BIN=/home/ubuntu/study-hub-models/whisper.cpp/build/bin/whisper-cli WHISPER_MODEL=/home/ubuntu/study-hub-models/ggml-large-v3.bin /home/ubuntu/study-hub-venv/bin/python -m fo_hub.worker --check-only
+`transcripts/evidence/<video-sha>/<runtime-fingerprint>/` guarda raw e checkpoints gzip com schema/checksum/identidade verificados. Inválidos são preservados em rejected. Mesmo título/path/tamanho não prova mesmos bytes.
 
-4. Escolher modelo por qualidade, não apenas velocidade; registrar decisão. Se o candidato mudar, atualizar `WHISPER_CPP_BIN` e `WHISPER_MODEL`, implementação de adapter se necessário, e reprovar ativação enquanto não houver suporte testado.
+`transcripts/review/<id>/vN.json.gz` permanece intacto. Reavaliação v4 cria `.qa-v4.json.gz` separado, vinculado ao SHA original, sem inferência; confere fonte, cobertura dos chunks, raw e stitching. `transcripts/private` nunca é público.
 
-## Comandos de ativação — NÃO executar enquanto gates estiverem fechados
+Somente a whitelist mínima (`lesson_id/version/corpus/qa.passed/segments`) em `generated_v2` é enviada ao OneDrive, comparada à DB sob lock de publicação comum. API/MCP exigem QA/revisão/fonte atuais. Warnings completos persistem na DB e no privado. Temporários MP4/WAV pertencentes à invocação são removidos; originais OneDrive e evidências nunca são apagados.
 
-Somente após aprovação documentada dos gates e verificação dos pré-requisitos, editar `/home/ubuntu/.config/study-hub/transcription.env` para conter exatamente:
+## Preflight e ativação autorizada
 
-    TRANSCRIPTION_ENABLED=true
-    FO_STATE_ROOT=/home/ubuntu/study-hub-state/federal-online
-    STUDY_HUB_FO_DB=/home/ubuntu/study-hub-state/federal-online/hub.sqlite3
-    WHISPER_CPP_BIN=/home/ubuntu/study-hub-models/whisper.cpp/build/bin/whisper-cli
-    WHISPER_MODEL=/home/ubuntu/study-hub-models/ggml-large-v3.bin
-    FO_ASR_MAX_CONTEXT=0
-
-`FO_ASR_MAX_CONTEXT=0` (sem contexto entre janelas) eliminou os loops reais do piloto; ver `docs/research/2026-10-29-fo-full-rebuild-and-asr-activation.md`.
-
-Criar via `sudoedit /etc/study-hub/fo-transcription.authorized` uma única linha:
-
-    I AUTHORIZE FO TRANSCRIPTION ON VPS
-
-Aplicar `sudo chown root:ubuntu /etc/study-hub/fo-transcription.authorized` e `sudo chmod 640 /etc/study-hub/fo-transcription.authorized`.
-O marker `/etc/study-hub/fo-vps.marker` já existe; marker sozinho não autoriza.
-
-Validar com as variáveis do arquivo carregadas explicitamente no shell da VPS:
+Na VPS, diretório `/home/ubuntu/study-hub/federal-online`:
 
     set -a
     . /home/ubuntu/.config/study-hub/transcription.env
     set +a
-    cd /home/ubuntu/study-hub/federal-online
     /home/ubuntu/study-hub-venv/bin/python -m fo_hub.worker --check-only
 
-Exigir `gate.allowed=true`, `preflight.ready=true` e fontes corretas. Para uma única aula científica selecionada por metadados (reconfirmar versão/elegibilidade antes), executar somente então na VPS, com limites também no piloto:
+Exigir gate.allowed/preflight.ready, hashes e orçamento corretos. `--check-only` não abre áudio nem toma lease. Marker VPS e arquivo de autorização explícita continuam obrigatórios. A data sozinha não autoriza.
 
-    sudo systemd-run --unit=study-hub-fo-pilot --collect --wait --pipe --uid=ubuntu --working-directory=/home/ubuntu/study-hub/federal-online -p CPUQuota=300% -p MemoryMax=12G -p TasksMax=128 -p UMask=0077 --setenv=TRANSCRIPTION_ENABLED=true --setenv=FO_STATE_ROOT=/home/ubuntu/study-hub-state/federal-online --setenv=STUDY_HUB_FO_DB=/home/ubuntu/study-hub-state/federal-online/hub.sqlite3 --setenv=WHISPER_CPP_BIN=/home/ubuntu/study-hub-models/whisper.cpp/build/bin/whisper-cli --setenv=WHISPER_MODEL=/home/ubuntu/study-hub-models/ggml-large-v3.bin /usr/bin/time -v /home/ubuntu/study-hub-venv/bin/python -m fo_hub.worker --run --once --lesson-id fo_21fd4985e207c5df
+Após homologação real, `transcription.env` contém `TRANSCRIPTION_ENABLED=true`, caminhos FO/modelo/binário atuais e `FO_ASR_MAX_CONTEXT=0`. A API usa o drop-in `30-transcription-enabled.conf` que acrescenta `/home/ubuntu/.config/study-hub/transcription-gate.env` como último EnvironmentFile, contendo somente esse gate. Um Environment=true simples NÃO supera o false de runtime.env. Coleta/index/OCR mantêm false; não iniciam ASR. Verificar a chave maiúscula `TRANSCRIPTION_ENABLED` em `/fo/sync-status`.
 
-Esse é um **exemplo histórico**, não um alvo atual aprovado: reconfirmar versão/source/estado e escolher explicitamente o job antes de copiar o comando. Não cria timer, não habilita boot e limita a seleção à aula `Desenvolvimento embrionário`, Biologia I, versão 1 na observação de 27/10/2026. Sem os gates, recusa executar. A configuração persistente pode permanecer `false` durante um piloto autorizado, pois `--setenv` só vale para a unit transitória. QA automatizada não equivale a aceitação humana da precisão. A unit transitória pode desaparecer após terminar; logs permanecem no journal.
+    sudo systemctl enable --now study-hub-fo-transcription.service
+    systemctl is-active study-hub-fo-transcription.service
+    systemctl is-enabled study-hub-fo-transcription.service
+    journalctl -u study-hub-fo-transcription.service -n 30 --no-pager
+    /home/ubuntu/study-hub-venv/bin/python -m fo_hub.worker --status
 
-Se a autorização incluir a fila integral e a amostra estiver aceita, iniciar o serviço persistente:
+Não há timer ASR; systemd independe da sessão Hermes. Não iniciar piloto concorrente. Não reinstalar todas as units pelo renderer: isso pode restaurar o produtor legado de materiais ou overrides históricos.
 
-    sudo systemctl start study-hub-fo-transcription.service
-    systemctl status study-hub-fo-transcription.service
-    journalctl -u study-hub-fo-transcription.service -n 50 --no-pager
+## Monitoramento e restart
 
-Não é necessário habilitar no boot para manter um serviço iniciado ativo. A autorização da missão atual inclui reinício após reboot **somente após gates aprovados**; nesse cenário, habilitar a unit e verificar o link/estado efetivo. Na situação bloqueada, manter disabled/inactive. Não há timer ASR nem ativação futura agendada.
+    systemctl show study-hub-fo-transcription.service -p MainPID -p ActiveState -p SubState -p MemoryCurrent -p CPUUsageNSec -p NRestarts
+    df -h /home/ubuntu
+    /home/ubuntu/study-hub-venv/bin/python -m fo_hub.worker --status
+    sudo systemctl restart study-hub-fo-transcription.service
 
-## Parada e revogação
+Progresso é o último chunk durável; durante decode observar heartbeat/CPU/decoder único. MainPID=0/auto-restart/OOM não significa atividade saudável. Após restart, verificar novo PID, lease recuperado, reúso de chunks, cursor/fila e conclusão real; PID sozinho não prova recuperação. Interrupção pode consumir uma tentativa; não reiniciar repetidamente uma mesma aula.
 
-`sudo systemctl stop study-hub-fo-transcription.service`, voltar a variável para `false`, revogar a autorização e manter `systemctl disable`. Não apagar fontes/vídeos/PDFs. Em retomada autorizada, leases interrompidos voltam à fila respeitando limite de tentativas e checkpoints concluídos não repetem inferência. A retomada após reboot precisa de novo start manual enquanto a unit estiver disabled; não foi habilitado boot. Interrupção por falta de disco antes do lease não gasta tentativa. Artefatos de review são resultados novos, não backups do corpus antigo.
+Cutover comprovado: o chunk 0–600 s de História persistiu antes de encerrar o piloto. A unit permanente recuperou o job, verificou os bytes da fonte, reutilizou esse chunk e decodificou a cauda; resultado aprovado às 05:42:37 UTC. Um override temporário retomava só esse job e depois executava o loop; foi removido por SHA antes do restart das 05:43:41. ExecStart final é somente `python -m fo_hub.worker --run --loop`. Após restart, Inglês ficou queued com tentativa preservada e Literatura foi selecionada; Round Robin não promete retomar imediatamente a disciplina interrompida. Nunca reinstalar o override transitório como configuração permanente.
 
-## Verificação realizada sem ASR
+## Recuperação e revogação
 
-Os testes injetam os subprocessos ASR: gates, integridade SHA, offsets em ms, retomada, retry, backpressure de disco, cache por bytes, stitching e sinais negativos, fontes versionadas, isolamento de review, publicação, HTTP/MCP e OneDrive allowlist. Gzip é verificado por round-trip sem perda. Testes de recuperação removem apenas temporários sintéticos marcados; nenhuma limpeza de arquivos existentes foi executada na VPS. Download tem limites explícitos de tamanho/transferência. Ver relatório datado em `docs/research/2026-10-27-fo-transcription-preparation.md` para os números finais.
+- paused_storage: preservar fila/evidências e ampliar espaço ou limpar somente resíduos classificados. Não apagar corpus/Anki.
+- Fonte indisponível: consultar deferrals e motivos agregados em `/fo/sync-status`; fonte válida nova volta automaticamente.
+- breaker_open: inspecionar erro privado/configuração; corrigir causa antes de `python -m fo_hub.worker --reset-breaker` e `systemctl reset-failed/start`. Nunca criar timer de reset.
+- Auth sistêmica: corrigir acesso pelo procedimento existente, não converter em warning de curso.
+- Review isolado: manter raw/QA para futuro, continuar outras aulas.
 
-## Configuração e monitoramento após autorização integral
+Revogação: `sudo systemctl disable --now study-hub-fo-transcription.service`, gate false em transcription.env E transcription-gate.env, restart somente da API para refletir a mudança e revogar autorização se solicitado. Não apagar fila, checkpoints ou originais. Preservar Anki/n8n/serviços terceiros.
 
-Baseline: large-v3 FP16, `pt`, beam 5/best-of 5, temperatura 0, fallback off/incremento efetivo 0, no-speech 0,6, entropy 2,4, logprob -1, contexto padrão **`-mc 0`** (também na construção direta de `Config`), CPU `-ng`, saída `-ojf`. Não usar prompt especulativo nem pós-processamento por IA. Fallback 0→1 em incrementos 0,2 e beam 10 são comparações, não melhorias já comprovadas. VAD permanece desligado por decisão de qualidade, não ausência de pesos: `models/for-tests-silero-v6.2.0-ggml.bin` tem 885.098 bytes e SHA-256 `2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987`, idêntico ao Silero v6.2.0 oficial `ggml-org/whisper-vad`. A biblioteca instalada carregou esses pesos e classificou dois segundos de zeros PCM em memória, em CPU, sem carregar Whisper ASR e sem abrir áudio real. Isso prova compatibilidade e execução sintética, não retenção de fala baixa, música/ruído nem alinhamento dos timestamps ASR com VAD. Não adicionar `--vad` ao pipeline antes da comparação real autorizada e da validação desse mapeamento.
+## Aprimoramentos fora do gate MVP
 
-1. Aceitar piloto e benchmark por qualidade PT-BR/termos/alucinação/timestamps, não por velocidade. Registrar configuração vencedora e consumo observado. Não há vencedor antes disso.
-2. Depois do aceite documentado, atualizar somente o ambiente FO para `true`, manter autorização explícita e repetir preflight. A missão atual permite fila persistente/boot após os gates; fora desse escopo, exigir autorização correspondente. Não criar timer e não executar essa etapa com QA bloqueada.
-3. Monitorar `journalctl -u study-hub-fo-transcription.service -f`, `systemctl show study-hub-fo-transcription.service -p ActiveState -p MemoryCurrent -p MemoryPeak -p CPUUsageNSec`, `df -h /home/ubuntu` e `/fo/sync-status`/`fo_get_sync_status`.
-4. Status preserva `transcription_jobs` legado e expõe `transcription_states`: `leased→processing`, `done→validated`, `stale→superseded`. `transcription_progress` informa total, progresso e leases vencidos. `paused_storage` é backpressure do worker; jobs ficam queued. Comandos têm timeout (ASR por chunk até 48 h); heartbeat em conexão SQLite própria renova o lease durante decodificação, sem inventar progresso entre checkpoints. Serviço recupera owner antigo sob lock após restart. Uma execução sintética não mede o tempo real em ARM.
-5. Observar crescimento dos artefatos gzip e do JSON público; não existe estimativa medida de bytes/hora ASR antes do piloto. Ao atingir reserva, pausar sem exclusões e ampliar armazenamento conforme necessidade, em vez de apagar evidências. Mudanças observadas de ID/tamanho/ModTime remoto invalidam a revisão; sem metadata nova não é possível detectar uma troca invisível de mesmo tamanho após validação. Hash do download protege reúso de inferência, não substitui inventário remoto atualizado.
+Gold/WER/CER, code-switch validado, refinamentos de alinhamento e revisão acadêmica/OCR são backlog. PDF policy v5 e privacidade continuam obrigatórias; não expor original como substituto de derivado seguro. Materiais legado permanece proibido; um timer novo exige ciclo real seguro e não pode alegar cobertura global se só atualiza uma linha fixa.

@@ -1,4 +1,23 @@
-# FO periodic materials — code prepared, NOT deployed or activated
+# FO periodic materials — deployed and timer enabled, 07/11/2026
+
+## Production acceptance
+
+Commit 7b93b61 deployed with hashes checked. Two initial automatic selections
+observed empty branches and advanced the durable cursor without upload. The third
+manual invocation acquired a real PDF (32,590,808 bytes / 436 pages), verified the
+full-SHA remote object, indexed policy v5 (435 text-only / one blocked), committed
+cursor sequence 3 and removed its temporary originals. No persistent local alias.
+
+After acceptance, the primary materials.timer was enabled/active. Its persistent
+catch-up ran a fourth selection automatically: another real PDF (5,703,103 bytes /
+203 text-only v5 pages), remote byte check, cursor sequence 4 and zero retained
+temporary originals. The existing daily 04:45 UTC calendar remains; this is bounded
+incremental rotation, not an assertion of complete or near-real-time coverage.
+
+Final readback: 174 materials / 8,457 pages, 7,912 text-only and 545 blocked. The
+historical 544 blocked pages were not released. The legacy producer was not started.
+The statements below describe the design and the earlier acceptance prerequisites;
+live receipts are linked from docs/research/2026-11-07-fo-mvp-activation.md.
 
 ## Producer and checkpoint
 
@@ -55,7 +74,7 @@ Locks: materials, materials-publication, index. No catalog/worker/QA code change
 ## Coordinated acceptance after commit/deploy
 
 Deploy only reviewed committed mission paths and verify hashes first. The primary
-`study-hub-fo-materials.service` draft now invokes automatic rotation with CPU100%,
+`study-hub-fo-materials.service` now invokes automatic rotation with CPU100%,
 MemoryMax=2G, TimeoutStartSec=75min and KillMode=control-group. It has no outer
 flock (the module owns that same lock) and no Restart. Its existing timer file and
 calendar are unchanged. No separate cycle timer/service is needed or installed.
@@ -85,5 +104,5 @@ filters through the collector adapter, defaults CLI to rotation, commits cursor
 only after verified indexing, handles empty branches without upload, and never
 advances on failed upload. Existing synthetic real-local-rclone copy/check and
 idempotency tests pass. These do not establish live portal completeness or real
-OneDrive acceptance. No VPS invocation/deploy/timer change was performed for this
-revision because runtime deployment requires the parent's coordinated commit.
+OneDrive acceptance. Those were the implementation-stage limits; production
+invocations and timer activation were subsequently verified as described above.

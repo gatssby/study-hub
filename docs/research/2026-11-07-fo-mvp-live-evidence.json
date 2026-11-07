@@ -1,0 +1,601 @@
+{
+  "final": {
+    "observed_at": 1794030551.393677,
+    "sync_status": {
+      "TRANSCRIPTION_ENABLED": true,
+      "lessons_total": 3311,
+      "lessons_present": 3023,
+      "lessons_missing": 288,
+      "materials_total": 174,
+      "pdf_pages_total": 8457,
+      "pdf_page_quality": {
+        "blocked": 20,
+        "low_text": 4,
+        "ocr_empty": 1,
+        "ocr_pending": 1,
+        "ocr_review": 523,
+        "text": 7908
+      },
+      "pdf_privacy": {
+        "policy_version": 5,
+        "current_policy_pages": 8457,
+        "v2_pages": 0,
+        "released_pages": 7912,
+        "blocked_pages": 545,
+        "unreviewed_pages": 0,
+        "ocr_pending_pages": 1
+      },
+      "transcripts_validated": 6,
+      "transcription_states": {
+        "queued": 3006,
+        "processing": 1,
+        "validated": 6,
+        "review": 1,
+        "failed": 0,
+        "superseded": 518
+      },
+      "sources": {
+        "current_queued": 3006,
+        "eligible": 2993,
+        "pending": 13
+      },
+      "transcription_deferrals": {
+        "total": 13,
+        "by_reason": {
+          "authenticated_observation_failed": 2,
+          "hls_404": 5,
+          "source_duration_mismatch": 2,
+          "stream_not_captured": 4
+        }
+      }
+    },
+    "services": {
+      "transcription": {
+        "Restart": "on-failure",
+        "TimeoutStopUSec": "1min 30s",
+        "MainPID": "3143673",
+        "Result": "success",
+        "NRestarts": "0",
+        "ExecMainStatus": "0",
+        "MemoryCurrent": "4334751744",
+        "CPUUsageNSec": "916855539000",
+        "CPUQuotaPerSecUSec": "3s",
+        "MemoryMax": "12884901888",
+        "TasksMax": "128",
+        "KillMode": "control-group",
+        "ActiveState": "active",
+        "SubState": "running",
+        "enabled": "enabled"
+      },
+      "api": {
+        "Restart": "on-failure",
+        "TimeoutStopUSec": "1min 30s",
+        "MainPID": "3138706",
+        "Result": "success",
+        "NRestarts": "0",
+        "ExecMainStatus": "0",
+        "MemoryCurrent": "37978112",
+        "CPUUsageNSec": "1653676000",
+        "CPUQuotaPerSecUSec": "1s",
+        "MemoryMax": "2147483648",
+        "TasksMax": "512",
+        "KillMode": "control-group",
+        "ActiveState": "active",
+        "SubState": "running"
+      },
+      "materials": {
+        "Restart": "no",
+        "TimeoutStopUSec": "1min 30s",
+        "MainPID": "0",
+        "Result": "success",
+        "NRestarts": "0",
+        "ExecMainStatus": "0",
+        "MemoryCurrent": "[not set]",
+        "CPUUsageNSec": "15394133000",
+        "CPUQuotaPerSecUSec": "1s",
+        "MemoryMax": "2147483648",
+        "TasksMax": "512",
+        "KillMode": "control-group",
+        "ActiveState": "inactive",
+        "SubState": "dead"
+      },
+      "catalog": {
+        "Restart": "on-failure",
+        "TimeoutStopUSec": "1min 30s",
+        "MainPID": "0",
+        "Result": "exit-code",
+        "NRestarts": "0",
+        "ExecMainStatus": "1",
+        "MemoryCurrent": "[not set]",
+        "CPUUsageNSec": "3131371719000",
+        "CPUQuotaPerSecUSec": "1s",
+        "MemoryMax": "2147483648",
+        "TasksMax": "512",
+        "KillMode": "control-group",
+        "ActiveState": "inactive",
+        "SubState": "dead"
+      },
+      "videos": {
+        "Restart": "no",
+        "TimeoutStopUSec": "1min 30s",
+        "MainPID": "0",
+        "Result": "success",
+        "NRestarts": "0",
+        "ExecMainStatus": "0",
+        "MemoryCurrent": "[not set]",
+        "CPUUsageNSec": "298811000",
+        "CPUQuotaPerSecUSec": "1s",
+        "MemoryMax": "2147483648",
+        "TasksMax": "512",
+        "KillMode": "control-group",
+        "ActiveState": "inactive",
+        "SubState": "dead"
+      },
+      "index": {
+        "Restart": "no",
+        "TimeoutStopUSec": "1min 30s",
+        "MainPID": "0",
+        "Result": "success",
+        "NRestarts": "0",
+        "ExecMainStatus": "0",
+        "MemoryCurrent": "[not set]",
+        "CPUUsageNSec": "4476901000",
+        "CPUQuotaPerSecUSec": "1s",
+        "MemoryMax": "2147483648",
+        "TasksMax": "512",
+        "KillMode": "control-group",
+        "ActiveState": "inactive",
+        "SubState": "dead"
+      },
+      "onedrive": {
+        "Restart": "no",
+        "TimeoutStopUSec": "1min 30s",
+        "MainPID": "0",
+        "Result": "success",
+        "NRestarts": "0",
+        "ExecMainStatus": "0",
+        "MemoryCurrent": "[not set]",
+        "CPUUsageNSec": "3646589000",
+        "CPUQuotaPerSecUSec": "1s",
+        "MemoryMax": "2147483648",
+        "TasksMax": "512",
+        "KillMode": "control-group",
+        "ActiveState": "inactive",
+        "SubState": "dead"
+      },
+      "ocr": {
+        "Restart": "no",
+        "TimeoutStopUSec": "1min 30s",
+        "MainPID": "0",
+        "Result": "success",
+        "NRestarts": "0",
+        "ExecMainStatus": "0",
+        "MemoryCurrent": "[not set]",
+        "CPUUsageNSec": "88595000",
+        "CPUQuotaPerSecUSec": "250ms",
+        "MemoryMax": "536870912",
+        "TasksMax": "32",
+        "KillMode": "control-group",
+        "ActiveState": "inactive",
+        "SubState": "dead"
+      }
+    },
+    "timers": {
+      "catalog": {
+        "NextElapseUSecRealtime": "Sat 2026-11-07 09:00:57 UTC",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      },
+      "materials": {
+        "NextElapseUSecRealtime": "Sun 2026-11-08 04:45:21 UTC",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      },
+      "videos": {
+        "NextElapseUSecRealtime": "Sat 2026-11-07 06:00:47 UTC",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      },
+      "index": {
+        "NextElapseUSecRealtime": "Sat 2026-11-07 05:51:52 UTC",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      },
+      "onedrive": {
+        "NextElapseUSecRealtime": "Sat 2026-11-07 06:26:22 UTC",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      },
+      "ocr": {
+        "NextElapseUSecRealtime": "Sat 2026-11-07 05:55:23 UTC",
+        "ActiveState": "active",
+        "UnitFileState": "enabled"
+      }
+    },
+    "restart": {
+      "before_main_pid": 3137550,
+      "after_main_pid": 3143673,
+      "interrupted_job_requeued": {
+        "lesson_id": "fo_d876d085003dd47b",
+        "version": 1,
+        "state": "queued",
+        "attempts": 1,
+        "last_error": "worker interrupted; resumed from persistent queue"
+      },
+      "current_lease": {
+        "lesson_id": "fo_11dfe6966cdd813f",
+        "version": 2,
+        "state": "leased",
+        "attempts": 1,
+        "progress": 0.0,
+        "updated_at": "1794030525.600065",
+        "subject": "Literatura - Teoria"
+      },
+      "cursor": {
+        "id": 1,
+        "last_discipline": "Literatura",
+        "cycle": 5,
+        "updated_at": 1794030224.0586848
+      },
+      "duplicate_jobs": 0,
+      "temporary_bootstrap_removed": true
+    },
+    "breaker": [
+      {
+        "fingerprint": "8ab713271b917bf46c90d470ba29fb4e62a7bcec30f73baa4db345f2fffc4cf4",
+        "consecutive_failures": 0,
+        "consecutive_reviews": 0,
+        "opened_at": null,
+        "reason": null
+      }
+    ],
+    "asr_decoder_count": 1,
+    "temporary_work_trees": 1,
+    "pending_material_failure_trees": 0,
+    "sqlite_quick_check": "ok",
+    "disk": {
+      "free_bytes": 11874660352,
+      "total_bytes": 48715948032
+    },
+    "memory": {
+      "MemTotal_bytes": 25137336320,
+      "MemAvailable_bytes": 18381955072
+    },
+    "loadavg": [
+      3.376953125,
+      3.080078125,
+      2.9775390625
+    ],
+    "catalog": {
+      "status_counts": {
+        "ok": 10,
+        "incomplete": 1
+      },
+      "courses": [
+        {
+          "title": "Intensivo UFPR 2026",
+          "status": "ok",
+          "warning_code": null
+        },
+        {
+          "title": "Ciências Básica",
+          "status": "ok",
+          "warning_code": null
+        },
+        {
+          "title": "Extensivo UFPR 2026",
+          "status": "ok",
+          "warning_code": null
+        },
+        {
+          "title": "Matemática Básica",
+          "status": "ok",
+          "warning_code": null
+        },
+        {
+          "title": "Materiais exclusivos de medicina",
+          "status": "ok",
+          "warning_code": null
+        },
+        {
+          "title": "Redação UFPR 2026",
+          "status": "ok",
+          "warning_code": null
+        },
+        {
+          "title": "Semiextensivo UFPR 2026",
+          "status": "ok",
+          "warning_code": null
+        },
+        {
+          "title": "Simuladão UFPR #01 - Gratuito",
+          "status": "ok",
+          "warning_code": null
+        },
+        {
+          "title": "Simuladão UFPR #02 - Gratuito",
+          "status": "incomplete",
+          "warning_code": "empty_unverified"
+        },
+        {
+          "title": "Simuladão UFPR #03 - Gratuito",
+          "status": "ok",
+          "warning_code": null
+        },
+        {
+          "title": "Simulados e Resolução de Provas",
+          "status": "ok",
+          "warning_code": null
+        }
+      ]
+    },
+    "anki": {
+      "anki-vnext-api.service": {
+        "MainPID": "998234",
+        "ActiveState": "active"
+      },
+      "anki-vnext-mcp.service": {
+        "MainPID": "998235",
+        "ActiveState": "active"
+      },
+      "anki-vnext-sync.service": {
+        "MainPID": "998212",
+        "ActiveState": "active"
+      }
+    },
+    "unit_hashes": {
+      "asr": "6ae579cba4fb437a08fd21d54e339b92088330450bf67332fb090974287abd37",
+      "materials": "2e19bb2db5a3ecac28316d35b79fdbe6b1ad22aafc6f2abd9b72caa98d9b9d12",
+      "api_gate_dropin": "c2a4170d4c022ca8cd163bdf7fd2108eb8206ed29f809e2d1351b6a1f68c4de9"
+    }
+  },
+  "permanent_completion": {
+    "observed_at": 1794030202.2957878,
+    "completed_by_permanent_service": {
+      "lesson_id": "fo_1f3a74cb71e98be4",
+      "version": 1,
+      "state": "done",
+      "progress": 1.0,
+      "attempts": 2,
+      "duration_s": 768.283867,
+      "segment_count": 121,
+      "qa_passed": true,
+      "warning_kinds": [],
+      "blocker_kinds": [],
+      "reused_chunks": 1,
+      "newly_decoded_chunks": 1,
+      "checkpoint_sha256_unchanged": true,
+      "source_original_present_size_verified": true,
+      "http_status": 200
+    },
+    "next_lease_before_restart": {
+      "lesson_id": "fo_d876d085003dd47b",
+      "version": 1,
+      "attempts": 1,
+      "state": "leased",
+      "subject": "Inglês - Teoria"
+    },
+    "cursor": {
+      "id": 1,
+      "last_discipline": "Inglês",
+      "cycle": 5,
+      "updated_at": 1794030159.6162248
+    },
+    "temporary_work_trees": 1
+  },
+  "handoff": {
+    "at": 1794029666.4273849,
+    "pilot_job": {
+      "lesson_id": "fo_1f3a74cb71e98be4",
+      "version": 1,
+      "state": "leased",
+      "progress": 0.7809613422482552,
+      "attempts": 1
+    },
+    "preserved_checkpoints": [
+      {
+        "sha256": "cafbd82d6148dbba719951ea6011a34d9c88b27f72607b0c975dd9c41124a3f4",
+        "source_sha256": "2250853801a9772c8c45dd01e0f1c5918dd938a883c265edf24c80172e16d47c",
+        "fingerprint": "3e27da618f00f1560bd5cef92b57075b97717fd64d8c0d5c62be6db005eb9d97",
+        "offset_s": 0.0,
+        "duration_s": 600
+      }
+    ],
+    "reassessed_validated_ids": [
+      "fo_135c415d8080927f",
+      "fo_d9f369413fd5cf40",
+      "fo_ce6134240d753024",
+      "fo_0978f8f807c122f4"
+    ],
+    "breaker_before": {
+      "fingerprint": "8ab713271b917bf46c90d470ba29fb4e62a7bcec30f73baa4db345f2fffc4cf4",
+      "consecutive_failures": 0,
+      "consecutive_reviews": 4,
+      "opened_at": null,
+      "reason": null
+    },
+    "breaker_after": {
+      "fingerprint": "8ab713271b917bf46c90d470ba29fb4e62a7bcec30f73baa4db345f2fffc4cf4",
+      "consecutive_failures": 0,
+      "consecutive_reviews": 0,
+      "opened_at": null,
+      "reason": null
+    },
+    "reason": "Four historic conservative-QA reviews now validated under QA v4; preserve original evidence and do not clear any open/technical breaker."
+  },
+  "api_mcp": {
+    "at": 1794030264.8422592,
+    "http": [
+      {
+        "lesson_id": "fo_135c415d8080927f",
+        "code": 200,
+        "segments": 624,
+        "warnings": 2
+      },
+      {
+        "lesson_id": "fo_d9f369413fd5cf40",
+        "code": 200,
+        "segments": 364,
+        "warnings": 2
+      },
+      {
+        "lesson_id": "fo_ce6134240d753024",
+        "code": 200,
+        "segments": 560,
+        "warnings": 5
+      },
+      {
+        "lesson_id": "fo_0978f8f807c122f4",
+        "code": 200,
+        "segments": 496,
+        "warnings": 2
+      },
+      {
+        "lesson_id": "fo_1f3a74cb71e98be4",
+        "code": 200,
+        "segments": 121,
+        "warnings": 0
+      },
+      {
+        "lesson_id": "fo_3f92db67195e2bbf",
+        "code": 200,
+        "segments": 430,
+        "warnings": 0
+      },
+      {
+        "lesson_id": "fo_4cc5e44ffb6dc603",
+        "code": 404,
+        "segments": 0,
+        "warnings": 0
+      }
+    ],
+    "mcp": [
+      {
+        "lesson_id": "fo_135c415d8080927f",
+        "is_error": false,
+        "segments": 624
+      },
+      {
+        "lesson_id": "fo_d9f369413fd5cf40",
+        "is_error": false,
+        "segments": 364
+      },
+      {
+        "lesson_id": "fo_ce6134240d753024",
+        "is_error": false,
+        "segments": 560
+      },
+      {
+        "lesson_id": "fo_0978f8f807c122f4",
+        "is_error": false,
+        "segments": 496
+      },
+      {
+        "lesson_id": "fo_1f3a74cb71e98be4",
+        "is_error": false,
+        "segments": 121
+      },
+      {
+        "lesson_id": "fo_3f92db67195e2bbf",
+        "is_error": false,
+        "segments": 430
+      },
+      {
+        "lesson_id": "fo_4cc5e44ffb6dc603",
+        "is_error": true,
+        "segments": 0
+      }
+    ],
+    "tools": {
+      "total": 26,
+      "fo": 7,
+      "anki": 19
+    },
+    "anki_health_ok": true,
+    "ocr_blocked_without_text": true
+  },
+  "materials_manual": {
+    "observed_at": 1794029547.0815287,
+    "unit": {
+      "Result": "success",
+      "ExecMainStatus": "0",
+      "MemoryPeak": "[not set]",
+      "ActiveState": "inactive"
+    },
+    "result": {
+      "files": 1,
+      "pages": 436,
+      "byte_verified": true,
+      "cleanup": true
+    },
+    "sequence": 3,
+    "observed_branches": 3,
+    "observed_rows": 1,
+    "pdf_sha256": "1b5dd7f19069d2556dec386a56ef9a0b21e38202834f92220883071fb28b2334",
+    "remote_bytes": 32590808,
+    "quality": [
+      {
+        "policy": 5,
+        "exposure": "blocked",
+        "quality": "ocr_pending",
+        "pages": 1
+      },
+      {
+        "policy": 5,
+        "exposure": "text_only",
+        "quality": "text",
+        "pages": 435
+      }
+    ],
+    "temporary_originals_remaining": 0,
+    "persistent_local_alias_present": false
+  },
+  "materials_timer": {
+    "observed_at": 1794030441.7887826,
+    "unit": {
+      "Result": "success",
+      "ExecMainStatus": "0",
+      "MemoryPeak": "[not set]",
+      "ActiveState": "inactive"
+    },
+    "result": {
+      "files": 1,
+      "pages": 203,
+      "byte_verified": true,
+      "cleanup": true
+    },
+    "sequence": 4,
+    "observed_branches": 4,
+    "observed_rows": 2,
+    "pdf_sha256": "5cb91ad05413681353251f5c69b7055bbacc2fbe26d974896378b422dd226635",
+    "remote_bytes": 5703103,
+    "quality": [
+      {
+        "policy": 5,
+        "exposure": "text_only",
+        "quality": "text",
+        "pages": 203
+      }
+    ],
+    "temporary_originals_remaining": 0,
+    "persistent_local_alias_present": false
+  },
+  "onedrive": {
+    "updated_at": 1794030333.6996832,
+    "pdf_sync": "verified",
+    "transcript_sync": "verified",
+    "transcript_files": 6,
+    "remote_videos": 2252,
+    "error_type": null,
+    "error_phase": null
+  },
+  "verification_scope": {
+    "final_tests_passed": 690,
+    "module_hashes_matched": 37,
+    "present_current_valid_sources": 3001,
+    "whole_vps_reboot_tested": false,
+    "controlled_service_restart_tested": true,
+    "notion_connected": false,
+    "source_bytes_for_entire_inventory_downloaded": false
+  }
+}
