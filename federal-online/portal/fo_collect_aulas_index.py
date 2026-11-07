@@ -42,6 +42,17 @@ except ImportError:  # pragma: no cover - handled at runtime.
 
 
 DEFAULT_FO_STATE_ROOT = DEFAULT_STATE_ROOT
+
+
+class CourseUnavailable(RuntimeError):
+    """Explicit course-level denial/absence, not login or service failure."""
+
+    def __init__(self, status: int):
+        if status not in (403, 404, 410):
+            raise ValueError("not a course-level unavailable status")
+        self.status = status
+        super().__init__(f"course unavailable: HTTP {status}")
+
 # No fixed course: callers (runtime.py) pass URLs discovered from /portal.
 DEFAULT_COURSE_URL = os.environ.get("FO_COURSE_URL", "")
 
@@ -1654,7 +1665,7 @@ def write_outputs(
 
 def open_course_page_for_collection(page: Any, config: RuntimeConfig, logger: Logger, reason: str) -> None:
     logger.log(f"[legacy_flow.goto] motivo={reason} curso={config.course_url}")
-    page.goto(config.course_url, wait_until="domcontentloaded", timeout=config.nav_timeout_ms)
+    response = page.goto(config.course_url, wait_until="domcontentloaded", timeout=config.nav_timeout_ms)
     if page_requires_login(page):
         if not config.email or not config.password:
             raise RuntimeError(
@@ -1664,7 +1675,14 @@ def open_course_page_for_collection(page: Any, config: RuntimeConfig, logger: Lo
         logger.log("[auth] login requerido; executando relogin automatico.")
         login_if_needed(page, config, logger)
         logger.log(f"[legacy_flow.goto_after_login] reabrindo curso={config.course_url}")
-        page.goto(config.course_url, wait_until="domcontentloaded", timeout=config.nav_timeout_ms)
+        response = page.goto(config.course_url, wait_until="domcontentloaded", timeout=config.nav_timeout_ms)
+    if page_requires_login(page):
+        raise SessionExpiredDuringCollection("Login required after course navigation")
+    status = response.status if response is not None else None
+    if status in (403, 404, 410):
+        raise CourseUnavailable(status)
+    if status is not None and status >= 400:
+        raise RuntimeError(f"course navigation failed: HTTP {status}")
     try:
         page.wait_for_load_state("load", timeout=config.nav_timeout_ms)
     except PlaywrightTimeoutError:

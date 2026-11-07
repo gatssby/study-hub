@@ -68,6 +68,21 @@ def read_json(path: Path, default: Any) -> Any:
         return default
 
 
+def read_catalog_json(path: Path, default: Any) -> Any:
+    """Missing state is new; malformed state is evidence, never a reset."""
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return default
+    if not isinstance(value, dict):
+        raise ValueError("catalog state must be an object")
+    key = {"courses.json": "courses", "aulas_index.json": "aulas"}.get(path.name)
+    if key and (not isinstance(value.get(key), list)
+                or any(not isinstance(row, dict) for row in value[key])):
+        raise ValueError("catalog state must contain object rows")
+    return value
+
+
 @contextmanager
 def run_lock(state_root: Path, name: str = "runtime") -> Iterator[Path]:
     """Non-blocking flock; compatible with an outer `flock` in systemd units on the same file."""
@@ -155,6 +170,10 @@ def courses_due(registry: dict[str, Any], mode: str, now: datetime, course_filte
         if mode == "weekly":
             due.append(course)
             continue
+        warning = course.get("warning")
+        retry_at = parse_iso(warning.get("retry_after")) if isinstance(warning, dict) else None
+        if not course_filter and retry_at and now < retry_at:
+            continue
         last_ok = parse_iso(course.get("last_ok_at"))
         if course.get("status") != "ok" or last_ok is None or now - last_ok >= INCREMENTAL_MAX_AGE:
             due.append(course)
@@ -199,6 +218,16 @@ def run_catalog_course(
     out = paths.course_dir(course["course_id"])
     out.mkdir(parents=True, exist_ok=True)
     checkpoint = out / collector.CHECKPOINT_FILENAME
+    previous = read_catalog_json(out / "aulas_index.json", {})
+    # Validate before invoking a producer that could overwrite corrupt evidence.
+    if checkpoint.exists():
+        cp = read_catalog_json(checkpoint, {})
+        if (cp.get('schema_version') != collector.SCHEMA_VERSION
+                or cp.get('course_url') != course['url']
+                or cp.get('path_filters') != []
+                or not isinstance(cp.get('entries'), list)
+                or any(not isinstance(row, dict) for row in cp['entries'])):
+            raise ValueError("invalid catalog checkpoint; preserved")
     resume = mode != "weekly" or checkpoint.exists()
     entries = collect(course, checkpoint, resume)
     traversal_errors = getattr(entries, 'traversal_errors', [])
@@ -217,7 +246,7 @@ def run_catalog_course(
 
     status_counts = dict(Counter(str(e.get("status") or "") for e in entries))
     observed_total = len(entries)
-    previous = read_json(out / "aulas_index.json", {})
+
     retained_previous = 0
     pending_errors = []
     if entries and (limited or traversal_errors or status_counts.get("error", 0)):
@@ -284,6 +313,7 @@ def catalog(args: argparse.Namespace, *, discover: Callable[[], list[dict[str, s
             collect: Callable[[dict[str, Any], Path, bool], list[dict[str, Any]]] | None = None,
             log: Callable[[str], None] = print) -> int:
     paths = Paths(args.state_root)
+    from fo_collect_aulas_index import CourseUnavailable
     with run_lock(args.state_root):
         browser_ctx = None
         if discover is None or collect is None:
@@ -294,11 +324,13 @@ def catalog(args: argparse.Namespace, *, discover: Callable[[], list[dict[str, s
             discovered = discover()
             if not discovered:
                 raise RuntimeError("nenhum curso descoberto em /portal; registro preservado")
-            registry = reconcile_courses(read_json(paths.courses_json, {}), discovered, now_iso())
+            registry = reconcile_courses(read_catalog_json(paths.courses_json, {}), discovered, now_iso())
             atomic_write_json(paths.courses_json, registry)
             due = courses_due(registry, args.mode, datetime.now(timezone.utc), args.course_filter)
             log(f"[catalog] descobertos={len(discovered)} pendentes={len(due)} mode={args.mode}")
             failures = 0
+            warnings = 0
+            completed = 0
             for course in due:
                 try:
                     limited = args.limit is not None
@@ -307,26 +339,74 @@ def catalog(args: argparse.Namespace, *, discover: Callable[[], list[dict[str, s
                     if errors:
                         failures += 1
                         update = {"status": "error", "last_summary": summary,
-                                  "last_error": f"catalog item errors: {errors}; checkpoint preserved"}
+                                  "last_error": f"catalog item errors: {errors}; checkpoint preserved", "warning": None}
                         log(f"[catalog] curso={course['course_id']} parcial: {errors} erros")
                     elif limited or summary.get('traversal_errors') or (summary["total"] == 0 and not summary.get('empty_verified')):
-                        failures += 1
                         reason = ("bounded collector" if limited else "incomplete branch traversal"
                                   if summary.get('traversal_errors') else "empty catalog not independently verified")
-                        update = {"status": "incomplete", "last_summary": summary, "last_error": reason}
+                        update = {"status": "incomplete", "last_summary": summary, "last_error": reason, "warning": None}
+                        if limited:
+                            failures += 1
+                        else:
+                            warnings += 1
+                            update["warning"] = {
+                                "code": "incomplete_traversal" if summary.get('traversal_errors') else "empty_unverified",
+                                "severity": "warning",
+                                "observed_at": now_iso(),
+                                "retry_after": (datetime.now(timezone.utc) + INCREMENTAL_MAX_AGE).isoformat(),
+                            }
                         log(f"[catalog] curso={course['course_id']} incompleto: {reason}")
                     else:
-                        update = {"status": "ok", "last_ok_at": now_iso(), "last_summary": summary, "last_error": ""}
+                        completed += 1
+                        update = {"status": "ok", "last_ok_at": now_iso(), "last_summary": summary, "last_error": "", "warning": None}
+                        if not summary['total'] and summary.get('empty_verified'):
+                            update['warning'] = {"code": "empty_verified", "severity": "info",
+                                                 "scope": "native_portal_video_items_only", "observed_at": now_iso()}
+                except CourseUnavailable as exc:
+                    warnings += 1
+                    update = {"status": "incomplete", "last_error": str(exc),
+                              "warning": {"code": "course_unavailable", "severity": "warning", "http_status": exc.status,
+                                          "needs_live_peer": exc.status == 403,
+                                          "observed_at": now_iso(),
+                                          "retry_after": (datetime.now(timezone.utc) + INCREMENTAL_MAX_AGE).isoformat()}}
+                    log(f"[catalog] curso={course['course_id']} indisponivel: HTTP {exc.status}")
                 except Exception as exc:  # per-course isolation; checkpoint keeps progress
                     failures += 1
-                    update = {"status": "error", "last_error": f"{type(exc).__name__}: {exc}"[:500]}
+                    update = {"status": "error", "last_error": f"{type(exc).__name__}: {exc}"[:500], "warning": None}
                     log(f"[catalog] curso={course['course_id']} falhou: {update['last_error']}")
-                registry = read_json(paths.courses_json, registry)
+                registry = read_catalog_json(paths.courses_json, registry)
                 for entry in registry["courses"]:
                     if entry["course_id"] == course["course_id"]:
                         entry.update(update, last_run_at=now_iso())
                 atomic_write_json(paths.courses_json, registry)
-            return 1 if failures else 0
+            # Evaluate persisted availability too: a cooldown/no-op must not
+            # hide an ongoing outage. Fresh completed peers can establish useful
+            # availability without needlessly recollecting them for one warning.
+            active = [c for c in registry['courses'] if c.get('status') != 'missing']
+            # A new 403 can be account-wide auth/authorization failure. Require
+            # a genuinely collected peer, not a cached last_ok timestamp.
+            if completed:
+                for course in active:
+                    if course.get('warning', None) and course['warning'].get('needs_live_peer'):
+                        course['warning']['needs_live_peer'] = False
+                        course['warning']['peer_verified_at'] = now_iso()
+            unverified_denial = any((c.get('warning') or {}).get('needs_live_peer') for c in active)
+            active_warnings = sum(bool(c.get('warning')) and c.get('status') != 'ok' for c in active)
+            active_errors = sum(c.get('status') == 'error' for c in active)
+            now = datetime.now(timezone.utc)
+            fresh_ok = sum(c.get('status') == 'ok' and last_ok is not None
+                           and now - last_ok < INCREMENTAL_MAX_AGE
+                           for c in active for last_ok in [parse_iso(c.get('last_ok_at'))])
+            failed = bool(failures or active_errors or unverified_denial or (active_warnings and
+                          (not fresh_ok or active_warnings > fresh_ok)))
+            registry["last_attempt"] = {"observed_at": now_iso(),
+                                        "status": "failed" if failed else "partial" if active_warnings else "ok",
+                                        "attempted": len(due), "completed": completed,
+                                        "warnings": warnings, "failures": failures,
+                                        "active_warnings": active_warnings, "active_errors": active_errors,
+                                        "fresh_ok": fresh_ok}
+            atomic_write_json(paths.courses_json, registry)
+            return 1 if failed else 0
         finally:
             if browser_ctx:
                 browser_ctx.close()
