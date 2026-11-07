@@ -1,5 +1,5 @@
 {
-  "observed_at": "2026-11-07T01:46:34Z",
+  "observed_at": "2026-11-07T02:52:32Z",
   "transport": "live loopback MCP HTTP",
   "calls": [
     {
@@ -101,6 +101,25 @@
         "transcripts_validated"
       ],
       "items": null
+    },
+    {
+      "tool": "anki_health",
+      "passed": true,
+      "response_keys": [
+        "anki_version",
+        "api_version",
+        "cards",
+        "collection_open",
+        "decks",
+        "last_collection_sync_at",
+        "last_media_sync_at",
+        "media_count",
+        "media_sync",
+        "notes",
+        "status",
+        "sync_state"
+      ],
+      "items": null
     }
   ],
   "tools": {
@@ -137,7 +156,16 @@
     ]
   },
   "pdf_released_page_has_citation": true,
+  "anki_health": {
+    "status": "ok",
+    "collection_open": true
+  },
   "review_blocked": [
+    {
+      "lesson_id": "fo_0978f8f807c122f4",
+      "state": "fo_not_found",
+      "has_text": false
+    },
     {
       "lesson_id": "fo_135c415d8080927f",
       "state": "fo_not_found",
@@ -159,13 +187,7 @@
       "has_text": false
     }
   ],
-  "processing_blocked": [
-    {
-      "lesson_id": "fo_0978f8f807c122f4",
-      "state": "fo_not_found",
-      "has_text": false
-    }
-  ],
+  "processing_blocked": [],
   "pdf_blocked_response_keys": [
     "material_id",
     "page_count",
@@ -219,6 +241,38 @@
       "subject": "Química - Teoria",
       "items": 2,
       "citations": true
+    }
+  ],
+  "api_http": [
+    {
+      "lesson_id": "fo_3f92db67195e2bbf",
+      "http_status": 200,
+      "text_served": true
+    },
+    {
+      "lesson_id": "fo_0978f8f807c122f4",
+      "http_status": 404,
+      "text_served": false
+    },
+    {
+      "lesson_id": "fo_135c415d8080927f",
+      "http_status": 404,
+      "text_served": false
+    },
+    {
+      "lesson_id": "fo_4cc5e44ffb6dc603",
+      "http_status": 404,
+      "text_served": false
+    },
+    {
+      "lesson_id": "fo_ce6134240d753024",
+      "http_status": 404,
+      "text_served": false
+    },
+    {
+      "lesson_id": "fo_d9f369413fd5cf40",
+      "http_status": 404,
+      "text_served": false
     }
   ]
 }

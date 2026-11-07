@@ -1,6 +1,6 @@
 # ATIVAÇÃO DAS TRANSCRIÇÕES — PILOTOS AUTORIZADOS, PRODUÇÃO CONDICIONADA A GATES
 
-Estado verificado na missão de 06/11/2026 (checkpoint 07/11, 00:13 UTC): `TRANSCRIPTION_ENABLED=false` no ambiente persistente; unit `study-hub-fo-transcription.service` desabilitada/inativa, sem timer. O arquivo de autorização existe, e o usuário autorizou explicitamente pilotos reais e produção somente após os gates. Um único lote RR transitório está em execução sob lock/cgroup, com gate verdadeiro apenas no ambiente desse piloto. Isso **não** significa produção persistente ativa. Ver `docs/research/2026-11-06-fo-production-mission.md` para resultados e pendências. Datas isoladas continuam não sendo autorização.
+Estado verificado na missão de 06/11/2026 (fechamento 07/11, 03:00 UTC): `TRANSCRIPTION_ENABLED=false` no ambiente persistente e na API; unit `study-hub-fo-transcription.service` desabilitada/inativa, sem timer e sem decoder. O arquivo de autorização existe, e o usuário autorizou explicitamente pilotos reais e produção somente após os gates. O lote RR transitório Física→Geografia **concluiu com dois resultados review**, sem publicação. Restart e reúso de chunks foram verificados, mas a qualidade falhou: não habilitar o serviço persistente. Cinco recortes focais reais não são gold humano; WER/CER continuam não medidos. Ver `docs/research/2026-11-07-fo-production-closure.md` e `2026-11-07-fo-qa-evidence.json` para decisões/evidências. Datas isoladas continuam não sendo autorização.
 
 ## O que está preparado
 
@@ -14,20 +14,22 @@ Evidências e checkpoints brutos são JSON gzip sem perda em `transcripts/eviden
 
 Somente o JSON público mínimo (`lesson_id`, `version`, `corpus`, `qa.passed=true`, `segments`) entra em `transcripts/generated_v2/<aula>/vN.json`. Publicação e cópia usam lock exclusivo/compartilhado comum. OneDrive usa allowlist `--files-from` confrontada com segmentos aprovados no banco e aula/source atuais; não envia raw, temporários, private, review ou revisão antiga. O MCP serve apenas aulas presentes, QA aprovada e revisão/fonte atuais. Spans de revisão focal ficam em `focused_reviews`, `pending_manual_review`; aprovação manual e retranscrição focal automática não fazem parte desta preparação.
 
-## Pré-requisitos manuais depois de nova autorização explícita
+## Pré-requisitos para liberação depois dos gates
+
+A missão de 06/11 já autorizou pilotos, produção persistente e boot **condicionados aos gates**. Não é necessária uma nova confirmação rotineira dentro desse escopo; é necessária evidência de qualidade/segurança. Os comandos históricos abaixo não são autorização nem comprovação de aceite, e não devem ser executados enquanto a qualidade continuar bloqueada.
 
 1. Entrar na VPS com `ssh oracle-vps`. Nunca executar inferência no Mac.
 2. Revisar `transcription/benchmark-selection-2026-10-27.json`, `benchmark-matrix.json` e `benchmark-evaluation.md`. Há seis aulas elegíveis de seis disciplinas e 18 janelas propostas, sem escuta. Faltam identificar pelo menos dois professores, confirmar ruído/música/silêncio, obter 90 minutos de gold, dois trechos sem fala de 3 min, probes curtos/fronteiras, glossário, timestamps e revisão por segundo anotador de 20%. O scorer WER/CER/termos/alucinação/timestamps/recursos/IC95 está implementado; nenhuma métrica de modelo foi medida. Executar benchmark somente se a nova autorização cobrir essa inferência.
 3. Confirmar espaço livre, fontes, pesos e binários. O preflight abaixo é seguro e pode continuar sendo usado antes da autorização:
 
     cd /home/ubuntu/study-hub/federal-online
-    TRANSCRIPTION_ENABLED=false STUDY_HUB_FO_DB=/home/ubuntu/study-hub-state/federal-online/hub.sqlite3 /home/ubuntu/study-hub-venv/bin/python -m fo_hub.worker --check-only
+    TRANSCRIPTION_ENABLED=false FO_STATE_ROOT=/home/ubuntu/study-hub-state/federal-online STUDY_HUB_FO_DB=/home/ubuntu/study-hub-state/federal-online/hub.sqlite3 WHISPER_CPP_BIN=/home/ubuntu/study-hub-models/whisper.cpp/build/bin/whisper-cli WHISPER_MODEL=/home/ubuntu/study-hub-models/ggml-large-v3.bin /home/ubuntu/study-hub-venv/bin/python -m fo_hub.worker --check-only
 
 4. Escolher modelo por qualidade, não apenas velocidade; registrar decisão. Se o candidato mudar, atualizar `WHISPER_CPP_BIN` e `WHISPER_MODEL`, implementação de adapter se necessário, e reprovar ativação enquanto não houver suporte testado.
 
-## Comandos de ativação — NÃO executar sem autorização
+## Comandos de ativação — NÃO executar enquanto gates estiverem fechados
 
-Somente após aprovação explícita e verificação dos pré-requisitos, editar `/home/ubuntu/.config/study-hub/transcription.env` para conter exatamente:
+Somente após aprovação documentada dos gates e verificação dos pré-requisitos, editar `/home/ubuntu/.config/study-hub/transcription.env` para conter exatamente:
 
     TRANSCRIPTION_ENABLED=true
     FO_STATE_ROOT=/home/ubuntu/study-hub-state/federal-online
@@ -57,7 +59,7 @@ Exigir `gate.allowed=true`, `preflight.ready=true` e fontes corretas. Para uma �
 
     sudo systemd-run --unit=study-hub-fo-pilot --collect --wait --pipe --uid=ubuntu --working-directory=/home/ubuntu/study-hub/federal-online -p CPUQuota=300% -p MemoryMax=12G -p TasksMax=128 -p UMask=0077 --setenv=TRANSCRIPTION_ENABLED=true --setenv=FO_STATE_ROOT=/home/ubuntu/study-hub-state/federal-online --setenv=STUDY_HUB_FO_DB=/home/ubuntu/study-hub-state/federal-online/hub.sqlite3 --setenv=WHISPER_CPP_BIN=/home/ubuntu/study-hub-models/whisper.cpp/build/bin/whisper-cli --setenv=WHISPER_MODEL=/home/ubuntu/study-hub-models/ggml-large-v3.bin /usr/bin/time -v /home/ubuntu/study-hub-venv/bin/python -m fo_hub.worker --run --once --lesson-id fo_21fd4985e207c5df
 
-Esse comando não cria timer, não habilita boot e limita a seleção à aula `Desenvolvimento embrionário`, Biologia I, versão 1 na observação de 27/10/2026. Sem os gates, recusa executar. A configuração persistente pode permanecer `false` durante um piloto autorizado, pois `--setenv` só vale para a unit transitória. QA automatizada não equivale a aceitação humana da precisão. A unit transitória pode desaparecer após terminar; logs permanecem no journal.
+Esse é um **exemplo histórico**, não um alvo atual aprovado: reconfirmar versão/source/estado e escolher explicitamente o job antes de copiar o comando. Não cria timer, não habilita boot e limita a seleção à aula `Desenvolvimento embrionário`, Biologia I, versão 1 na observação de 27/10/2026. Sem os gates, recusa executar. A configuração persistente pode permanecer `false` durante um piloto autorizado, pois `--setenv` só vale para a unit transitória. QA automatizada não equivale a aceitação humana da precisão. A unit transitória pode desaparecer após terminar; logs permanecem no journal.
 
 Se a autorização incluir a fila integral e a amostra estiver aceita, iniciar o serviço persistente:
 
@@ -65,7 +67,7 @@ Se a autorização incluir a fila integral e a amostra estiver aceita, iniciar o
     systemctl status study-hub-fo-transcription.service
     journalctl -u study-hub-fo-transcription.service -n 50 --no-pager
 
-Não é necessário habilitar no boot para manter um serviço iniciado ativo. `systemctl enable` só deve ser usado se a autorização incluir reinício após reboot. Não há timer nem início automático amanhã.
+Não é necessário habilitar no boot para manter um serviço iniciado ativo. A autorização da missão atual inclui reinício após reboot **somente após gates aprovados**; nesse cenário, habilitar a unit e verificar o link/estado efetivo. Na situação bloqueada, manter disabled/inactive. Não há timer ASR nem ativação futura agendada.
 
 ## Parada e revogação
 
@@ -80,7 +82,7 @@ Os testes injetam os subprocessos ASR: gates, integridade SHA, offsets em ms, re
 Baseline: large-v3 FP16, `pt`, beam 5/best-of 5, temperatura 0, fallback off/incremento efetivo 0, no-speech 0,6, entropy 2,4, logprob -1, contexto padrão **`-mc 0`** (também na construção direta de `Config`), CPU `-ng`, saída `-ojf`. Não usar prompt especulativo nem pós-processamento por IA. Fallback 0→1 em incrementos 0,2 e beam 10 são comparações, não melhorias já comprovadas. VAD permanece desligado por decisão de qualidade, não ausência de pesos: `models/for-tests-silero-v6.2.0-ggml.bin` tem 885.098 bytes e SHA-256 `2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987`, idêntico ao Silero v6.2.0 oficial `ggml-org/whisper-vad`. A biblioteca instalada carregou esses pesos e classificou dois segundos de zeros PCM em memória, em CPU, sem carregar Whisper ASR e sem abrir áudio real. Isso prova compatibilidade e execução sintética, não retenção de fala baixa, música/ruído nem alinhamento dos timestamps ASR com VAD. Não adicionar `--vad` ao pipeline antes da comparação real autorizada e da validação desse mapeamento.
 
 1. Aceitar piloto e benchmark por qualidade PT-BR/termos/alucinação/timestamps, não por velocidade. Registrar configuração vencedora e consumo observado. Não há vencedor antes disso.
-2. Atualizar somente o ambiente FO para `true`, manter autorização explícita e repetir preflight. Iniciar manualmente o serviço apenas quando a autorização também abranger a fila integral. Boot exige decisão separada; não criar timer.
+2. Depois do aceite documentado, atualizar somente o ambiente FO para `true`, manter autorização explícita e repetir preflight. A missão atual permite fila persistente/boot após os gates; fora desse escopo, exigir autorização correspondente. Não criar timer e não executar essa etapa com QA bloqueada.
 3. Monitorar `journalctl -u study-hub-fo-transcription.service -f`, `systemctl show study-hub-fo-transcription.service -p ActiveState -p MemoryCurrent -p MemoryPeak -p CPUUsageNSec`, `df -h /home/ubuntu` e `/fo/sync-status`/`fo_get_sync_status`.
 4. Status preserva `transcription_jobs` legado e expõe `transcription_states`: `leased→processing`, `done→validated`, `stale→superseded`. `transcription_progress` informa total, progresso e leases vencidos. `paused_storage` é backpressure do worker; jobs ficam queued. Comandos têm timeout (ASR por chunk até 48 h); heartbeat em conexão SQLite própria renova o lease durante decodificação, sem inventar progresso entre checkpoints. Serviço recupera owner antigo sob lock após restart. Uma execução sintética não mede o tempo real em ARM.
 5. Observar crescimento dos artefatos gzip e do JSON público; não existe estimativa medida de bytes/hora ASR antes do piloto. Ao atingir reserva, pausar sem exclusões e ampliar armazenamento conforme necessidade, em vez de apagar evidências. Mudanças observadas de ID/tamanho/ModTime remoto invalidam a revisão; sem metadata nova não é possível detectar uma troca invisível de mesmo tamanho após validação. Hash do download protege reúso de inferência, não substitui inventário remoto atualizado.

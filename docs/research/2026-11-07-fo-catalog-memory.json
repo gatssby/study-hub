@@ -1,0 +1,72 @@
+{
+  "observed_at": "2026-11-07T03:00:55.567709+00:00",
+  "before": {
+    "observed_at": 1794019226.0434973,
+    "reason": "catalog cgroup OOM at 2 GiB; pause auto-restart while bounding browser lifecycle; no database reset",
+    "checkpoint_entries": 1012,
+    "checkpoint_sha256": "876c2ddf780c28118e680e3d869617238fd5797af71333d22c85d267b4793456",
+    "asr_persistent": "unchanged disabled false",
+    "catalog_state": "MainPID=0\nResult=signal\nActiveState=failed\n"
+  },
+  "deployment": {
+    "observed_at": 1794019586.5258331,
+    "code_commit": "a50cdb9",
+    "runtime_sha256": "86f6fcf80dc5d016794e2f48ca21a2057df596eab7be7f148a6abf0426c25c8c",
+    "checkpoint_entries": 1012,
+    "checkpoint_unchanged": true,
+    "batch_new_rows": 200,
+    "memory_max_unchanged": "2G"
+  },
+  "oom_events": [
+    {
+      "utc": "2026-11-07T02:24:15.224777+00:00",
+      "message": "study-hub-fo-catalog.service: A process of this unit has been killed by the OOM killer."
+    },
+    {
+      "utc": "2026-11-07T02:24:15.541042+00:00",
+      "message": "study-hub-fo-catalog.service: Failed with result 'oom-kill'."
+    },
+    {
+      "utc": "2026-11-07T02:24:15.542399+00:00",
+      "message": "study-hub-fo-catalog.service: Consumed 1h 41min 50.869s CPU time, 1.9G memory peak, 0B memory swap peak."
+    }
+  ],
+  "checkpoint_entries_now": null,
+  "extensivo_completed_after_fix": {
+    "course_id": "extensivo-ufpr-2026-ed8a12f0",
+    "status": "ok",
+    "last_run_at": "2026-11-07T02:54:31+00:00",
+    "last_ok_at": "2026-11-07T02:54:31+00:00",
+    "last_summary": {
+      "empty_verified": false,
+      "published_total": 1070,
+      "retained_previous": 0,
+      "status_counts": {
+        "not_launched": 1,
+        "ok": 1069
+      },
+      "total": 1070,
+      "traversal_errors": 0,
+      "unknown_branches": 6
+    }
+  },
+  "progress_observed": true,
+  "service": {
+    "MainPID": "3068770",
+    "Result": "success",
+    "MemoryCurrent": "1061601280",
+    "MemoryPeak": "1268682752",
+    "MemoryMax": "2147483648",
+    "ActiveState": "activating",
+    "SubState": "start"
+  },
+  "scope": "catalog only; budget 200 new durable entries per browser; no reset, no resource/frequency increase, no ASR activation",
+  "full_global_completion": "NOT TESTED",
+  "catalog_timer_schedule": {
+    "OnCalendar": "*-*-* 03,09,15,21:00:00",
+    "RandomizedDelaySec": 120,
+    "Persistent": true,
+    "source": "systemctl cat study-hub-fo-catalog.timer",
+    "next_property_while_triggered_service_running": "empty; no completed global run claimed"
+  }
+}

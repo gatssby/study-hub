@@ -1,0 +1,80 @@
+{
+  "gate": {
+    "allowed": false,
+    "reasons": [
+      "TRANSCRIPTION_ENABLED is not true"
+    ],
+    "TRANSCRIPTION_ENABLED": "false"
+  },
+  "queue": {
+    "done": 1,
+    "queued": 3008,
+    "review": 5,
+    "superseded": 518
+  },
+  "preflight": {
+    "ready": true,
+    "problems": [],
+    "dependencies": {
+      "ffmpeg": {
+        "available": true,
+        "version": "ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers"
+      },
+      "ffprobe": {
+        "available": true,
+        "version": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers"
+      },
+      "rclone": {
+        "available": true,
+        "version": "rclone v1.73.1"
+      },
+      "whisper": {
+        "available": true,
+        "version": "whisper.cpp version: 1.9.5-dev",
+        "missing_flags": []
+      }
+    },
+    "model_sha256": "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
+    "model_expected_sha256": "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
+    "runtime_sha256": "61f809860bea4cef8a936049280e06006b849a87e7ae35e919e7703237db3c5c",
+    "parameters": {
+      "language": "pt",
+      "threads": 3,
+      "beam_size": 5,
+      "temperature": 0,
+      "temperature_fallback": false,
+      "temperature_increment": 0,
+      "best_of": 5,
+      "no_speech_threshold": 0.6,
+      "max_context": 0,
+      "entropy_threshold": 2.4,
+      "logprob_threshold": -1.0,
+      "vad": false,
+      "chunk_s": 600,
+      "overlap_s": 2,
+      "stitching_version": 1,
+      "checkpoint_version": 1
+    },
+    "eligible_jobs": 2995,
+    "invalid_sources": 0,
+    "storage": {
+      "free_bytes": 12005867520,
+      "reserve_bytes": 4294967296,
+      "largest_source_bytes": 697698800
+    },
+    "resources": {
+      "cpu_count": 4,
+      "threads": 3,
+      "memory_available_bytes": 22623539200,
+      "service_memory_max_bytes": 12884901888,
+      "service_cpu_quota_percent": 300
+    },
+    "publication": {
+      "source_root": "onedrive:Federal Online/",
+      "target": "onedrive:Study Hub/Federal Online/Transcripts/generated_v2",
+      "remote_access_verified": false
+    },
+    "inference_executed": false
+  },
+  "inference_executed": false
+}

@@ -1,0 +1,389 @@
+{
+  "observed_at": "2026-11-07T02:37:19.470645+00:00",
+  "focal_windows": [
+    {
+      "lesson_id": "fo_135c415d8080927f",
+      "offset_s": 1156,
+      "duration_s": 8,
+      "wall_s": 44.27407130692154,
+      "rows": 2
+    },
+    {
+      "lesson_id": "fo_135c415d8080927f",
+      "offset_s": 1166,
+      "duration_s": 8,
+      "wall_s": 44.45625459076837,
+      "rows": 2
+    },
+    {
+      "lesson_id": "fo_4cc5e44ffb6dc603",
+      "offset_s": 1186,
+      "duration_s": 36,
+      "wall_s": 103.56123875500634,
+      "rows": 7
+    },
+    {
+      "lesson_id": "fo_4cc5e44ffb6dc603",
+      "offset_s": 588,
+      "duration_s": 32,
+      "wall_s": 107.5376682030037,
+      "rows": 9
+    },
+    {
+      "lesson_id": "fo_d9f369413fd5cf40",
+      "offset_s": 588,
+      "duration_s": 32,
+      "wall_s": 109.48558637080714,
+      "rows": 6
+    }
+  ],
+  "focal_windows_total": 5,
+  "focal_summary_sha256": "618c8d2242f6cbc9648d605bcdba7615b5ee592ded1374e62e63a581a939ce34",
+  "reference_human": false,
+  "WER": null,
+  "CER": null,
+  "promoted_reviews": 0,
+  "reviews": [
+    {
+      "lesson_id": "fo_135c415d8080927f",
+      "version": 1,
+      "subject": "Biologia - Teoria",
+      "title": "Bioquímica",
+      "artifact_sha256": "6aad891dd84886059c1aba1b80d0a4dbfd77859f0bf027f376d7f176777d4568",
+      "qa_passed": false,
+      "flag_counts": {
+        "duplicate_segment": 2
+      },
+      "duration_s": 2148.283867,
+      "parameters": {
+        "language": "pt",
+        "threads": 3,
+        "beam_size": 5,
+        "temperature": 0,
+        "temperature_fallback": false,
+        "temperature_increment": 0,
+        "best_of": 5,
+        "no_speech_threshold": 0.6,
+        "max_context": 0,
+        "entropy_threshold": 2.4,
+        "logprob_threshold": -1.0,
+        "vad": false,
+        "chunk_s": 600,
+        "overlap_s": 2,
+        "stitching_version": 1,
+        "checkpoint_version": 1
+      },
+      "segment_count": 624,
+      "chunks": [
+        {
+          "offset_s": 0.0,
+          "duration_s": 600,
+          "reused": true
+        },
+        {
+          "offset_s": 598.0,
+          "duration_s": 600,
+          "reused": true
+        },
+        {
+          "offset_s": 1196.0,
+          "duration_s": 600,
+          "reused": true
+        },
+        {
+          "offset_s": 1794.0,
+          "duration_s": 354.2838670000001,
+          "reused": true
+        }
+      ]
+    },
+    {
+      "lesson_id": "fo_4cc5e44ffb6dc603",
+      "version": 1,
+      "subject": "Espanhol - Teoria",
+      "title": "Identificación de ideas",
+      "artifact_sha256": "b8f422a568da83163f9a1c65a28390d103acaf0a5b9c03169e58db2e10fbc6cc",
+      "qa_passed": false,
+      "flag_counts": {
+        "non_monotonic": 2,
+        "ambiguous_overlap": 1
+      },
+      "duration_s": 1264.939389,
+      "parameters": {
+        "language": "pt",
+        "threads": 3,
+        "beam_size": 5,
+        "temperature": 0,
+        "temperature_fallback": false,
+        "temperature_increment": 0,
+        "best_of": 5,
+        "no_speech_threshold": 0.6,
+        "max_context": 0,
+        "entropy_threshold": 2.4,
+        "logprob_threshold": -1.0,
+        "vad": false,
+        "chunk_s": 600,
+        "overlap_s": 2,
+        "stitching_version": 1,
+        "checkpoint_version": 1
+      },
+      "segment_count": 236,
+      "chunks": [
+        {
+          "offset_s": 0.0,
+          "duration_s": 600,
+          "reused": false
+        },
+        {
+          "offset_s": 598.0,
+          "duration_s": 600,
+          "reused": false
+        },
+        {
+          "offset_s": 1196.0,
+          "duration_s": 68.93938899999989,
+          "reused": false
+        }
+      ]
+    },
+    {
+      "lesson_id": "fo_d9f369413fd5cf40",
+      "version": 1,
+      "subject": "Filosofia - Teoria",
+      "title": "Mito de Er",
+      "artifact_sha256": "10dffc7fcb82691ec74cb16cb549193ecc88d7ba26212f02de6218f05becb206",
+      "qa_passed": false,
+      "flag_counts": {
+        "non_monotonic": 1,
+        "ambiguous_overlap": 1
+      },
+      "duration_s": 2161.528011,
+      "parameters": {
+        "language": "pt",
+        "threads": 3,
+        "beam_size": 5,
+        "temperature": 0,
+        "temperature_fallback": false,
+        "temperature_increment": 0,
+        "best_of": 5,
+        "no_speech_threshold": 0.6,
+        "max_context": 0,
+        "entropy_threshold": 2.4,
+        "logprob_threshold": -1.0,
+        "vad": false,
+        "chunk_s": 600,
+        "overlap_s": 2,
+        "stitching_version": 1,
+        "checkpoint_version": 1
+      },
+      "segment_count": 364,
+      "chunks": [
+        {
+          "offset_s": 0.0,
+          "duration_s": 600,
+          "reused": false
+        },
+        {
+          "offset_s": 598.0,
+          "duration_s": 600,
+          "reused": false
+        },
+        {
+          "offset_s": 1196.0,
+          "duration_s": 600,
+          "reused": false
+        },
+        {
+          "offset_s": 1794.0,
+          "duration_s": 367.5280109999999,
+          "reused": false
+        }
+      ]
+    },
+    {
+      "lesson_id": "fo_ce6134240d753024",
+      "version": 1,
+      "subject": "Física - Teoria",
+      "title": "Unidades de medida e Análise Dimensional",
+      "artifact_sha256": "12fb2e6d36551f7af5fba7ac22b92266e66230260b6a72953070d42dc1f2f99c",
+      "qa_passed": false,
+      "flag_counts": {
+        "non_monotonic": 3,
+        "ambiguous_overlap": 2
+      },
+      "duration_s": 1977.079856,
+      "parameters": {
+        "language": "pt",
+        "threads": 3,
+        "beam_size": 5,
+        "temperature": 0,
+        "temperature_fallback": false,
+        "temperature_increment": 0,
+        "best_of": 5,
+        "no_speech_threshold": 0.6,
+        "max_context": 0,
+        "entropy_threshold": 2.4,
+        "logprob_threshold": -1.0,
+        "vad": false,
+        "chunk_s": 600,
+        "overlap_s": 2,
+        "stitching_version": 1,
+        "checkpoint_version": 1
+      },
+      "segment_count": 560,
+      "chunks": [
+        {
+          "offset_s": 0.0,
+          "duration_s": 600,
+          "reused": true
+        },
+        {
+          "offset_s": 598.0,
+          "duration_s": 600,
+          "reused": true
+        },
+        {
+          "offset_s": 1196.0,
+          "duration_s": 600,
+          "reused": false
+        },
+        {
+          "offset_s": 1794.0,
+          "duration_s": 183.07985600000006,
+          "reused": false
+        }
+      ]
+    },
+    {
+      "lesson_id": "fo_0978f8f807c122f4",
+      "version": 1,
+      "subject": "Geografia - Teoria",
+      "title": "Cartografia I",
+      "artifact_sha256": "851b58005d89df334426796d8d58e16bbc1baedf7a42bda07db44bc363b1f4e0",
+      "qa_passed": false,
+      "flag_counts": {
+        "non_monotonic": 1,
+        "ambiguous_overlap": 1
+      },
+      "duration_s": 1817.012967,
+      "parameters": {
+        "language": "pt",
+        "threads": 3,
+        "beam_size": 5,
+        "temperature": 0,
+        "temperature_fallback": false,
+        "temperature_increment": 0,
+        "best_of": 5,
+        "no_speech_threshold": 0.6,
+        "max_context": 0,
+        "entropy_threshold": 2.4,
+        "logprob_threshold": -1.0,
+        "vad": false,
+        "chunk_s": 600,
+        "overlap_s": 2,
+        "stitching_version": 1,
+        "checkpoint_version": 1
+      },
+      "segment_count": 496,
+      "chunks": [
+        {
+          "offset_s": 0.0,
+          "duration_s": 600,
+          "reused": false
+        },
+        {
+          "offset_s": 598.0,
+          "duration_s": 600,
+          "reused": false
+        },
+        {
+          "offset_s": 1196.0,
+          "duration_s": 600,
+          "reused": false
+        },
+        {
+          "offset_s": 1794.0,
+          "duration_s": 23.01296699999989,
+          "reused": false
+        }
+      ]
+    }
+  ],
+  "decisions": {
+    "fo_135c415d8080927f": "Glicerídeo/repetição científica não homologada; preservar fala e flags; não aprovar por regex.",
+    "fo_4cc5e44ffb6dc603": "Boundaries com non_monotonic/ambiguous_overlap; recortes preservados, não são gold nem publicação.",
+    "fo_d9f369413fd5cf40": "Boundary ambígua; preservar candidatos privados, sem fabricar timestamps.",
+    "fo_ce6134240d753024": "Três junções temporais sobrepostas, duas ambiguidades explícitas sem match; review, sem arquivo público.",
+    "fo_0978f8f807c122f4": "Review ao final do segundo job: fronteiras ambíguas preservadas; nenhum texto publicado."
+  },
+  "physics_boundary_timestamps": [
+    {
+      "idx": 150,
+      "previous_end": 600.0,
+      "current_start": 598.0
+    },
+    {
+      "idx": 325,
+      "previous_end": 1198.0,
+      "current_start": 1197.78
+    },
+    {
+      "idx": 504,
+      "previous_end": 1796.0,
+      "current_start": 1794.0
+    }
+  ],
+  "persistent_asr_quality_gate": "BLOCKED",
+  "rr_receipts": [
+    {
+      "index": 0,
+      "started_at": 1794011218.715457,
+      "finished_at": 1794013573.7763083,
+      "result": {
+        "state": "review",
+        "lesson_id": "fo_ce6134240d753024",
+        "version": 1
+      },
+      "cursor_before": {
+        "id": 1,
+        "last_discipline": "Física",
+        "cycle": 2,
+        "updated_at": 1794007542.4405687
+      },
+      "cursor_after": {
+        "id": 1,
+        "last_discipline": "Física",
+        "cycle": 3,
+        "updated_at": 1794011218.7166562
+      },
+      "temporary_entries": 0,
+      "controlled_restart": true
+    },
+    {
+      "index": 1,
+      "started_at": 1794013778.4046607,
+      "finished_at": 1794018938.6809716,
+      "result": {
+        "state": "review",
+        "lesson_id": "fo_0978f8f807c122f4",
+        "version": 1
+      },
+      "cursor_before": {
+        "id": 1,
+        "last_discipline": "Geografia",
+        "cycle": 3,
+        "updated_at": 1794013573.7830758
+      },
+      "cursor_after": {
+        "id": 1,
+        "last_discipline": "Geografia",
+        "cycle": 4,
+        "updated_at": 1794013778.405735
+      },
+      "temporary_entries": 0,
+      "runtime_code": "97e6396"
+    }
+  ],
+  "rr_completed": true,
+  "language_validation_note": "A review de Espanhol usou language=pt; validar língua efetiva/mistura de fala antes de escolher outra configuração. Não foi alegada acurácia linguística."
+}
