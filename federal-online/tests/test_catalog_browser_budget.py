@@ -16,7 +16,7 @@ class Config:
     storage_state_file: Path | None = None
 
 
-def session_fixture(monkeypatch, tmp_path, total, *, seed=0, limit=None, fail_second=False):
+def session_fixture(monkeypatch, tmp_path, total, *, seed=0, limit=None, fail_second=False, errors=None):
     session = runtime.BrowserSession.__new__(runtime.BrowserSession)
     session.base_config = Config()
     session.paths = SimpleNamespace(storage_state=tmp_path / 'session.json')
@@ -37,20 +37,28 @@ def session_fixture(monkeypatch, tmp_path, total, *, seed=0, limit=None, fail_se
             durable.clear()
         target = total if args.limit is None else min(total, args.limit)
         durable.extend({'media_id': str(i)} for i in range(len(durable), target))
-        return collector.CollectedEntries(list(durable), traversal_errors=['unresolved branch'])
+        return collector.CollectedEntries(list(durable), traversal_errors=errors(len(calls)) if errors else ['unresolved branch'])
 
     monkeypatch.setattr(collector, 'load_checkpoint', load)
     monkeypatch.setattr(collector, 'collect_index', collect)
     return session, calls, durable
 
 
-def test_unlimited_course_recycles_browser_after_bounded_new_progress(monkeypatch, tmp_path):
-    session, calls, durable = session_fixture(monkeypatch, tmp_path, 450)
+@pytest.mark.parametrize('total, limits', [(450, [200, 400, 600]), (400, [200, 400, 600]), (0, [200])])
+def test_unlimited_course_recycles_browser_after_bounded_new_progress(monkeypatch, tmp_path, total, limits):
+    session, calls, durable = session_fixture(monkeypatch, tmp_path, total)
     result = session.collect_course({'url': 'https://portal.invalid/course'}, tmp_path / 'checkpoint.json', True)
-    assert calls == [(200, False), (400, False), (600, False)]
-    assert len(result) == len(durable) == 450
-    assert len({x['media_id'] for x in result}) == 450
+    assert calls == [(n, False) for n in limits]
+    assert len(result) == len(durable) == total
+    assert len({x['media_id'] for x in result}) == total
     assert result.traversal_errors == ['unresolved branch']
+
+
+def test_browser_recycling_preserves_earlier_traversal_uncertainty(monkeypatch, tmp_path):
+    session, calls, _ = session_fixture(monkeypatch, tmp_path, 220, errors=lambda n: ['earlier branch'] if n == 1 else [])
+    result = session.collect_course({'url': 'https://portal.invalid/course'}, tmp_path / 'checkpoint.json', True)
+    assert calls == [(200, False), (400, False)]
+    assert result.traversal_errors == ['earlier branch']
 
 
 def test_resume_budget_counts_only_new_progress_not_old_checkpoint(monkeypatch, tmp_path):

@@ -542,11 +542,18 @@ class BrowserSession:
             args.limit = len(previous) + CATALOG_BROWSER_BATCH_SIZE
         # The collector owns sync_playwright; discovery already owns a loop on
         # this thread. Keep the two lifecycle contexts on independent threads.
+        traversal_errors = []
         with ThreadPoolExecutor(max_workers=1) as executor:
             while True:
                 entries = executor.submit(collector.collect_index, args, config, self.logger, checkpoint).result()
+                for error in getattr(entries, 'traversal_errors', []):
+                    if error not in traversal_errors:
+                        traversal_errors.append(error)
                 if self.args.limit is not None or len(entries) < args.limit:
-                    return entries
+                    return collector.CollectedEntries(
+                        entries, traversal_errors=traversal_errors,
+                        empty_evidence=getattr(entries, 'empty_evidence', None),
+                    )
                 # collect_index closes its context/browser/driver in finally.
                 # Resume the durable rows in a fresh browser instead of keeping
                 # thousands of player/network objects alive in one context.
