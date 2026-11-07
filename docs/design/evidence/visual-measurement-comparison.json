@@ -1,0 +1,52 @@
+{
+  "content_width": {
+    "original": 1120,
+    "local": 1120,
+    "equal": true
+  },
+  "h1_font": {
+    "original": "26.25px",
+    "local": "26.25px",
+    "equal": true
+  },
+  "h2_font": {
+    "original": "21px",
+    "local": "21px",
+    "equal": true
+  },
+  "card_width": {
+    "original": 269.5,
+    "local": 269.5,
+    "equal": true
+  },
+  "card_height": {
+    "original": 93,
+    "local": 93,
+    "equal": true
+  },
+  "card_radius": {
+    "original": "12.75px",
+    "local": "12.75px",
+    "equal": true
+  },
+  "card_header_height": {
+    "original": 68.25,
+    "local": 68.25,
+    "equal": true
+  },
+  "card_title_font": {
+    "original": "15.75px",
+    "local": "15.75px",
+    "equal": true
+  },
+  "button_height": {
+    "original": 31.5,
+    "local": 31.5,
+    "equal": true
+  },
+  "button_radius": {
+    "original": "6.75px",
+    "local": "6.75px",
+    "equal": true
+  }
+}
