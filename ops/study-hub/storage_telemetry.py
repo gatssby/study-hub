@@ -75,15 +75,16 @@ def _atomic_json(path: Path, data: object) -> None:
 
 
 def _largest_source(root: Path) -> int:
-    with sqlite3.connect(f'file:{root}/hub.sqlite3?mode=ro', uri=True, timeout=1) as connection:
-        try:
-            connection.execute('pragma query_only=on')
-            connection.execute('pragma cache_size=-1024')
-            deadline = time.monotonic() + 2
-            connection.set_progress_handler(lambda: int(time.monotonic() > deadline), 1000)
-            return int(connection.execute('select coalesce(max(size),0) from lesson_video_sources where available=1').fetchone()[0])
-        finally:
-            connection.close()
+    # Explicit close only: sqlite3's context manager commits, it does not close.
+    connection = sqlite3.connect(f'file:{root}/hub.sqlite3?mode=ro', uri=True, timeout=1)
+    try:
+        connection.execute('pragma query_only=on')
+        connection.execute('pragma cache_size=-1024')
+        deadline = time.monotonic() + 2
+        connection.set_progress_handler(lambda: int(time.monotonic() > deadline), 1000)
+        return int(connection.execute('select coalesce(max(size),0) from lesson_video_sources where available=1').fetchone()[0])
+    finally:
+        connection.close()
 
 
 def sample(root: Path, *, now: float | None = None, available_bytes: int | None = None,

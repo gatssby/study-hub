@@ -77,6 +77,18 @@ describe('Dashboard read-only', () => {
     expect(screen.queryByText('Observação somente leitura')).toBeNull();
     expect(screen.queryByText('Somente leitura')).toBeNull();
   });
+  it('renders OneDrive epoch-second observation as a real date, not 1970', async () => {
+    render(<App load={async () => ({ ...snapshot, onedrive: { state: 'active', last_observed_at: 1794082879, pdf_sync: 'verified', transcript_sync: 'verified' } })} />);
+    await screen.findByText(/Conclusão: .*2026/);
+    expect(screen.queryByText(/1970/)).toBeNull();
+  });
+  it('shows Study Hub usage, temporaries and Whisper reserve in the storage card', async () => {
+    render(<App load={async () => ({ ...snapshot, storage: { ...snapshot.storage, study_hub_bytes: 2486953419, temp_bytes: 140361671, whisper_reserve_bytes: 5097523696, warning: null } })} />);
+    await screen.findByText('2,3 GiB Study Hub');
+    expect(screen.getByText('0,1 GiB temporários')).toBeTruthy();
+    expect(screen.getByText('4,7 GiB reserva Whisper')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
   it('withholds ETA when samples are insufficient and surfaces a real storage warning', async () => {
     render(<App load={async () => ({ ...snapshot, pace: { comparable_samples: 2, eta_seconds: null }, storage: { ...snapshot.storage, warning: 'low_reserve' } })} />);
     await screen.findByText('Sem amostra suficiente');

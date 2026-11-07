@@ -42,3 +42,12 @@ def test_publish_retains_bounded_history_and_no_private_paths(tmp_path):
     assert result['growth_bytes_per_day'] is None
     assert 'state' not in result
     assert (state / 'telemetry/storage.json').exists()
+
+
+def test_largest_source_reads_real_sqlite_without_closed_connection_error(tmp_path):
+    import sqlite3
+    db = sqlite3.connect(tmp_path / 'hub.sqlite3')
+    db.execute('CREATE TABLE lesson_video_sources(size INTEGER, available INTEGER)')
+    db.executemany('INSERT INTO lesson_video_sources VALUES(?,?)', [(10, 1), (99, 0), (42, 1)])
+    db.commit(); db.close()
+    assert module._largest_source(tmp_path) == 42
