@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Sequential persistent video sync. Never invokes transcription or deletes remote data."""
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlsplit
 import hashlib
 import json
 import os
@@ -11,6 +11,7 @@ import time
 import tempfile
 
 import fo_download_upload_videos as core
+from fo_media_identity import canonical_media_url
 
 STATE = Path(os.environ.get('FO_STATE_ROOT', '/home/ubuntu/study-hub-state/federal-online'))
 RESERVE = 4 * 1024**3
@@ -21,8 +22,7 @@ class SourceDurationMismatch(RuntimeError):
 
 
 def canonical_url(url):
-    p = urlsplit(url or '')
-    return urlunsplit((p.scheme, p.netloc, p.path, '', ''))
+    return canonical_media_url(url)
 
 
 def identity(row):

@@ -16,7 +16,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Iterable, Mapping
-from urllib.parse import urlsplit, urlunsplit
+from portal.fo_media_identity import canonical_media_url
 
 from .pdf_privacy import PRIVACY_POLICY_VERSION, sanitize_page
 
@@ -129,8 +129,7 @@ class FOStore:
                 else:
                     ver = old["version"]
                     def media_url(value):
-                        parts = urlsplit(value or '')
-                        return urlunsplit((parts.scheme, parts.netloc, parts.path, '', ''))
+                        return canonical_media_url(value)
                     if media_url(old["video_url"]) != media_url(r.get("video_url")) or old["duration_s"] != dur:
                         kind, ver = "media_changed", ver + 1
                     elif any(old[k] != f[k] for k in f):

@@ -1,6 +1,6 @@
 """Incremental FO metadata/PDF loader. Never imports old transcript content."""
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlsplit
 import hashlib
 import json
 import math
@@ -9,11 +9,11 @@ import time
 from .store import FOStore, lesson_id_for
 from .transcription import TranscriptionQueue
 from .pdf_privacy import PRIVACY_POLICY_VERSION, PagePrivacy, sanitize_page
+from portal.fo_media_identity import canonical_media_url
 
 
 def canonical(url):
-    p=urlsplit(url or '')
-    return urlunsplit((p.scheme,p.netloc,p.path,'',''))
+    return canonical_media_url(url)
 
 
 def read_json(path, default):
@@ -218,7 +218,12 @@ def ingest(state,db_path,index_pdfs=True):
         if not source:continue
         used.add(relative);visited.add(lid);lesson=observe_video_source(store,lid,full,inventory_source(full,source))
         # A fallback remote identity is metadata, not a second video to transcribe.
-        aliases=c.execute("SELECT s.lesson_id FROM lesson_video_sources s JOIN lessons l USING(lesson_id) WHERE s.remote_path=? AND s.lesson_id!=? AND l.course_id LIKE 'remote:%'",(full,lid)).fetchall()
+        aliases=c.execute("SELECT s.lesson_id FROM lesson_video_sources s JOIN lessons l USING(lesson_id) "
+                          "WHERE s.remote_path=? AND s.lesson_id!=? AND l.course_id LIKE 'remote:%' AND l.present=1 "
+                          "AND NOT EXISTS (SELECT 1 FROM transcription_jobs j WHERE j.lesson_id=l.lesson_id "
+                          "AND j.state IN ('leased','done','review')) "
+                          "AND NOT EXISTS (SELECT 1 FROM transcripts t WHERE t.lesson_id=l.lesson_id)",
+                          (full,lid)).fetchall()
         with c:
             for alias in aliases:
                 c.execute('UPDATE lesson_video_sources SET available=0 WHERE lesson_id=?',(alias[0],))

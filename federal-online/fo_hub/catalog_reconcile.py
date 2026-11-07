@@ -13,12 +13,12 @@ import hashlib
 import json
 from pathlib import Path
 import sqlite3
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlsplit
+from portal.fo_media_identity import canonical_media_url
 
 
 def canonical(url):
-    parsed = urlsplit(url or '')
-    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, '', ''))
+    return canonical_media_url(url)
 
 
 def course_key(url):
