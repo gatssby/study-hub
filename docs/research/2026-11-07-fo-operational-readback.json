@@ -1,5 +1,5 @@
 {
-  "observed_at": "2026-11-07T03:00:53.083266+00:00",
+  "observed_at": "2026-11-07T04:03:50.402666+00:00",
   "jobs": {
     "done": 1,
     "queued": 3008,
@@ -349,7 +349,7 @@
       "ExecMainStartTimestamp": "Sat 2026-11-07 01:40:35 UTC",
       "ExecMainExitTimestamp": "",
       "ExecMainStatus": "0",
-      "MemoryCurrent": "38060032",
+      "MemoryCurrent": "38072320",
       "MemoryPeak": "39079936",
       "CPUQuotaPerSecUSec": "1s",
       "MemoryMax": "2147483648",
@@ -366,21 +366,21 @@
       "Restart": "on-failure",
       "TimeoutStopUSec": "1min 30s",
       "RestartPreventExitStatus": "2",
-      "MainPID": "3068770",
-      "Result": "success",
+      "MainPID": "0",
+      "Result": "exit-code",
       "NRestarts": "0",
       "ExecMainStartTimestamp": "Sat 2026-11-07 02:46:26 UTC",
-      "ExecMainExitTimestamp": "",
-      "ExecMainStatus": "0",
-      "MemoryCurrent": "1026584576",
-      "MemoryPeak": "1268682752",
+      "ExecMainExitTimestamp": "Sat 2026-11-07 03:58:43 UTC",
+      "ExecMainStatus": "1",
+      "MemoryCurrent": "[not set]",
+      "MemoryPeak": "1946517504",
       "CPUQuotaPerSecUSec": "1s",
       "MemoryMax": "2147483648",
       "TasksMax": "512",
       "KillMode": "control-group",
       "Id": "study-hub-fo-catalog.service",
-      "ActiveState": "activating",
-      "SubState": "start",
+      "ActiveState": "inactive",
+      "SubState": "dead",
       "UnitFileState": "static",
       "StartLimitIntervalUSec": "10s",
       "StartLimitBurst": "5"
@@ -415,8 +415,8 @@
       "MainPID": "0",
       "Result": "success",
       "NRestarts": "0",
-      "ExecMainStartTimestamp": "Sat 2026-11-07 03:00:21 UTC",
-      "ExecMainExitTimestamp": "Sat 2026-11-07 03:00:27 UTC",
+      "ExecMainStartTimestamp": "Sat 2026-11-07 04:02:38 UTC",
+      "ExecMainExitTimestamp": "Sat 2026-11-07 04:02:44 UTC",
       "ExecMainStatus": "0",
       "MemoryCurrent": "[not set]",
       "MemoryPeak": "[not set]",
@@ -438,8 +438,8 @@
       "MainPID": "0",
       "Result": "success",
       "NRestarts": "0",
-      "ExecMainStartTimestamp": "Sat 2026-11-07 02:25:49 UTC",
-      "ExecMainExitTimestamp": "Sat 2026-11-07 02:29:06 UTC",
+      "ExecMainStartTimestamp": "Sat 2026-11-07 03:26:28 UTC",
+      "ExecMainExitTimestamp": "Sat 2026-11-07 03:29:36 UTC",
       "ExecMainStatus": "0",
       "MemoryCurrent": "[not set]",
       "MemoryPeak": "[not set]",
@@ -461,8 +461,8 @@
       "MainPID": "0",
       "Result": "success",
       "NRestarts": "0",
-      "ExecMainStartTimestamp": "Sat 2026-11-07 02:56:19 UTC",
-      "ExecMainExitTimestamp": "Sat 2026-11-07 02:56:19 UTC",
+      "ExecMainStartTimestamp": "Sat 2026-11-07 03:55:18 UTC",
+      "ExecMainExitTimestamp": "Sat 2026-11-07 03:55:19 UTC",
       "ExecMainStatus": "0",
       "MemoryCurrent": "[not set]",
       "MemoryPeak": "[not set]",
@@ -484,8 +484,8 @@
       "MainPID": "0",
       "Result": "success",
       "NRestarts": "0",
-      "ExecMainStartTimestamp": "Sat 2026-11-07 02:01:54 UTC",
-      "ExecMainExitTimestamp": "Sat 2026-11-07 02:01:55 UTC",
+      "ExecMainStartTimestamp": "Sat 2026-11-07 04:02:00 UTC",
+      "ExecMainExitTimestamp": "Sat 2026-11-07 04:02:00 UTC",
       "ExecMainStatus": "0",
       "MemoryCurrent": "[not set]",
       "MemoryPeak": "[not set]",
@@ -526,12 +526,12 @@
   },
   "timers": {
     "catalog": {
-      "NextElapseUSecRealtime": "",
+      "NextElapseUSecRealtime": "Sat 2026-11-07 09:00:32 UTC",
       "LastTriggerUSec": "Sat 2026-11-07 03:00:14 UTC",
       "Result": "success",
       "Id": "study-hub-fo-catalog.timer",
       "ActiveState": "active",
-      "SubState": "running",
+      "SubState": "waiting",
       "UnitFileState": "enabled",
       "StartLimitIntervalUSec": "10s",
       "StartLimitBurst": "5"
@@ -548,8 +548,8 @@
       "StartLimitBurst": "5"
     },
     "index": {
-      "NextElapseUSecRealtime": "Sat 2026-11-07 03:11:50 UTC",
-      "LastTriggerUSec": "Sat 2026-11-07 03:00:21 UTC",
+      "NextElapseUSecRealtime": "Sat 2026-11-07 04:11:30 UTC",
+      "LastTriggerUSec": "Sat 2026-11-07 04:00:49 UTC",
       "Result": "success",
       "Id": "study-hub-fo-index.timer",
       "ActiveState": "active",
@@ -559,8 +559,8 @@
       "StartLimitBurst": "5"
     },
     "onedrive": {
-      "NextElapseUSecRealtime": "Sat 2026-11-07 03:26:28 UTC",
-      "LastTriggerUSec": "Sat 2026-11-07 02:25:49 UTC",
+      "NextElapseUSecRealtime": "Sat 2026-11-07 04:25:20 UTC",
+      "LastTriggerUSec": "Sat 2026-11-07 03:26:28 UTC",
       "Result": "success",
       "Id": "study-hub-fo-onedrive.timer",
       "ActiveState": "active",
@@ -570,8 +570,8 @@
       "StartLimitBurst": "5"
     },
     "ocr": {
-      "NextElapseUSecRealtime": "Sat 2026-11-07 03:05:41 UTC",
-      "LastTriggerUSec": "Sat 2026-11-07 02:56:19 UTC",
+      "NextElapseUSecRealtime": "Sat 2026-11-07 04:06:05 UTC",
+      "LastTriggerUSec": "Sat 2026-11-07 03:55:18 UTC",
       "Result": "success",
       "Id": "study-hub-fo-ocr.timer",
       "ActiveState": "active",
@@ -581,8 +581,8 @@
       "StartLimitBurst": "5"
     },
     "videos": {
-      "NextElapseUSecRealtime": "Sat 2026-11-07 03:01:00 UTC",
-      "LastTriggerUSec": "Sat 2026-11-07 02:01:54 UTC",
+      "NextElapseUSecRealtime": "Sat 2026-11-07 05:01:01 UTC",
+      "LastTriggerUSec": "Sat 2026-11-07 04:02:00 UTC",
       "Result": "success",
       "Id": "study-hub-fo-videos.timer",
       "ActiveState": "active",
@@ -883,14 +883,18 @@
       "course_id": "semiextensivo-ufpr-2026-0e9bcc74",
       "title": "Semiextensivo UFPR 2026",
       "status": "ok",
-      "last_run_at": "2026-10-30T06:55:08+00:00",
-      "last_ok_at": "2026-10-30T06:55:08+00:00",
+      "last_run_at": "2026-11-07T03:36:17+00:00",
+      "last_ok_at": "2026-11-07T03:36:17+00:00",
       "last_summary": {
+        "empty_verified": false,
+        "published_total": 839,
+        "retained_previous": 0,
         "status_counts": {
           "not_launched": 1,
           "ok": 838
         },
         "total": 839,
+        "traversal_errors": 0,
         "unknown_branches": 6
       },
       "native_empty_evidence": {
@@ -904,13 +908,17 @@
       "course_id": "simuladao-ufpr1-26-3a00f98c",
       "title": "Simuladão UFPR #01 - Gratuito",
       "status": "ok",
-      "last_run_at": "2026-10-30T06:55:20+00:00",
-      "last_ok_at": "2026-10-30T06:55:20+00:00",
+      "last_run_at": "2026-11-07T03:36:28+00:00",
+      "last_ok_at": "2026-11-07T03:36:28+00:00",
       "last_summary": {
+        "empty_verified": false,
+        "published_total": 2,
+        "retained_previous": 0,
         "status_counts": {
           "ok": 2
         },
         "total": 2,
+        "traversal_errors": 0,
         "unknown_branches": 1
       },
       "native_empty_evidence": {
@@ -924,10 +932,12 @@
       "course_id": "simuladao-ufpr2-26-568263fb",
       "title": "Simuladão UFPR #02 - Gratuito",
       "status": "incomplete",
-      "last_run_at": "2026-11-06T23:36:32+00:00",
+      "last_run_at": "2026-11-07T03:37:05+00:00",
       "last_ok_at": "2026-10-30T06:55:57+00:00",
       "last_summary": {
         "empty_verified": false,
+        "published_total": 0,
+        "retained_previous": 0,
         "status_counts": {},
         "total": 0,
         "traversal_errors": 0,
@@ -972,13 +982,17 @@
       "course_id": "simulados-resolucao-de-provas-5e115236",
       "title": "Simulados e Resolução de Provas",
       "status": "ok",
-      "last_run_at": "2026-10-30T07:47:03+00:00",
-      "last_ok_at": "2026-10-30T07:47:03+00:00",
+      "last_run_at": "2026-11-07T03:58:43+00:00",
+      "last_ok_at": "2026-11-07T03:58:43+00:00",
       "last_summary": {
+        "empty_verified": false,
+        "published_total": 422,
+        "retained_previous": 0,
         "status_counts": {
           "ok": 422
         },
         "total": 422,
+        "traversal_errors": 0,
         "unknown_branches": 4
       },
       "native_empty_evidence": {
@@ -989,13 +1003,7 @@
       }
     }
   ],
-  "catalog_checkpoints": [
-    {
-      "course_id": "semiextensivo-ufpr-2026-0e9bcc74",
-      "entries": 64,
-      "mtime": 1794020452.192834
-    }
-  ],
+  "catalog_checkpoints": [],
   "api_status": {
     "TRANSCRIPTION_ENABLED": false,
     "lessons_total": 3311,
@@ -1041,8 +1049,8 @@
       "unknown_states": {}
     },
     "last_sync": {
-      "run_id": "bbc34bf84c6f414fb07034364d60bf2a",
-      "at": "2026-11-07T03:00:26Z",
+      "run_id": "75b1ee8252e34f3f9e906aa0a583d5cf",
+      "at": "2026-11-07T04:02:43Z",
       "created": 0,
       "renamed": 0,
       "media_changed": 0,
@@ -1051,7 +1059,7 @@
     },
     "components": {
       "index": {
-        "observed_at": 1794020427.8680649,
+        "observed_at": 1794024164.8211653,
         "summary": {
           "created": 0,
           "renamed": 0,
@@ -1073,9 +1081,9 @@
     }
   },
   "inventory_proof": {
-    "inventory_started_at": 1794018406.6532564,
-    "inventory_sha256": "fe7d93c594cd2d5a9ae3a53159e9fd66f764f85f74ca62ec6341bbb837986baf",
-    "updated_at": 1794018349.3836143,
+    "inventory_started_at": 1794022030.3770206,
+    "inventory_sha256": "df2f503ebf1effb2123cd1890f5640cff4fc849561377c39dc580330b038ffbd",
+    "updated_at": 1794021988.6378233,
     "phase": null,
     "status": null
   },
@@ -1093,18 +1101,18 @@
   "residual_archive_snapshots": 0,
   "resources": {
     "MemTotal": 25137336320,
-    "MemAvailable": 21573689344,
+    "MemAvailable": 22585659392,
     "cpu_count": 4,
     "load_average": [
-      0.72314453125,
-      0.9296875,
-      1.3017578125
+      0.1708984375,
+      0.48876953125,
+      0.7177734375
     ],
     "disk_total": 48715948032,
-    "disk_used": 36695130112,
-    "disk_free": 12004040704
+    "disk_used": 36705742848,
+    "disk_free": 11993427968
   },
   "asr_processes": [],
   "other_stdin_python_pids": [],
-  "journald_disk_usage": "Archived and active journals take up 279.6M in the file system."
+  "journald_disk_usage": "Archived and active journals take up 287.6M in the file system."
 }

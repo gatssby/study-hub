@@ -1,0 +1,347 @@
+{
+  "observed_at": "2026-11-07T04:01:18.304360+00:00",
+  "attempt_finished": true,
+  "attempt_exit_code": 1,
+  "attempt_exit_reason": "Simuladao #02 empty catalog not independently verified; preserve incomplete, never certify empty",
+  "registry_status_counts": {
+    "ok": 10,
+    "incomplete": 1
+  },
+  "courses": [
+    {
+      "course_id": "base-intensivo-ufpr-fd3aa635",
+      "title": "Intensivo UFPR 2026",
+      "status": "ok",
+      "last_run_at": "2026-11-07T00:25:56+00:00",
+      "last_ok_at": "2026-11-07T00:25:56+00:00",
+      "last_summary": {
+        "empty_verified": false,
+        "status_counts": {
+          "ok": 424
+        },
+        "total": 424,
+        "traversal_errors": 0,
+        "unknown_branches": 19
+      },
+      "catalog_sha256": "b8dc4d521603e710399462d53f57c1f8b968a000a51181e80f7aa6cf0d2ec349",
+      "native_empty_evidence": {
+        "verified_no_native_video": null,
+        "media_type_counts": null,
+        "unknown_items": null,
+        "scope": null
+      }
+    },
+    {
+      "course_id": "ciencias-basica-f60c5666",
+      "title": "Ciências Básica",
+      "status": "ok",
+      "last_run_at": "2026-11-07T00:26:38+00:00",
+      "last_ok_at": "2026-11-07T00:26:38+00:00",
+      "last_summary": {
+        "empty_verified": false,
+        "status_counts": {
+          "ok": 27
+        },
+        "total": 27,
+        "traversal_errors": 0,
+        "unknown_branches": 1
+      },
+      "catalog_sha256": "c3129ed1a88383e1f49520d199e420ae12801a194429bcd7d99360e3d9300174",
+      "native_empty_evidence": {
+        "verified_no_native_video": null,
+        "media_type_counts": null,
+        "unknown_items": null,
+        "scope": null
+      }
+    },
+    {
+      "course_id": "extensivo-ufpr-2026-ed8a12f0",
+      "title": "Extensivo UFPR 2026",
+      "status": "ok",
+      "last_run_at": "2026-11-07T02:54:31+00:00",
+      "last_ok_at": "2026-11-07T02:54:31+00:00",
+      "last_summary": {
+        "empty_verified": false,
+        "published_total": 1070,
+        "retained_previous": 0,
+        "status_counts": {
+          "not_launched": 1,
+          "ok": 1069
+        },
+        "total": 1070,
+        "traversal_errors": 0,
+        "unknown_branches": 6
+      },
+      "catalog_sha256": "871fdace2204d01f9c48d8701a8c5ae9094872213cd580eb3605bf7176f9a5e4",
+      "native_empty_evidence": {
+        "verified_no_native_video": null,
+        "media_type_counts": null,
+        "unknown_items": null,
+        "scope": null
+      }
+    },
+    {
+      "course_id": "matematica-basica-cc866fe3",
+      "title": "Matemática Básica",
+      "status": "ok",
+      "last_run_at": "2026-11-07T02:55:21+00:00",
+      "last_ok_at": "2026-11-07T02:55:21+00:00",
+      "last_summary": {
+        "empty_verified": false,
+        "published_total": 25,
+        "retained_previous": 0,
+        "status_counts": {
+          "ok": 25
+        },
+        "total": 25,
+        "traversal_errors": 0,
+        "unknown_branches": 1
+      },
+      "catalog_sha256": "7e3012e1059e49bddfdd68888b68a4fcc0a3567dd20c9c74f4d6560989fe04c0",
+      "native_empty_evidence": {
+        "verified_no_native_video": null,
+        "media_type_counts": null,
+        "unknown_items": null,
+        "scope": null
+      }
+    },
+    {
+      "course_id": "materiais-exclusivos-medicina-355aad2b",
+      "title": "Materiais exclusivos de medicina",
+      "status": "ok",
+      "last_run_at": "2026-11-07T02:57:47+00:00",
+      "last_ok_at": "2026-11-07T02:57:47+00:00",
+      "last_summary": {
+        "empty_verified": false,
+        "published_total": 51,
+        "retained_previous": 0,
+        "status_counts": {
+          "ok": 51
+        },
+        "total": 51,
+        "traversal_errors": 0,
+        "unknown_branches": 21
+      },
+      "catalog_sha256": "b17288efd3d9ec1d3bb449da46ae8f9c6ffd594b12f57120b4621bcd1e1bea3a",
+      "native_empty_evidence": {
+        "verified_no_native_video": null,
+        "media_type_counts": null,
+        "unknown_items": null,
+        "scope": null
+      }
+    },
+    {
+      "course_id": "redacao20-ufpr26-a6910cd7",
+      "title": "Redação UFPR 2026",
+      "status": "ok",
+      "last_run_at": "2026-11-07T02:59:07+00:00",
+      "last_ok_at": "2026-11-07T02:59:07+00:00",
+      "last_summary": {
+        "empty_verified": false,
+        "published_total": 24,
+        "retained_previous": 0,
+        "status_counts": {
+          "ok": 24
+        },
+        "total": 24,
+        "traversal_errors": 0,
+        "unknown_branches": 1
+      },
+      "catalog_sha256": "4e0b71cc6c5d57caa0be3a9a7cae0c1be9effec7a9405bf9f1f76f4f6faed9fd",
+      "native_empty_evidence": {
+        "verified_no_native_video": null,
+        "media_type_counts": null,
+        "unknown_items": null,
+        "scope": null
+      }
+    },
+    {
+      "course_id": "semiextensivo-ufpr-2026-0e9bcc74",
+      "title": "Semiextensivo UFPR 2026",
+      "status": "ok",
+      "last_run_at": "2026-11-07T03:36:17+00:00",
+      "last_ok_at": "2026-11-07T03:36:17+00:00",
+      "last_summary": {
+        "empty_verified": false,
+        "published_total": 839,
+        "retained_previous": 0,
+        "status_counts": {
+          "not_launched": 1,
+          "ok": 838
+        },
+        "total": 839,
+        "traversal_errors": 0,
+        "unknown_branches": 6
+      },
+      "catalog_sha256": "9e576cd104d2992568fab7591678fd444edd463929952c8ff145c0be66cfe5ba",
+      "native_empty_evidence": {
+        "verified_no_native_video": null,
+        "media_type_counts": null,
+        "unknown_items": null,
+        "scope": null
+      }
+    },
+    {
+      "course_id": "simuladao-ufpr1-26-3a00f98c",
+      "title": "Simuladão UFPR #01 - Gratuito",
+      "status": "ok",
+      "last_run_at": "2026-11-07T03:36:28+00:00",
+      "last_ok_at": "2026-11-07T03:36:28+00:00",
+      "last_summary": {
+        "empty_verified": false,
+        "published_total": 2,
+        "retained_previous": 0,
+        "status_counts": {
+          "ok": 2
+        },
+        "total": 2,
+        "traversal_errors": 0,
+        "unknown_branches": 1
+      },
+      "catalog_sha256": "13bfa78c0977cb6b4668c6c9aaf2beef8b41c4ed942889dff18f7c4a3dc5f3b5",
+      "native_empty_evidence": {
+        "verified_no_native_video": null,
+        "media_type_counts": null,
+        "unknown_items": null,
+        "scope": null
+      }
+    },
+    {
+      "course_id": "simuladao-ufpr2-26-568263fb",
+      "title": "Simuladão UFPR #02 - Gratuito",
+      "status": "incomplete",
+      "last_run_at": "2026-11-07T03:37:05+00:00",
+      "last_ok_at": "2026-10-30T06:55:57+00:00",
+      "last_summary": {
+        "empty_verified": false,
+        "published_total": 0,
+        "retained_previous": 0,
+        "status_counts": {},
+        "total": 0,
+        "traversal_errors": 0,
+        "unknown_branches": 0
+      },
+      "catalog_sha256": "c2d2430db5828be0aed55e26bce9b98f2e4058e08bc6e8397ce80902c4fe270b",
+      "native_empty_evidence": {
+        "verified_no_native_video": false,
+        "media_type_counts": {
+          "U": 4,
+          "D": 4,
+          "A": 2
+        },
+        "unknown_items": 1,
+        "scope": "native_portal_video_items_only"
+      }
+    },
+    {
+      "course_id": "simuladao-ufpr3-26-9621094f",
+      "title": "Simuladão UFPR #03 - Gratuito",
+      "status": "ok",
+      "last_run_at": "2026-11-06T23:37:19+00:00",
+      "last_ok_at": "2026-11-06T23:37:19+00:00",
+      "last_summary": {
+        "empty_verified": true,
+        "status_counts": {},
+        "total": 0,
+        "traversal_errors": 0,
+        "unknown_branches": 0
+      },
+      "catalog_sha256": "4ef3097b27a3fec0ebcf2ef173df37aa7f74e5663fc3c5de693c3bb14c314005",
+      "native_empty_evidence": {
+        "verified_no_native_video": true,
+        "media_type_counts": {
+          "U": 5,
+          "D": 4,
+          "A": 2
+        },
+        "unknown_items": 0,
+        "scope": "native_portal_video_items_only"
+      }
+    },
+    {
+      "course_id": "simulados-resolucao-de-provas-5e115236",
+      "title": "Simulados e Resolução de Provas",
+      "status": "ok",
+      "last_run_at": "2026-11-07T03:58:43+00:00",
+      "last_ok_at": "2026-11-07T03:58:43+00:00",
+      "last_summary": {
+        "empty_verified": false,
+        "published_total": 422,
+        "retained_previous": 0,
+        "status_counts": {
+          "ok": 422
+        },
+        "total": 422,
+        "traversal_errors": 0,
+        "unknown_branches": 4
+      },
+      "catalog_sha256": "01b45747ddf0b79dcc49e1006cdd38d9670c587f3d3244a940824ddc853f77d1",
+      "native_empty_evidence": {
+        "verified_no_native_video": null,
+        "media_type_counts": null,
+        "unknown_items": null,
+        "scope": null
+      }
+    }
+  ],
+  "checkpoints_remaining": 0,
+  "before_service": {
+    "RestartUSec": "15min",
+    "MainPID": "0",
+    "Result": "exit-code",
+    "NRestarts": "0",
+    "ExecMainExitTimestamp": "Sat 2026-11-07 03:58:43 UTC",
+    "ExecMainStatus": "1",
+    "MemoryPeak": "1946517504",
+    "ActiveState": "activating",
+    "SubState": "auto-restart"
+  },
+  "after_service": {
+    "RestartUSec": "15min",
+    "MainPID": "0",
+    "Result": "exit-code",
+    "NRestarts": "0",
+    "ExecMainExitTimestamp": "Sat 2026-11-07 03:58:43 UTC",
+    "ExecMainStatus": "1",
+    "MemoryPeak": "1946517504",
+    "ActiveState": "inactive",
+    "SubState": "dead"
+  },
+  "timer": {
+    "TimersCalendar": "{ OnCalendar=*-*-* 03,09,15,21:00:00 ; next_elapse=Sat 2026-11-07 09:00:00 UTC }",
+    "NextElapseUSecRealtime": "Sat 2026-11-07 09:00:32 UTC",
+    "LastTriggerUSec": "Sat 2026-11-07 03:00:14 UTC",
+    "ActiveState": "active",
+    "SubState": "waiting",
+    "UnitFileState": "enabled"
+  },
+  "operator_action": "cancel delayed retry only after MainPID=0; preserve active/enabled original 03/09/15/21 UTC calendar; avoid repeated unsupported-empty discovery every 15 min",
+  "real_browser_rotations": [
+    {
+      "utc": "2026-11-07T03:06:21.293325+00:00",
+      "message": "[2026-11-07 03:06:21] [catalog] recycling browser after durable batch total=200"
+    },
+    {
+      "utc": "2026-11-07T03:14:14.962816+00:00",
+      "message": "[2026-11-07 03:14:14] [catalog] recycling browser after durable batch total=400"
+    },
+    {
+      "utc": "2026-11-07T03:21:55.298302+00:00",
+      "message": "[2026-11-07 03:21:55] [catalog] recycling browser after durable batch total=600"
+    },
+    {
+      "utc": "2026-11-07T03:31:50.496229+00:00",
+      "message": "[2026-11-07 03:31:50] [catalog] recycling browser after durable batch total=800"
+    },
+    {
+      "utc": "2026-11-07T03:42:53.693771+00:00",
+      "message": "[2026-11-07 03:42:53] [catalog] recycling browser after durable batch total=200"
+    },
+    {
+      "utc": "2026-11-07T03:50:45.562613+00:00",
+      "message": "[2026-11-07 03:50:45] [catalog] recycling browser after durable batch total=400"
+    }
+  ],
+  "oom_events_after_fix": [],
+  "full_catalog_acceptance": "BLOCKED by independently unverified #02, not OOM or remaining long-running job"
+}

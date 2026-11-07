@@ -1,0 +1,80 @@
+{
+  "observed_at": "2026-11-07T04:02:44.916156+00:00",
+  "scope": "two real incremental ingest runs after completed catalog attempt; hash excludes observation timestamps, includes lesson identity/version/presence/metadata and every job state/attempt",
+  "observations": [
+    {
+      "business_state_sha256": "59701792395000ea37253fd1e51b7501b14f8732075c29c1cc8a4d8becab8f5b",
+      "lessons": [
+        3311,
+        3023,
+        288
+      ],
+      "jobs": {
+        "done": 1,
+        "queued": 3008,
+        "review": 5,
+        "superseded": 518
+      },
+      "sources": {
+        "current_queued": 3008,
+        "eligible": 2995,
+        "pending": 13
+      },
+      "gate": false
+    },
+    {
+      "business_state_sha256": "59701792395000ea37253fd1e51b7501b14f8732075c29c1cc8a4d8becab8f5b",
+      "lessons": [
+        3311,
+        3023,
+        288
+      ],
+      "jobs": {
+        "done": 1,
+        "queued": 3008,
+        "review": 5,
+        "superseded": 518
+      },
+      "sources": {
+        "current_queued": 3008,
+        "eligible": 2995,
+        "pending": 13
+      },
+      "gate": false
+    },
+    {
+      "business_state_sha256": "59701792395000ea37253fd1e51b7501b14f8732075c29c1cc8a4d8becab8f5b",
+      "lessons": [
+        3311,
+        3023,
+        288
+      ],
+      "jobs": {
+        "done": 1,
+        "queued": 3008,
+        "review": 5,
+        "superseded": 518
+      },
+      "sources": {
+        "current_queued": 3008,
+        "eligible": 2995,
+        "pending": 13
+      },
+      "gate": false
+    }
+  ],
+  "index_service_runs": [
+    {
+      "Result": "success",
+      "ExecMainExitTimestamp": "Sat 2026-11-07 04:02:38 UTC",
+      "ExecMainStatus": "0"
+    },
+    {
+      "Result": "success",
+      "ExecMainExitTimestamp": "Sat 2026-11-07 04:02:44 UTC",
+      "ExecMainStatus": "0"
+    }
+  ],
+  "idempotent": true,
+  "inference_or_anki_writes": false
+}

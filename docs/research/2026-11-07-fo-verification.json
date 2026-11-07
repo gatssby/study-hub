@@ -1,10 +1,10 @@
 {
-  "observed_at": "2026-11-07T02:52:31.432087+00:00",
+  "observed_at": "2026-11-07T04:19:28.970466+00:00",
   "code_commit": "a50cdb9ea72397c2be6948a7fc622b3c3dee6a28",
   "pytest": {
     "command": "services/anki-mcp-v2/.venv/bin/python -m pytest federal-online/tests tests services/anki-mcp-v2/tests -q",
     "passed": 628,
-    "duration_s": 7.27,
+    "duration_s": 7.79,
     "exit_code": 0
   },
   "fo_python_hashes": {
@@ -12,5 +12,17 @@
     "total": 36,
     "manifest": "2026-11-06-fo-module-hashes.json"
   },
-  "asr_unit_sha256_equal": true
+  "asr_unit_sha256_equal": true,
+  "final_incremental_ingest": {
+    "real_runs": 2,
+    "business_state_sha256_unchanged": true,
+    "evidence": "2026-11-07-fo-final-ingest-idempotency.json"
+  },
+  "mcp": {
+    "tools": 26,
+    "fo": 7,
+    "anki": 19,
+    "review_blocked": 5,
+    "evidence": "2026-11-06-fo-mcp-smoke.json"
+  }
 }

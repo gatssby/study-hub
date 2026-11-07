@@ -1,0 +1,26 @@
+{
+  "observed_at": "2026-11-07T03:23:04.875896+00:00",
+  "branch": "feat/study-hub-migration",
+  "code_commit": "a50cdb9ea72397c2be6948a7fc622b3c3dee6a28",
+  "documentation_commit": "eef4da5854856e7889941c81adc85d06fa8ff96e",
+  "remote_ref": "refs/heads/feat/study-hub-migration",
+  "remote_sha": "eef4da5854856e7889941c81adc85d06fa8ff96e",
+  "exact_match": true,
+  "force_push": false,
+  "scope": "13 selected FO/docs paths; unrelated dirty worktree not staged",
+  "runbook_deployment": {
+    "source_ancestor": "74273c35708be3069c58a8e325a02ef821a32129",
+    "local_and_verified_remote_sha256": "01d7feabafcbe742c9efb3e118af352ef46ead79a0b0b1eaa9d1598b3758c02c",
+    "atomic_replace": true,
+    "services_restarted": false
+  },
+  "notion": {
+    "connected": false,
+    "updated": false,
+    "reason": "CONNECTION_REQUIRED",
+    "status_reconfirmed_at": "2026-11-07T04:19:28.970466+00:00"
+  },
+  "note": "Receipt proves published documentation commit before its status-marker update; final status-marker commit is read back independently at session close.",
+  "last_remote_ref_verified_at": "2026-11-07T04:19:28.970466+00:00",
+  "last_remote_ref_sha": "eef4da5854856e7889941c81adc85d06fa8ff96e"
+}

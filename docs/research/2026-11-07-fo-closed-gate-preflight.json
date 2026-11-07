@@ -58,14 +58,14 @@
     "eligible_jobs": 2995,
     "invalid_sources": 0,
     "storage": {
-      "free_bytes": 12005867520,
+      "free_bytes": 11993993216,
       "reserve_bytes": 4294967296,
       "largest_source_bytes": 697698800
     },
     "resources": {
       "cpu_count": 4,
       "threads": 3,
-      "memory_available_bytes": 22623539200,
+      "memory_available_bytes": 22633373696,
       "service_memory_max_bytes": 12884901888,
       "service_cpu_quota_percent": 300
     },
@@ -76,5 +76,7 @@
     },
     "inference_executed": false
   },
-  "inference_executed": false
+  "inference_executed": false,
+  "observed_at": "2026-11-07T04:19:28.970466+00:00",
+  "scope": "check-only, explicit TRANSCRIPTION_ENABLED=false; no audio/lease/inference; permanent service remains disabled/inactive"
 }

@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "observed_at": "2026-11-07T03:00:54.219120+00:00",
+  "observed_at": "2026-11-07T04:03:51.507642+00:00",
   "read_only": true,
-  "inventory_sha256": "fe7d93c594cd2d5a9ae3a53159e9fd66f764f85f74ca62ec6341bbb837986baf",
+  "inventory_sha256": "df2f503ebf1effb2123cd1890f5640cff4fc849561377c39dc580330b038ffbd",
   "counts": {
     "total": 3311,
     "present": 3023,
@@ -8400,7 +8400,7 @@
       },
       "retained_previous": 0,
       "traversal_errors": 0,
-      "generated_at": "2026-10-30T06:55:08+00:00",
+      "generated_at": "2026-11-07T03:36:17+00:00",
       "empty_classification": null
     },
     {
@@ -8417,7 +8417,7 @@
       },
       "retained_previous": 0,
       "traversal_errors": 0,
-      "generated_at": "2026-10-30T06:55:20+00:00",
+      "generated_at": "2026-11-07T03:36:28+00:00",
       "empty_classification": null
     },
     {
@@ -8430,7 +8430,7 @@
       "observed_status_counts": {},
       "retained_previous": 0,
       "traversal_errors": 0,
-      "generated_at": "2026-11-06T23:36:32+00:00",
+      "generated_at": "2026-11-07T03:37:05+00:00",
       "empty_classification": "empty_catalog_not_live_verified"
     },
     {
@@ -8460,7 +8460,7 @@
       },
       "retained_previous": 0,
       "traversal_errors": 0,
-      "generated_at": "2026-10-30T07:47:03+00:00",
+      "generated_at": "2026-11-07T03:58:43+00:00",
       "empty_classification": null
     }
   ],

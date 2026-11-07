@@ -1,5 +1,5 @@
 {
-  "observed_at": "2026-11-07T03:00:55.567709+00:00",
+  "observed_at": "2026-11-07T04:01:18.304360+00:00",
   "before": {
     "observed_at": 1794019226.0434973,
     "reason": "catalog cgroup OOM at 2 GiB; pause auto-restart while bounding browser lifecycle; no database reset",
@@ -52,6 +52,70 @@
   },
   "progress_observed": true,
   "service": {
+    "Restart": "on-failure",
+    "TimeoutStopUSec": "1min 30s",
+    "RestartPreventExitStatus": "2",
+    "MainPID": "0",
+    "Result": "exit-code",
+    "NRestarts": "0",
+    "ExecMainStartTimestamp": "Sat 2026-11-07 02:46:26 UTC",
+    "ExecMainExitTimestamp": "Sat 2026-11-07 03:58:43 UTC",
+    "ExecMainStatus": "1",
+    "MemoryCurrent": "[not set]",
+    "MemoryPeak": "1946517504",
+    "CPUQuotaPerSecUSec": "1s",
+    "MemoryMax": "2147483648",
+    "TasksMax": "512",
+    "KillMode": "control-group",
+    "Id": "study-hub-fo-catalog.service",
+    "ActiveState": "inactive",
+    "SubState": "dead",
+    "UnitFileState": "static",
+    "StartLimitIntervalUSec": "10s",
+    "StartLimitBurst": "5"
+  },
+  "scope": "catalog only; budget 200 new durable entries per browser; no reset, no resource/frequency increase, no ASR activation",
+  "full_global_completion": "BLOCKED: independently unverified empty Simuladao #02; 10 ok / 1 incomplete",
+  "catalog_timer_schedule": {
+    "OnCalendar": "*-*-* 03,09,15,21:00:00",
+    "RandomizedDelaySec": 120,
+    "Persistent": true,
+    "source": "systemctl cat study-hub-fo-catalog.timer",
+    "next_property_while_triggered_service_running": "empty; no completed global run claimed",
+    "next_observed_after_attempt": "Sat 2026-11-07 09:00:32 UTC"
+  },
+  "browser_rotation_followup": {
+    "observed_at": "2026-11-07T03:16:58.383200+00:00",
+    "checkpoint_entries": 457,
+    "real_browser_rotations": [
+      {
+        "utc": "2026-11-07T03:06:21.293325+00:00",
+        "message": "[2026-11-07 03:06:21] [catalog] recycling browser after durable batch total=200"
+      },
+      {
+        "utc": "2026-11-07T03:14:14.962816+00:00",
+        "message": "[2026-11-07 03:14:14] [catalog] recycling browser after durable batch total=400"
+      }
+    ],
+    "service": {
+      "MainPID": "3068770",
+      "Result": "success",
+      "NRestarts": "0",
+      "MemoryCurrent": "1290203136",
+      "MemoryPeak": "1905938432"
+    },
+    "memory_events": {
+      "low": 0,
+      "high": 0,
+      "max": 0,
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0,
+      "sock_throttled": 0
+    }
+  },
+  "initial_post_fix_observation_at": "2026-11-07T03:00:55.567709+00:00",
+  "initial_post_fix_service": {
     "MainPID": "3068770",
     "Result": "success",
     "MemoryCurrent": "1061601280",
@@ -60,13 +124,40 @@
     "ActiveState": "activating",
     "SubState": "start"
   },
-  "scope": "catalog only; budget 200 new durable entries per browser; no reset, no resource/frequency increase, no ASR activation",
-  "full_global_completion": "NOT TESTED",
-  "catalog_timer_schedule": {
-    "OnCalendar": "*-*-* 03,09,15,21:00:00",
-    "RandomizedDelaySec": 120,
-    "Persistent": true,
-    "source": "systemctl cat study-hub-fo-catalog.timer",
-    "next_property_while_triggered_service_running": "empty; no completed global run claimed"
+  "global_attempt_finished": true,
+  "global_attempt_exit_code": 1,
+  "global_attempt_evidence": "2026-11-07-fo-catalog-global-final.json",
+  "browser_rotation_final": {
+    "count": 6,
+    "events": [
+      {
+        "utc": "2026-11-07T03:06:21.293325+00:00",
+        "message": "[2026-11-07 03:06:21] [catalog] recycling browser after durable batch total=200"
+      },
+      {
+        "utc": "2026-11-07T03:14:14.962816+00:00",
+        "message": "[2026-11-07 03:14:14] [catalog] recycling browser after durable batch total=400"
+      },
+      {
+        "utc": "2026-11-07T03:21:55.298302+00:00",
+        "message": "[2026-11-07 03:21:55] [catalog] recycling browser after durable batch total=600"
+      },
+      {
+        "utc": "2026-11-07T03:31:50.496229+00:00",
+        "message": "[2026-11-07 03:31:50] [catalog] recycling browser after durable batch total=800"
+      },
+      {
+        "utc": "2026-11-07T03:42:53.693771+00:00",
+        "message": "[2026-11-07 03:42:53] [catalog] recycling browser after durable batch total=200"
+      },
+      {
+        "utc": "2026-11-07T03:50:45.562613+00:00",
+        "message": "[2026-11-07 03:50:45] [catalog] recycling browser after durable batch total=400"
+      }
+    ],
+    "oom_events_after_fix": 0,
+    "peak_bytes": 1946517504,
+    "memory_max_bytes": 2147483648,
+    "checkpoints_remaining": 0
   }
 }

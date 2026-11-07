@@ -1,0 +1,22 @@
+{
+  "observed_at": "2026-11-07T03:21:51.611636+00:00",
+  "operation": "read-only streaming DB snapshot; same production sanitizer; no raw text output",
+  "policy_version": 5,
+  "documents": 172,
+  "counts": {
+    "pages": 7818,
+    "text_only_checked": 7274,
+    "excluded": 544,
+    "rejected_release": 0,
+    "text_changed": 0,
+    "exposure_changed": 0
+  },
+  "selection_fingerprint_sha256": "883d80d1d6d4cce894c9aada5ebb0a0ce336205ea87e6e9ec0bc6bfe1413fa08",
+  "rejected_handles": [],
+  "wall_s": 2.370132498908788,
+  "peak_rss_bytes": 21405696,
+  "originals_opened": 0,
+  "published_or_reclassified_pages": 0,
+  "academic_quality_certified": false,
+  "no_pii_detected_by_current_policy": true
+}
