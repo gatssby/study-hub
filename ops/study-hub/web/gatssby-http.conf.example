@@ -1,0 +1,21 @@
+# Future deployment only. Include inside http {}; no existing vhost changes.
+# Keep this file enabled after TLS activation for ACME renewals.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name gatssby.com.br www.gatssby.com.br;
+    server_tokens off;
+
+    # Public exception: ACME token files ONLY, never the frontend.
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/study-hub-acme;
+        default_type text/plain;
+        auth_basic off;
+        autoindex off;
+        try_files $uri =404;
+    }
+
+    location / {
+        return 308 https://gatssby.com.br$request_uri;
+    }
+}

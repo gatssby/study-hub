@@ -1,0 +1,90 @@
+# Future deployment only. Include inside http {} AFTER certonly succeeds.
+# Independent certificate lineage: never reuse another host's certificate.
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name www.gatssby.com.br;
+    server_tokens off;
+    ssl_certificate /etc/letsencrypt/live/gatssby.com.br/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/gatssby.com.br/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_tickets off;
+    # Redirect-only host: no frontend or API is served here.
+    return 308 https://gatssby.com.br$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name gatssby.com.br;
+    server_tokens off;
+    ssl_certificate /etc/letsencrypt/live/gatssby.com.br/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/gatssby.com.br/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_tickets off;
+
+    root /srv/study-hub-web/current;
+    index index.html;
+    default_type application/octet-stream;
+    types {
+        text/html html;
+        text/css css;
+        application/javascript js mjs;
+        application/json json;
+        image/svg+xml svg;
+        image/png png;
+        image/jpeg jpg jpeg;
+        image/webp webp;
+        image/x-icon ico;
+        font/woff woff;
+        font/woff2 woff2;
+    }
+    autoindex off;
+    auth_basic "Study Hub private";
+    auth_basic_user_file /etc/nginx/study-hub-web.htpasswd;
+    satisfy all;
+    client_max_body_size 1k;
+
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    add_header Referrer-Policy no-referrer always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
+    # Private HTML, assets and API: never persist authenticated responses.
+    # Keep headers at server scope to avoid add_header inheritance surprises.
+    add_header Cache-Control "private, no-store" always;
+
+    location = /api/dashboard {
+        # Rewrite-phase guard: HEAD is deliberately NOT implicitly allowed.
+        if ($request_method != GET) { return 405; }
+        # No caller-selected query parameters reach the private adapter.
+        if ($args != "") { return 400; }
+        proxy_pass http://127.0.0.1:3401/api/dashboard;
+        proxy_http_version 1.1;
+        proxy_set_header Host localhost;
+        proxy_set_header Connection "";
+        proxy_set_header Authorization "";
+        proxy_set_header Cookie "";
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_connect_timeout 2s;
+        proxy_read_timeout 10s;
+        proxy_send_timeout 10s;
+        proxy_buffering on;
+        proxy_cache off;
+        proxy_hide_header Cache-Control;
+        proxy_hide_header Expires;
+        proxy_hide_header Set-Cookie;
+    }
+
+    # No generic proxy, no FO routes, no SPA fallback inside /api.
+    location = /api { return 404; }
+    location ^~ /api/ { return 404; }
+    location ~ /\. { return 404; }
+
+    location / {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files $uri $uri/ /index.html;
+    }
+}
