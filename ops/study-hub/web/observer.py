@@ -125,9 +125,9 @@ def mapping(value):
 
 
 def count(value):
-    if type(value) is int and value >= 0:
+    if type(value) is int and 0 <= value <= 9007199254740991:
         return value
-    if type(value) is float and math.isfinite(value) and value >= 0 and value.is_integer():
+    if type(value) is float and math.isfinite(value) and 0 <= value <= 9007199254740991 and value.is_integer():
         return int(value)
     return None
 
@@ -136,8 +136,57 @@ def state(value):
     return value if isinstance(value, str) and value in STATES else 'unknown'
 
 
+def storage_projection(raw):
+    receipt = mapping(raw.get('storage_receipt'))
+    stamp = receipt.get('observed_at')
+    fresh = type(stamp) in (int, float) and math.isfinite(stamp) and 0 <= time.time() - stamp <= 900
+    if not fresh:
+        receipt = {}
+    growth = receipt.get('growth_bytes_per_day')
+    valid_growth = type(growth) in (int, float) and math.isfinite(growth) and abs(growth) <= 9007199254740991
+    warning = receipt.get('warning')
+    return {'free_bytes': count(raw.get('disk_free')), 'total_bytes': count(raw.get('disk_total')),
+            **{key: count(receipt.get(key)) for key in
+               ('available_bytes', 'study_hub_bytes', 'temp_bytes', 'whisper_reserve_bytes')},
+            'growth_bytes_per_day': growth if valid_growth else None,
+            'sample_observed_at': stamp if fresh else None,
+            'warning': warning if isinstance(warning, str) and warning in ('low_reserve', 'growth_risk') else None}
+
+
+PACE_KEYS = ('comparable_samples', 'median_processing_per_audio', 'remaining_active_audio_s',
+             'unknown_duration_jobs', 'ignored_jobs', 'eta_seconds', 'eta_low_seconds',
+             'eta_high_seconds', 'completed_24h', 'audio_24h_s')
+DOWNLOAD_KEYS = ('verified', 'error', 'unavailable', 'other', 'verified_bytes')
+SYNC = ('verified', 'failed', 'absent', 'not_generated')
+
+
+def finite(value):
+    return value if type(value) in (int, float) and math.isfinite(value) and 0 <= value <= 9007199254740991 else None
+
+
+def short_text(value, limit=40):
+    return value[:limit] if isinstance(value, str) and value.isprintable() else None
+
+
+def review_projection(item):
+    item = mapping(item)
+    reasons = {}
+    for key, value in list(mapping(item.get('reasons')).items())[:8]:
+        if short_text(key) and count(value) is not None:
+            reasons[short_text(key)] = count(value)
+    intervals = []
+    for pair in item.get('intervals') if isinstance(item.get('intervals'), list) else []:
+        if isinstance(pair, list) and len(pair) == 2 and all(finite(x) is not None for x in pair):
+            intervals.append([pair[0], pair[1]])
+    return {'discipline': short_text(item.get('discipline')) or 'Outros',
+            'severity': item.get('severity') if item.get('severity') in ('grave', 'leve', 'desconhecida') else 'desconhecida',
+            'reasons': reasons, 'intervals': intervals[:8], 'state': 'review'}
+
+
 def project(raw):
     raw = mapping(raw)
+    pipeline = mapping(raw.get('pipeline'))
+    receipt = mapping(pipeline.get('onedrive')) or mapping(raw.get('onedrive_receipt'))
     status = mapping(raw.get('status'))
     jobs = mapping(status.get('transcription_jobs'))
     pdf = mapping(status.get('pdf_privacy'))
@@ -156,15 +205,25 @@ def project(raw):
         'observed_at': datetime.now(timezone.utc).isoformat(),
         'transcription': {**{key: count(jobs.get(key)) for key in ('done', 'queued', 'review')},
                           'processing': count(jobs.get('leased', jobs.get('processing'))),
-                          'current_progress': progress},
+                          'current_progress': progress, 'eta_seconds': None},
+        'queue_scope': {key: count(mapping(raw.get('queue_scope')).get(key))
+                        for key in ('active', 'archived', 'ignored')},
         'pdf': {'materials': count(status.get('materials_total')), 'pages': count(status.get('pdf_pages_total')),
                 'released': count(pdf.get('released_pages')), 'blocked': count(pdf.get('blocked_pages'))},
         'video': {'available_sources': count(raw.get('available_sources')),
                   'indexed_objects': count(index.get('source_videos')),
                   'pending_sources': count(mapping(status.get('sources')).get('pending'))},
         'services': {name: state(units.get(name)) for name in SERVICES},
-        'storage': {'free_bytes': count(raw.get('disk_free')), 'total_bytes': count(raw.get('disk_total'))},
-        'onedrive': {'state': state(units.get('onedrive')), 'last_observed_at': None},
+        'storage': storage_projection(raw),
+        'onedrive': {'state': state(units.get('onedrive')),
+                     'last_observed_at': finite(mapping(pipeline.get('onedrive')).get('updated_at')),
+                     **{key: (receipt.get(key) if receipt.get(key) in SYNC else 'unknown')
+                        for key in ('pdf_sync', 'transcript_sync')},
+                     **{key: count(receipt.get(key)) for key in ('transcript_files', 'remote_videos', 'remote_video_bytes')}},
+        'pace': {key: finite(mapping(pipeline.get('transcription')).get(key)) for key in PACE_KEYS},
+        'downloads': {key: count(mapping(pipeline.get('videos')).get(key)) for key in DOWNLOAD_KEYS},
+        'reviews': [review_projection(item) for item in
+                    (pipeline.get('reviews') if isinstance(pipeline.get('reviews'), list) else [])[:20]],
         'transfer': {'state': 'not_instrumented'},
     }
 

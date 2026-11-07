@@ -1,0 +1,45 @@
+[Unit]
+Description=Study Hub read-only dashboard observer
+After=network.target
+StartLimitIntervalSec=120
+StartLimitBurst=4
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/study-hub/ops/study-hub/web
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/ubuntu/study-hub-observer-venv/bin/gunicorn --config gunicorn.conf.py production:application
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=20
+KillMode=control-group
+RuntimeDirectory=study-hub-observer
+RuntimeDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET
+CapabilityBoundingSet=
+ReadOnlyPaths=/home/ubuntu/study-hub-state/federal-online
+ReadWritePaths=/run/study-hub-observer
+InaccessiblePaths=-/home/ubuntu/.ssh -/home/ubuntu/.config -/home/ubuntu/anki-vnext
+MemoryMax=192M
+CPUQuota=20%
+TasksMax=16
+LimitNOFILE=128
+StandardOutput=null
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

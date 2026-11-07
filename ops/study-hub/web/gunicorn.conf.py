@@ -1,0 +1,20 @@
+"""Dedicated loopback-only production runtime; no request-target logging."""
+bind = '127.0.0.1:3401'
+workers = 1
+worker_class = 'sync'
+threads = 1
+backlog = 16
+timeout = 18
+graceful_timeout = 15
+keepalive = 0
+limit_request_line = 512
+limit_request_fields = 24
+limit_request_field_size = 1024
+accesslog = None
+errorlog = '-'
+loglevel = 'info'
+logger_class = 'safe_logging.SanitizedLogger'
+forwarded_allow_ips = '127.0.0.1'
+worker_tmp_dir = '/run/study-hub-observer'
+max_requests = 10000
+max_requests_jitter = 0
