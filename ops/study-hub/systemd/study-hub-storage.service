@@ -1,0 +1,25 @@
+[Unit]
+Description=Study Hub bounded storage observation (no cleanup)
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/study-hub
+ExecStart=/usr/bin/python3 /home/ubuntu/study-hub/ops/study-hub/storage_telemetry.py --state-root /home/ubuntu/study-hub-state/federal-online
+Nice=19
+IOSchedulingClass=idle
+CPUQuota=10%
+MemoryMax=128M
+TasksMax=16
+TimeoutStartSec=90
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/study-hub-state/federal-online/telemetry
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX

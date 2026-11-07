@@ -1,0 +1,11 @@
+[Unit]
+Description=Study Hub hourly storage reserve warning
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+AccuracySec=1min
+Unit=study-hub-storage.service
+
+[Install]
+WantedBy=timers.target
