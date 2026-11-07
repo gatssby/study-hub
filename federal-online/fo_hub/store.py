@@ -471,6 +471,20 @@ class FOStore:
                          "SELECT 1 FROM lesson_video_sources s WHERE s.lesson_id=l.lesson_id "
                          "AND s.available=1 AND s.revision=CAST(l.version AS TEXT) "
                          "AND s.remote_path IS NOT NULL)")
+        deferred_reasons = {}
+        if 'transcription_source_deferrals' in tables and 'lesson_video_sources' in tables:
+            deferred_rows = self.conn.execute("SELECT d.reason,s.available FROM transcription_source_deferrals d "
+                "JOIN transcription_jobs j ON j.lesson_id=d.lesson_id AND j.version=d.version AND j.state='queued' "
+                "JOIN lessons l ON l.lesson_id=d.lesson_id AND l.version=d.version AND l.present=1 "
+                "JOIN lesson_video_sources s ON s.lesson_id=d.lesson_id AND s.revision=CAST(d.version AS TEXT) "
+                "WHERE d.remote_path IS s.remote_path AND d.size IS s.size AND d.retry_after>?", (time.time(),)).fetchall()
+            allowed_reasons = {'remote_object_not_found', 'source_duration_mismatch', 'hls_404',
+                               'authenticated_observation_failed', 'stream_not_captured'}
+            for reason, available in deferred_rows:
+                public_reason = reason if reason in allowed_reasons else 'source_pending_verification'
+                deferred_reasons[public_reason] = deferred_reasons.get(public_reason, 0) + 1
+                if available:
+                    eligible -= 1
         return {
             'TRANSCRIPTION_ENABLED': os.environ.get('TRANSCRIPTION_ENABLED', 'false').strip().lower() == 'true',
             "lessons_total": q("SELECT COUNT(*) FROM lessons"),
@@ -491,4 +505,5 @@ class FOStore:
             "components": components,
             "sources": {"current_queued": current_queued, "eligible": eligible,
                         "pending": current_queued - eligible},
+            "transcription_deferrals": {"total": sum(deferred_reasons.values()), "by_reason": deferred_reasons},
         }

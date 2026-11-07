@@ -32,6 +32,11 @@ def test_missing_remote_object_is_deferred_without_attempt_exhaustion_or_breaker
     assert store.conn.execute('SELECT reason FROM transcription_source_deferrals').fetchone()[0] == 'remote_object_not_found'
     assert worker.run_once()['state'] == 'idle'
     assert len(calls) == 1
+    from fo_hub.worker import worker_status
+    assert worker_status(worker.cfg)['next_discipline'] is None
+    status=store.sync_status()
+    assert status['sources']['eligible']==0
+    assert status['transcription_deferrals']=={'total':1,'by_reason':{'remote_object_not_found':1}}
     assert store.conn.execute('SELECT COUNT(*) FROM transcription_breaker WHERE opened_at IS NOT NULL').fetchone()[0] == 0
     # A newly observed source identity is immediately eligible, not hidden by the old backoff.
     store.conn.execute("UPDATE lesson_video_sources SET remote_path='onedrive:Federal Online/new.mp4'")

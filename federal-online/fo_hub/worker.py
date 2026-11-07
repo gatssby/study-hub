@@ -795,6 +795,9 @@ def worker_status(cfg):
             retry='COALESCE(j.retry_at,0)' if 'retry_at' in {r[1] for r in c.execute('PRAGMA table_info(transcription_jobs)')} else '0'
             rows=[dict(r) for r in c.execute(f"SELECT j.lesson_id,l.subject,l.front,l.module,l.title FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version JOIN lesson_video_sources s ON s.lesson_id=j.lesson_id WHERE j.state='queued' AND {retry}<=? AND j.attempts<j.max_attempts AND l.present=1 AND s.available=1 AND s.revision=CAST(j.version AS TEXT) AND s.remote_path IS NOT NULL AND NOT EXISTS(SELECT 1 FROM transcription_jobs busy JOIN lesson_video_sources bs ON bs.lesson_id=busy.lesson_id WHERE busy.state='leased' AND bs.remote_path=s.remote_path)",(time.time(),))]
         next_job=choose(rows,cursor[0] if cursor else None)
+        if 'transcription_source_deferrals' in tables:
+            blocked={r[0] for r in c.execute("SELECT d.lesson_id FROM transcription_source_deferrals d JOIN lesson_video_sources s ON s.lesson_id=d.lesson_id AND s.revision=CAST(d.version AS TEXT) WHERE d.remote_path IS s.remote_path AND d.size IS s.size AND d.retry_after>?",(time.time(),))}
+            next_job=choose([r for r in rows if r['lesson_id'] not in blocked],cursor[0] if cursor else None)
         breakers=[dict(r) for r in c.execute('SELECT * FROM transcription_breaker ORDER BY fingerprint')] if 'transcription_breaker' in tables else []
     return {'leased':leased,'next_discipline':discipline(next_job) if next_job else None,'counts':counts,'breaker':breakers,'free_bytes':shutil.disk_usage(cfg.state).free}
 
