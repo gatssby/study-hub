@@ -73,3 +73,11 @@ A arquitetura de implantação, contrato visual e sequenciamento foram desdobrad
 - **Produção desejada:** `https://gatssby.com.br/`, preservando `https://n8n.gatssby.com.br/` e demais vhosts sem alteração; DNS raiz ainda sem A record no snapshot. Nginx/TLS já gerenciam n8n por vhost separado.
 - **Design vinculante:** Community file `1531598093643920564`; reprodução fiel do layout após acesso aos frames originais (leitura web automatizada retornou 403). Não partir de inspiração genérica.
 - **Primeiro sprint:** auditoria anti-regressão n8n, obtenção de arquivo Figma duplicado, contrato visual, scaffold local-only, sem mudar DNS/Nginx/n8n. Após aceite: backend read-only/telemetria real, host isolado, TLS/auth e cutover com smoke n8n.
+
+## Sprint 1 — implementação local verificada em 07/11/2026
+
+Entregues shell/Dashboard React/TypeScript/Vite em `apps/study-hub-web` e observador local allowlisted em `ops/study-hub/web/observer.py`. Preview127.0.0.1:3400, backend127.0.0.1:3401; browser não acessa FO/SQLite. Dados reais com polling20s, indisponível/null, loading/offline/stale e serviços com falhas explícitas; sem percentual fictício de download. Última conclusão OneDrive permanece desconhecida.
+
+Figma recuperado no Safari autenticado e Remix do proprietário confirmado: Make `kd36an23RU8hgKDxF55sTR`. Preview original da autora inspecionado, contrato/tokens/screenshots em `docs/design/`. Sem sidebar no original; respeitada composição header/quatro resumos/grid2 colunas.10 medidas selecionadas iguais, sem alegar pixel-perfect global. MCP desktop3845 responde, mas não entrega layers/frames de Make.
+
+Build estático e6 testes frontend +5 testes observer aprovados, smoke browser desktop/mobile integrado200. n8n pré/pós raiz/health200, container/PIDs/hashes preservados. Nenhum DNS/Nginx/serviço da VPS alterado. Templates futuros, DNS exato, autenticação/TLS e rollback documentados no roadmap principal e `ops/study-hub/web/README.md`. Publicação e biblioteca continuam próximas fases, não entregues por este sprint.
