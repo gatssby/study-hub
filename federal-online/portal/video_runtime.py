@@ -25,6 +25,16 @@ def canonical_url(url):
     return canonical_media_url(url)
 
 
+def source_unavailability_reason(exc):
+    if isinstance(exc,SourceDurationMismatch):return 'source_duration_mismatch'
+    if isinstance(exc,subprocess.CalledProcessError):
+        detail=str(exc.stderr or '').casefold()
+        if any(x in detail for x in ('unauthorized','forbidden','token expired','401','403')):return None
+        if '404' in detail and 'not found' in detail:return 'hls_404'
+        if '410' in detail and 'gone' in detail:return 'hls_gone'
+    return None
+
+
 def identity(row):
     key = row.get('media_id') or row.get('item_id')
     if not key:
@@ -128,7 +138,7 @@ def main():
             hierarchy='/'.join(core.source_ref_to_parts(core.source_ref_from_aula(row)))
             destination=f'onedrive:Federal Online/{course}/{hierarchy}/{key}/{version}/{title}.mp4'
             local=tmp/f'{key}-{version}.mp4'
-            if not local.exists() and previous.get('status')=='error':
+            if not local.exists() and previous.get('status') in ('error','unavailable'):
                 # Repeatedly downloading a source already shorter than catalog
                 # cannot repair it. Probe BEFORE touching its known partial.
                 probe=subprocess.run(['ffprobe','-v','quiet','-show_entries','format=duration',
@@ -160,7 +170,7 @@ def main():
                 probe=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','json',str(candidate.tmp_partial_path)],capture_output=True,text=True,check=True,timeout=30)
                 duration=float(json.loads(probe.stdout)['format']['duration'])
                 expected=float(row.get('duracao_segundos') or 0)
-                if expected and duration<expected*0.95:raise RuntimeError('Incomplete video; do not upload')
+                if expected and duration<expected*0.95:raise SourceDurationMismatch('Incomplete video; do not upload')
                 os.replace(candidate.tmp_partial_path,local)
             subprocess.run(['rclone','copyto',str(local),destination,'--retries','3','--low-level-retries','5'],capture_output=True,text=True,check=True,timeout=7200)
             verify_upload(local,destination)
@@ -170,12 +180,19 @@ def main():
             local.unlink()
         except Exception as exc:
             attempts=int(previous.get('attempts',0))+1
+            reason=source_unavailability_reason(exc)
+            if reason:
+                manifest['items'][key]={'revision':version,'status':'unavailable','reason':reason,
+                                        'error_type':type(exc).__name__,'attempts':attempts,
+                                        'checked_at':time.time(),'retry_at':time.time()+86400}
+                atomic_json(manifest_path,manifest)
+                continue
             delay=21600 if isinstance(exc,SourceDurationMismatch) else min(86400,60*2**min(attempts,10))
             manifest['items'][key]={'revision':version,'status':'error','error_type':type(exc).__name__,'attempts':attempts,'retry_at':time.time()+delay}
             atomic_json(manifest_path,manifest)
             # A failed staged upload must not accumulate videos from other jobs.
             break
-    print(json.dumps({'video_states':{status:sum(x.get('status')==status for x in manifest['items'].values()) for status in ('verified','existing_remote_verified','error')}}))
+    print(json.dumps({'video_states':{status:sum(x.get('status')==status for x in manifest['items'].values()) for status in ('verified','existing_remote_verified','unavailable','error')}}))
 
 
 if __name__=='__main__':main()
