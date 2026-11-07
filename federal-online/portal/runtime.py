@@ -32,6 +32,7 @@ DEFAULT_ENV_FILE = Path(os.environ.get("FO_ENV_FILE") or "/home/ubuntu/.config/s
 PORTAL_URL = os.environ.get("FO_PORTAL_URL") or f"{ORIGIN}/portal"
 INCREMENTAL_MAX_AGE = timedelta(hours=6)
 SCHEMA_VERSION = 1
+CATALOG_BROWSER_BATCH_SIZE = 200
 
 
 # --------------------------------------------------------------------------- utils
@@ -531,12 +532,27 @@ class BrowserSession:
 
         config = replace(self.base_config, course_url=course["url"], storage_state_file=self.paths.storage_state)
         self._save_session()
-        args = SimpleNamespace(path_filter=[], no_resume=not resume, limit=self.args.limit,
+        args = argparse.Namespace(path_filter=[], no_resume=not resume, limit=self.args.limit,
                                storage_state=self.paths.storage_state)
+        if args.limit is None:
+            previous, _ = collector.load_checkpoint(
+                checkpoint, course_url=config.course_url, path_filters=args.path_filter,
+                logger=self.logger, resume_enabled=resume,
+            )
+            args.limit = len(previous) + CATALOG_BROWSER_BATCH_SIZE
         # The collector owns sync_playwright; discovery already owns a loop on
         # this thread. Keep the two lifecycle contexts on independent threads.
         with ThreadPoolExecutor(max_workers=1) as executor:
-            return executor.submit(collector.collect_index, args, config, self.logger, checkpoint).result()
+            while True:
+                entries = executor.submit(collector.collect_index, args, config, self.logger, checkpoint).result()
+                if self.args.limit is not None or len(entries) < args.limit:
+                    return entries
+                # collect_index closes its context/browser/driver in finally.
+                # Resume the durable rows in a fresh browser instead of keeping
+                # thousands of player/network objects alive in one context.
+                self.logger.log(f"[catalog] recycling browser after durable batch total={len(entries)}")
+                args.no_resume = False
+                args.limit = len(entries) + CATALOG_BROWSER_BATCH_SIZE
 
     def discover_material_options(self) -> list[dict[str, Any]]:
         import fo_sync_materials_from_portal_materiais as mat

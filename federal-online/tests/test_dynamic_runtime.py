@@ -28,7 +28,7 @@ def test_existing_collector_runs_outside_discovery_playwright_thread(tmp_path,mo
     session.base_config=Config()
     session.paths=runtime.Paths(tmp_path)
     session.args=SimpleNamespace(limit=None)
-    session.logger=None
+    session.logger=SimpleNamespace(log=lambda message:None)
     session._save_session=lambda:None
     def collect(*args):
         threads.append(threading.get_ident())
