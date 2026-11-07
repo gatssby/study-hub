@@ -65,3 +65,11 @@ Comando: cd "$HOME/Workspace/Study Hub" && python3 ops/study-hub/fo_monitor.py -
 ## Aceite do dashboard web
 
 Métricas compatíveis com API/banco e denominadores explícitos; polling leve; estado offline/stale; nenhum vazamento de originais/PII/QA review; atualização contínua sem Hermes; testes direcionados e um smoke end-to-end. Evitar testes excessivos e mudanças em serviços Anki/n8n.
+
+## Atualização de domínio e fidelidade visual — 07/11/2026
+
+A arquitetura de implantação, contrato visual e sequenciamento foram desdobrados em `docs/superpowers/plans/2026-11-07-study-hub-domain-figma-ui.md`.
+
+- **Produção desejada:** `https://gatssby.com.br/`, preservando `https://n8n.gatssby.com.br/` e demais vhosts sem alteração; DNS raiz ainda sem A record no snapshot. Nginx/TLS já gerenciam n8n por vhost separado.
+- **Design vinculante:** Community file `1531598093643920564`; reprodução fiel do layout após acesso aos frames originais (leitura web automatizada retornou 403). Não partir de inspiração genérica.
+- **Primeiro sprint:** auditoria anti-regressão n8n, obtenção de arquivo Figma duplicado, contrato visual, scaffold local-only, sem mudar DNS/Nginx/n8n. Após aceite: backend read-only/telemetria real, host isolado, TLS/auth e cutover com smoke n8n.
