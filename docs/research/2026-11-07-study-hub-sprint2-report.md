@@ -101,6 +101,13 @@ Ritmo e ETA:
 - ETA de ~158 dias (156–173). Com menos de 5 amostras, nenhum prazo é exibido.
 - Últimas 24 h: 8 aulas, 3,6 h de áudio.
 
+Ativação verificada às 20:55 UTC:
+- A aula Espanhol em andamento terminou normalmente e foi para `review` (QA v4: idioma misto não verificado).
+- O worker reiniciou uma única vez (PID 3143673 → 3768054, 0 restarts por falha). Nenhum job estava leased no momento, então nenhuma tentativa foi consumida.
+- O worker novo pegou Filosofia, com telemetria de fase em `decoding 1/3`. A próxima disciplina é Física.
+- Contagens: done 13, review 5, queued 2.996 (Inglês 90 e Espanhol 87 ignorados), leased 1.
+- n8n inalterado: mesmo start, mesmo PID e 0 restarts.
+
 ## PDFs
 
 - 174 materiais e 8.457 páginas: 7.912 liberadas, 545 bloqueadas (523 OCR review, 20 blocked, 1 vazia, 1 pendente sem original).
