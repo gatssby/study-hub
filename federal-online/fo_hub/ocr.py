@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 import time
 from pathlib import Path
 
-from .pdf_privacy import PRIVACY_POLICY_VERSION, sanitize_page
+from .pdf_privacy import CPF_RE, PRIVACY_POLICY_VERSION, sanitize_page
 from .store import FOStore
 
 RESERVE_BYTES = 4 * 1024**3
@@ -128,6 +129,43 @@ def process_pending(state, store, *, extractor=extract_page, available_bytes=Non
         # The transient original never outlives the run.
         shutil.rmtree(originals, ignore_errors=True)
     return {"processed": processed, "errors": errors, "exposure": "blocked"}
+
+
+_CONTACT_RE = re.compile(r"(?i)[\w.+-]+@[\w-]+\.[\w.]+|\b(?:e-?mail|telefone|whats\s*app|celular)\b")
+_MATH_RE = re.compile(r"[=±×÷√∑∫π∆Δ≤≥≠^]|\d\s*[+\-*/]\s*\d")
+
+
+def triage_ocr_review(text: str) -> dict:
+    """Aggregate review hint for an OCR page. NEVER approves or changes text.
+
+    Returns only reasons/scalar counters (no content) so a human reviewer can
+    prioritize. Formulas and numbers are treated as signals to preserve, not
+    noise to strip; any identity/contact hint sends the page to privacy review.
+    """
+    value = text or ""
+    stripped = value.strip()
+    reasons = []
+    alpha = sum(ch.isalpha() for ch in stripped)
+    words = re.findall(r"[^\W\d_]{3,}", stripped)
+    if not stripped:
+        reasons.append("empty")
+    if sanitize_page(value).quality == "privacy_review" or CPF_RE.search(value):
+        reasons.append("identity_hint")
+    if _CONTACT_RE.search(value):
+        reasons.append("contact_hint")
+    if stripped and alpha / len(stripped) < 0.5:
+        reasons.append("low_alpha")
+    if _MATH_RE.search(value):
+        reasons.append("math_or_numeric")
+    if 0 < len(stripped) < 200:
+        reasons.append("short")
+    lane = ("privacy_review" if {"identity_hint", "contact_hint"} & set(reasons)
+            else "empty" if not stripped
+            else "visual_check_math" if "math_or_numeric" in reasons
+            else "visual_check_noisy" if "low_alpha" in reasons or len(words) < 5
+            else "visual_check_text")
+    return {"lane": lane, "reasons": reasons, "chars": len(stripped),
+            "words": len(words), "approved": False}
 
 
 def main():

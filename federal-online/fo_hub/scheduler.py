@@ -2,6 +2,9 @@
 import unicodedata
 from .disciplines import discipline_for, pedagogical_key
 
+# Owner-authorized exact canonical names only; anything else is refused.
+EXCLUDABLE_DISCIPLINES=frozenset({'Inglês','Espanhol'})
+
 
 def discipline(row):
     return discipline_for(row.get('subject'),row.get('front'),row.get('module'))
@@ -11,9 +14,11 @@ def discipline_key(name):
     return unicodedata.normalize('NFKD',name).encode('ascii','ignore').decode().casefold()
 
 
-def choose(jobs,last_discipline=None):
+def choose(jobs,last_discipline=None,excluded=()):
     groups={}
-    for job in jobs:groups.setdefault(discipline(job),[]).append(job)
+    for job in jobs:
+        name=discipline(job)
+        if name not in excluded:groups.setdefault(name,[]).append(job)
     names=sorted(groups,key=discipline_key)
     if not names:return None
     after=[name for name in names if last_discipline is None or discipline_key(name)>discipline_key(last_discipline)]

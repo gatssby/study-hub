@@ -29,10 +29,11 @@ import uuid
 import zlib
 
 from .store import FOStore, ACCEPTED_CORPUS
-from .scheduler import choose, discipline, discipline_key
+from .scheduler import EXCLUDABLE_DISCIPLINES, choose, discipline, discipline_key
 from .transcription import AUTH_PHRASE, DEFAULT_AUTH_FILE, DEFAULT_PLATFORM_MARKER, TranscriptionQueue, qa_segments, classify_qa, QA_POLICY_VERSION
 
 RESERVE=4*1024**3
+PHASES=('downloading','hashing','probing','decoding','stitching','repetition_check','qa','publishing','finished')
 HEARTBEAT_INTERVAL_S=60
 MODEL_SHA256='64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2'
 
@@ -334,7 +335,31 @@ class Worker:
         self.c.execute('INSERT OR IGNORE INTO transcription_rr_cursor VALUES(1,NULL,0,0)')
         self.c.execute('CREATE TABLE IF NOT EXISTS transcription_breaker(fingerprint TEXT PRIMARY KEY,consecutive_failures INTEGER,consecutive_reviews INTEGER,opened_at REAL,reason TEXT)')
         self.c.execute('CREATE TABLE IF NOT EXISTS transcription_source_deferrals(lesson_id TEXT,version INTEGER,remote_path TEXT,size INTEGER,reason TEXT,retry_after REAL,observed_at REAL,PRIMARY KEY(lesson_id,version))')
+        # Persistent scheduling preference: jobs stay queued, never rewritten.
+        self.c.execute('CREATE TABLE IF NOT EXISTS transcription_discipline_exclusions(discipline TEXT PRIMARY KEY,reason TEXT,created_at REAL)')
+        # Observable phase telemetry; one row per job version, best effort.
+        self.c.execute('CREATE TABLE IF NOT EXISTS transcription_job_phases(lesson_id TEXT,version INTEGER,phase TEXT,phase_started_at REAL,chunk_index INTEGER,chunk_total INTEGER,updated_at REAL,PRIMARY KEY(lesson_id,version))')
         self.c.commit()
+
+    def excluded_disciplines(self):
+        return {r[0] for r in self.c.execute('SELECT discipline FROM transcription_discipline_exclusions')}
+
+    def exclude_discipline(self,name,reason):
+        if name not in EXCLUDABLE_DISCIPLINES:raise ValueError('discipline not in exact owner allowlist')
+        with self.c:self.c.execute('INSERT OR IGNORE INTO transcription_discipline_exclusions VALUES(?,?,?)',(name,str(reason)[:200],time.time()))
+
+    def include_discipline(self,name):
+        if name not in EXCLUDABLE_DISCIPLINES:raise ValueError('discipline not in exact owner allowlist')
+        with self.c:self.c.execute('DELETE FROM transcription_discipline_exclusions WHERE discipline=?',(name,))
+
+    def record_phase(self,job,phase,chunk_index=None,chunk_total=None):
+        if phase not in PHASES:raise ValueError('unknown phase')
+        try:
+            now=time.time()
+            with self.c:self.c.execute('INSERT OR REPLACE INTO transcription_job_phases VALUES(?,?,?,?,?,?,?)',
+                                       (job['lesson_id'],job['version'],phase,now,chunk_index,chunk_total,now))
+        except sqlite3.Error:
+            pass  # telemetry must never fail inference or lose a lease
 
     def catalog_order(self):
         """item_id -> portal 'ordem' from the current catalog (cached per mtime set)."""
@@ -371,7 +396,7 @@ class Worker:
             cursor=self.c.execute('SELECT * FROM transcription_rr_cursor WHERE id=1').fetchone()
             deferred={(r['lesson_id'],r['version'],r['remote_path'],r['size']) for r in self.c.execute('SELECT * FROM transcription_source_deferrals WHERE retry_after>?',(now,))}
             rows=[r for r in rows if (r['lesson_id'],r['version'],r['remote_path'],r['size']) not in deferred]
-            row=choose([dict(r,ordem=self.catalog_order().get(r['item_id'])) for r in rows],cursor['last_discipline'])
+            row=choose([dict(r,ordem=self.catalog_order().get(r['item_id'])) for r in rows],cursor['last_discipline'],self.excluded_disciplines())
             if row is None:self.c.commit();return None
             self.c.execute("UPDATE transcription_jobs SET state='leased',attempts=attempts+1,lease_owner=?,lease_until=?,updated_at=? WHERE lesson_id=? AND version=?",(self.owner,now+7*86400,str(now),row['lesson_id'],row['version']))
             name=discipline(row)
@@ -434,6 +459,7 @@ class Worker:
         size=int(source.get('size') or 0)
         if size<=0 or self.free_bytes()<RESERVE+size+100*1024**2:raise RuntimeError('storage budget or source size invalid')
         video=work/'source.mp4'
+        self.record_phase(job,'downloading')
         try:
             self.command(['rclone','copyto',source['remote_path'],video,'--retries','3','--transfers','1',
                           '--max-transfer',f'{size+1024**2}B','--cutoff-mode','HARD'])
@@ -444,7 +470,9 @@ class Worker:
             if missing and not denied:raise SourceUnavailable('remote_object_not_found') from exc
             raise
         if video.stat().st_size!=size:raise RuntimeError('source download size mismatch')
+        self.record_phase(job,'hashing')
         source_sha256=file_sha256(video)
+        self.record_phase(job,'probing')
         probe=self.command(['ffprobe','-v','error','-show_entries','format=duration','-of','json',video],timeout=60)
         duration=float(json.loads(probe.stdout)['format']['duration'])
         if not math.isfinite(duration) or duration<=0 or duration>24*3600:raise ValueError('invalid source duration')
@@ -459,7 +487,10 @@ class Worker:
         evidence=cfg.state/'transcripts/evidence'/source_sha256/fingerprint
         evidence.mkdir(parents=True,exist_ok=True)
         queue=TranscriptionQueue(self.store)
+        step=max(1e-9,cfg.chunk_s-cfg.overlap_s)
+        chunk_total=1+max(0,math.ceil((duration-cfg.chunk_s)/step)) if duration>cfg.chunk_s else 1
         while offset<duration:
+            self.record_phase(job,'decoding',chunk_index=len(chunks)+1,chunk_total=chunk_total)
             if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
             if self.free_bytes()<RESERVE+100*1024**2:raise RuntimeError('storage reserve reached')
             length=min(cfg.chunk_s,duration-offset);audio=work/'chunk.wav';prefix=work/'asr'
@@ -540,6 +571,7 @@ class Worker:
             if offset+length>=duration:break
             offset+=cfg.chunk_s-cfg.overlap_s
         from .stitching import stitch_chunks
+        self.record_phase(job,'stitching')
         stitched=stitch_chunks(chunks)
         segments=stitched['segments']
         qa=qa_segments(segments,duration)
@@ -548,6 +580,7 @@ class Worker:
         qa['flags'].extend({**flag,'origin':'stitching'} for flag in stitched['flags'])
         qa['flags'].extend(raw_flags)
         qa['flags'].extend(acoustic_flags)
+        self.record_phase(job,'repetition_check')
         self.verify_repetitions(video,work,segments,qa,chunks)
         if not segments:qa['flags'].append({'kind':'empty_output'})
         if cfg.review_only:qa['flags'].append({'kind':'pilot_manual_review_required','start':0,'end':duration})
@@ -556,6 +589,7 @@ class Worker:
         # assignment: retain raw speech, do not force ES or publish blindly.
         if discipline(lesson)=='Espanhol':
             qa['flags'].append({'kind':'mixed_language_configuration_unverified','start':0,'end':duration})
+        self.record_phase(job,'qa')
         classify_qa(qa,segments,duration)
         _,latest=self.current_source(job)
         if any(latest[k]!=source[k] for k in ('remote_path','revision','size','available')):raise SourceChanged('source changed during inference')
@@ -563,6 +597,7 @@ class Worker:
         status='validated' if qa['passed'] else 'review'
         artifact['qa_policy_version']=QA_POLICY_VERSION
         path=cfg.state/'transcripts'/('private' if qa['passed'] else 'review')/job['lesson_id']/f"v{job['version']}.json.gz"
+        self.record_phase(job,'publishing')
         atomic_json(path,artifact)
         if qa['passed']:
             lock=cfg.state/'locks/transcript-publication.lock';lock.parent.mkdir(parents=True,exist_ok=True)
@@ -580,6 +615,7 @@ class Worker:
                     seg=segments[idx] if segments else {'start':0,'end':duration}
                     start=max(0,float(flag.get('start',seg['start']))-2);end=min(duration,float(flag.get('end',seg['end']))+2)
                     self.c.execute("INSERT OR IGNORE INTO focused_reviews VALUES(?,?,?,?,?,'pending_manual_review')",(job['lesson_id'],job['version'],start,end,flag['kind']))
+        self.record_phase(job,'finished')
         return status
 
     def reassess_review(self,lesson_id,extra_flags=()):
@@ -794,23 +830,105 @@ def worker_status(cfg):
         if 'lesson_video_sources' in tables:
             retry='COALESCE(j.retry_at,0)' if 'retry_at' in {r[1] for r in c.execute('PRAGMA table_info(transcription_jobs)')} else '0'
             rows=[dict(r) for r in c.execute(f"SELECT j.lesson_id,l.subject,l.front,l.module,l.title FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version JOIN lesson_video_sources s ON s.lesson_id=j.lesson_id WHERE j.state='queued' AND {retry}<=? AND j.attempts<j.max_attempts AND l.present=1 AND s.available=1 AND s.revision=CAST(j.version AS TEXT) AND s.remote_path IS NOT NULL AND NOT EXISTS(SELECT 1 FROM transcription_jobs busy JOIN lesson_video_sources bs ON bs.lesson_id=busy.lesson_id WHERE busy.state='leased' AND bs.remote_path=s.remote_path)",(time.time(),))]
-        next_job=choose(rows,cursor[0] if cursor else None)
+        excluded=None
+        if 'transcription_discipline_exclusions' in tables:
+            names={r[0] for r in c.execute('SELECT discipline FROM transcription_discipline_exclusions')}
+            excluded={n:{} for n in sorted(names)}
+            for r in c.execute('SELECT j.state,l.subject,l.front,l.module FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version'):
+                name=discipline(dict(r))
+                if name in excluded:excluded[name][r[0]]=excluded[name].get(r[0],0)+1
+        skip=set(excluded or ())
+        next_job=choose(rows,cursor[0] if cursor else None,skip)
         if 'transcription_source_deferrals' in tables:
             blocked={r[0] for r in c.execute("SELECT d.lesson_id FROM transcription_source_deferrals d JOIN lesson_video_sources s ON s.lesson_id=d.lesson_id AND s.revision=CAST(d.version AS TEXT) WHERE d.remote_path IS s.remote_path AND d.size IS s.size AND d.retry_after>?",(time.time(),))}
-            next_job=choose([r for r in rows if r['lesson_id'] not in blocked],cursor[0] if cursor else None)
+            next_job=choose([r for r in rows if r['lesson_id'] not in blocked],cursor[0] if cursor else None,skip)
         breakers=[dict(r) for r in c.execute('SELECT * FROM transcription_breaker ORDER BY fingerprint')] if 'transcription_breaker' in tables else []
-    return {'leased':leased,'next_discipline':discipline(next_job) if next_job else None,'counts':counts,'breaker':breakers,'free_bytes':shutil.disk_usage(cfg.state).free}
+        phase=[]
+        if 'transcription_job_phases' in tables:
+            for r in c.execute("SELECT p.lesson_id,p.version,p.phase,p.phase_started_at,p.chunk_index,p.chunk_total,p.updated_at,l.subject,l.front,l.module FROM transcription_job_phases p JOIN transcription_jobs j ON j.lesson_id=p.lesson_id AND j.version=p.version AND j.state='leased' JOIN lessons l ON l.lesson_id=p.lesson_id ORDER BY p.lesson_id"):
+                d=dict(r);d['discipline']=discipline(d)
+                for k in ('subject','front','module'):d.pop(k)
+                phase.append(d)
+    return {'leased':leased,'next_discipline':discipline(next_job) if next_job else None,'counts':counts,'breaker':breakers,
+            'excluded_disciplines':excluded,'phase':phase,'free_bytes':shutil.disk_usage(cfg.state).free}
+
+
+AUDIT_METRICS=('segments','words','repetition_ratio','covered_until_s','flag_count','warning_count','blocker_count','overlap_total_s','boundary_total_s','local_defect_budget_s')
+
+
+def _kinds(rows):
+    out={}
+    for f in rows or ():
+        if isinstance(f,dict) and isinstance(f.get('kind'),str):out[f['kind']]=out.get(f['kind'],0)+1
+    return out
+
+
+def review_audit(cfg):
+    """Read-only, allowlisted projection of review jobs; never emits speech text."""
+    reviews=[]
+    with closing(FOStore(cfg.db,readonly=True).conn) as c:
+        tables={r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        excluded={r[0] for r in c.execute('SELECT discipline FROM transcription_discipline_exclusions')} if 'transcription_discipline_exclusions' in tables else set()
+        jobs=[dict(r) for r in c.execute("SELECT j.lesson_id,j.version,j.attempts,l.subject,l.front,l.module FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id WHERE j.state='review' ORDER BY j.lesson_id")]
+    for job in jobs:
+        if not re.fullmatch(r'[A-Za-z0-9_\-]+',str(job['lesson_id'])):continue
+        name=discipline(job)
+        folder=cfg.state/'transcripts/review'/job['lesson_id']
+        path=folder/f"v{job['version']}.json.gz"
+        receipts=[p for p in folder.glob(f"v{job['version']}.qa-v*.json.gz") if not p.is_symlink()] if folder.is_dir() else []
+        item={'lesson_id':job['lesson_id'],'version':job['version'],'attempts':job['attempts'],'discipline':name,
+              'excluded_discipline':name in excluded,'artifact_present':False,'artifact_sha256':None,
+              'qa_policy_version':None,'duration_s':None,'passed':None,'blocker_kinds':None,'warning_kinds':None,
+              'flag_kinds':None,'metrics':None,'chunks':None,'reused_chunks':None,'reassessment_receipts':len(receipts)}
+        if path.is_file() and not path.is_symlink():
+            content=path.read_bytes()
+            try:art=json.loads(gzip.decompress(content))
+            except (OSError,EOFError,ValueError,zlib.error):art=None
+            item.update(artifact_present=True,artifact_sha256=hashlib.sha256(content).hexdigest())
+            if isinstance(art,dict):
+                qa=art.get('qa') if isinstance(art.get('qa'),dict) else {}
+                metrics=qa.get('metrics') if isinstance(qa.get('metrics'),dict) else {}
+                chunks=art.get('chunks') if isinstance(art.get('chunks'),list) else []
+                number=lambda v:isinstance(v,(int,float)) and not isinstance(v,bool)
+                item.update(qa_policy_version=art.get('qa_policy_version') if isinstance(art.get('qa_policy_version'),int) else None,
+                            duration_s=float(art['duration_s']) if number(art.get('duration_s')) else None,
+                            passed=qa.get('passed') if isinstance(qa.get('passed'),bool) else None,
+                            blocker_kinds=_kinds(qa.get('blockers')) if 'blockers' in qa else None,
+                            warning_kinds=_kinds(qa.get('warnings')) if 'warnings' in qa else None,
+                            flag_kinds=_kinds(qa.get('flags')),
+                            metrics={k:metrics[k] for k in AUDIT_METRICS if number(metrics.get(k))},
+                            chunks=len(chunks),reused_chunks=sum(1 for x in chunks if isinstance(x,dict) and x.get('reused') is True))
+        reviews.append(item)
+    return {'reviews':reviews,'excluded_disciplines':sorted(excluded),'inference_executed':False,'mutations':0}
 
 
 def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__);mode=p.add_mutually_exclusive_group(required=True)
     mode.add_argument('--check-only',action='store_true');mode.add_argument('--run',action='store_true')
     mode.add_argument('--reset-breaker',action='store_true');mode.add_argument('--status',action='store_true')
+    mode.add_argument('--review-audit',action='store_true',help='Read-only allowlisted review projection')
+    mode.add_argument('--exclude-discipline',metavar='NAME',help='Exact allowlisted name: '+', '.join(sorted(EXCLUDABLE_DISCIPLINES)))
+    mode.add_argument('--include-discipline',metavar='NAME')
     once=p.add_mutually_exclusive_group();once.add_argument('--once',action='store_true');once.add_argument('--loop',action='store_true')
     p.add_argument('--lesson-id',help='Restrict an authorized pilot to exactly this queued lesson')
     a=p.parse_args(argv);cfg=Config.from_env()
     if a.status:
         print(json.dumps(worker_status(cfg)));return 0
+    if a.review_audit:
+        print(json.dumps(review_audit(cfg)));return 0
+    if a.exclude_discipline is not None or a.include_discipline is not None:
+        name=a.exclude_discipline if a.exclude_discipline is not None else a.include_discipline
+        if name not in EXCLUDABLE_DISCIPLINES:
+            print(json.dumps({'error':'discipline not in exact owner allowlist','allowed':sorted(EXCLUDABLE_DISCIPLINES)}));return 2
+        # Preference write only: no lease, no job rewrite. A running worker
+        # honours it at its next lease transaction once it runs this code.
+        w=Worker(cfg,gate_fn=lambda:{'allowed':False})
+        try:
+            if a.exclude_discipline is not None:w.exclude_discipline(name,'owner_authorized_exact_exclusion')
+            else:w.include_discipline(name)
+            print(json.dumps({'excluded':sorted(w.excluded_disciplines())}))
+        finally:w.c.close()
+        return 0
     if a.reset_breaker:
         with closing(FOStore(cfg.db).conn) as c:
             if c.execute("SELECT 1 FROM sqlite_master WHERE name='transcription_breaker'").fetchone():
