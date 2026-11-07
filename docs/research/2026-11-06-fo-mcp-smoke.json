@@ -1,5 +1,5 @@
 {
-  "observed_at": "2026-11-07T00:17:21Z",
+  "observed_at": "2026-11-07T01:46:34Z",
   "transport": "live loopback MCP HTTP",
   "calls": [
     {
@@ -149,7 +149,19 @@
       "has_text": false
     },
     {
+      "lesson_id": "fo_ce6134240d753024",
+      "state": "fo_not_found",
+      "has_text": false
+    },
+    {
       "lesson_id": "fo_d9f369413fd5cf40",
+      "state": "fo_not_found",
+      "has_text": false
+    }
+  ],
+  "processing_blocked": [
+    {
+      "lesson_id": "fo_0978f8f807c122f4",
       "state": "fo_not_found",
       "has_text": false
     }

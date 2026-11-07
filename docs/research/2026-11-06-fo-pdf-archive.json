@@ -1,0 +1,64 @@
+{
+  "observed_at": "2026-11-07T01:25:14Z",
+  "receipt": {
+    "verified_at": 1794014446.6174388,
+    "files": [
+      {
+        "sha256": "c0a1551b9a258baf88134d625b32f98c4278abfad0830d8921cd49278743f028",
+        "bytes": 7622464,
+        "source_handle": "c3f66f609080ddec86280524",
+        "source_root": "materials-sources",
+        "unlinked": true
+      },
+      {
+        "sha256": "e2c56a04fa1ae0bd5a459eb5b54fc4ebfad99e2fc291e3b32ee8f88270fa7293",
+        "bytes": 3450766,
+        "source_handle": "f2dbb364e1a0f9ff71678557",
+        "source_root": "materials-sources",
+        "unlinked": true
+      },
+      {
+        "sha256": "003404871ac5da94e45da70ba4b331d1553958e9cff829784ca6600e5e9bc9de",
+        "bytes": 15451322,
+        "source_handle": "48f6c0b724e39ca851aa19b6",
+        "source_root": "materials",
+        "unlinked": false
+      }
+    ],
+    "remote_namespace": "onedrive:Federal Online PDFs/_unattributed",
+    "verification": "rclone check --one-way --download against stable owned SHA256 snapshot",
+    "privacy": "private unattributed originals; never indexed or published",
+    "cleanup": true
+  },
+  "independent_remote_readback": [
+    {
+      "sha256": "c0a1551b9a258baf88134d625b32f98c4278abfad0830d8921cd49278743f028",
+      "bytes": 7622464,
+      "quickxor": null,
+      "exact_target_readback": true
+    },
+    {
+      "sha256": "e2c56a04fa1ae0bd5a459eb5b54fc4ebfad99e2fc291e3b32ee8f88270fa7293",
+      "bytes": 3450766,
+      "quickxor": null,
+      "exact_target_readback": true
+    },
+    {
+      "sha256": "003404871ac5da94e45da70ba4b331d1553958e9cff829784ca6600e5e9bc9de",
+      "bytes": 15451322,
+      "quickxor": null,
+      "exact_target_readback": true
+    }
+  ],
+  "local_originals_retained": [
+    {
+      "source_handle": "48f6c0b724e39ca851aa19b6",
+      "sha256": "003404871ac5da94e45da70ba4b331d1553958e9cff829784ca6600e5e9bc9de",
+      "bytes": 15451322
+    }
+  ],
+  "originals_unlinked": 2,
+  "archived_files": 3,
+  "archived_bytes": 26524552,
+  "scope": "three selected residuals only; no index or remote delete; ambiguous staging kept"
+}

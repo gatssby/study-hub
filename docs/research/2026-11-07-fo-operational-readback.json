@@ -1,0 +1,877 @@
+{
+  "observed_at": "2026-11-07T01:56:08.884497+00:00",
+  "jobs": {
+    "done": 1,
+    "leased": 1,
+    "queued": 3008,
+    "review": 4,
+    "superseded": 518
+  },
+  "lessons": {
+    "total": 3311,
+    "present": 3023,
+    "missing": 288
+  },
+  "pdf_quality": [
+    {
+      "quality": "blocked",
+      "exposure": "blocked",
+      "policy_version": 5,
+      "n": 20
+    },
+    {
+      "quality": "low_text",
+      "exposure": "text_only",
+      "policy_version": 5,
+      "n": 4
+    },
+    {
+      "quality": "ocr_empty",
+      "exposure": "blocked",
+      "policy_version": 5,
+      "n": 1
+    },
+    {
+      "quality": "ocr_review",
+      "exposure": "blocked",
+      "policy_version": 5,
+      "n": 523
+    },
+    {
+      "quality": "text",
+      "exposure": "text_only",
+      "policy_version": 5,
+      "n": 7270
+    }
+  ],
+  "leases": [
+    {
+      "lesson_id": "fo_0978f8f807c122f4",
+      "version": 1,
+      "progress": 0.33021228295945343,
+      "attempts": 2,
+      "updated_at": "1794016538.7887259",
+      "heartbeat_age_s": 30.10452175140381
+    }
+  ],
+  "reviews": [
+    {
+      "lesson_id": "fo_135c415d8080927f",
+      "version": 1,
+      "subject": "Biologia - Teoria",
+      "title": "Bioquímica",
+      "artifact_sha256": "6aad891dd84886059c1aba1b80d0a4dbfd77859f0bf027f376d7f176777d4568",
+      "qa_passed": false,
+      "flag_counts": {
+        "duplicate_segment": 2
+      },
+      "duration_s": 2148.283867,
+      "parameters": {
+        "language": "pt",
+        "threads": 3,
+        "beam_size": 5,
+        "temperature": 0,
+        "temperature_fallback": false,
+        "temperature_increment": 0,
+        "best_of": 5,
+        "no_speech_threshold": 0.6,
+        "max_context": 0,
+        "entropy_threshold": 2.4,
+        "logprob_threshold": -1.0,
+        "vad": false,
+        "chunk_s": 600,
+        "overlap_s": 2,
+        "stitching_version": 1,
+        "checkpoint_version": 1
+      },
+      "segment_count": 624,
+      "chunks": [
+        {
+          "offset_s": 0.0,
+          "duration_s": 600,
+          "reused": true
+        },
+        {
+          "offset_s": 598.0,
+          "duration_s": 600,
+          "reused": true
+        },
+        {
+          "offset_s": 1196.0,
+          "duration_s": 600,
+          "reused": true
+        },
+        {
+          "offset_s": 1794.0,
+          "duration_s": 354.2838670000001,
+          "reused": true
+        }
+      ]
+    },
+    {
+      "lesson_id": "fo_4cc5e44ffb6dc603",
+      "version": 1,
+      "subject": "Espanhol - Teoria",
+      "title": "Identificación de ideas",
+      "artifact_sha256": "b8f422a568da83163f9a1c65a28390d103acaf0a5b9c03169e58db2e10fbc6cc",
+      "qa_passed": false,
+      "flag_counts": {
+        "non_monotonic": 2,
+        "ambiguous_overlap": 1
+      },
+      "duration_s": 1264.939389,
+      "parameters": {
+        "language": "pt",
+        "threads": 3,
+        "beam_size": 5,
+        "temperature": 0,
+        "temperature_fallback": false,
+        "temperature_increment": 0,
+        "best_of": 5,
+        "no_speech_threshold": 0.6,
+        "max_context": 0,
+        "entropy_threshold": 2.4,
+        "logprob_threshold": -1.0,
+        "vad": false,
+        "chunk_s": 600,
+        "overlap_s": 2,
+        "stitching_version": 1,
+        "checkpoint_version": 1
+      },
+      "segment_count": 236,
+      "chunks": [
+        {
+          "offset_s": 0.0,
+          "duration_s": 600,
+          "reused": false
+        },
+        {
+          "offset_s": 598.0,
+          "duration_s": 600,
+          "reused": false
+        },
+        {
+          "offset_s": 1196.0,
+          "duration_s": 68.93938899999989,
+          "reused": false
+        }
+      ]
+    },
+    {
+      "lesson_id": "fo_d9f369413fd5cf40",
+      "version": 1,
+      "subject": "Filosofia - Teoria",
+      "title": "Mito de Er",
+      "artifact_sha256": "10dffc7fcb82691ec74cb16cb549193ecc88d7ba26212f02de6218f05becb206",
+      "qa_passed": false,
+      "flag_counts": {
+        "non_monotonic": 1,
+        "ambiguous_overlap": 1
+      },
+      "duration_s": 2161.528011,
+      "parameters": {
+        "language": "pt",
+        "threads": 3,
+        "beam_size": 5,
+        "temperature": 0,
+        "temperature_fallback": false,
+        "temperature_increment": 0,
+        "best_of": 5,
+        "no_speech_threshold": 0.6,
+        "max_context": 0,
+        "entropy_threshold": 2.4,
+        "logprob_threshold": -1.0,
+        "vad": false,
+        "chunk_s": 600,
+        "overlap_s": 2,
+        "stitching_version": 1,
+        "checkpoint_version": 1
+      },
+      "segment_count": 364,
+      "chunks": [
+        {
+          "offset_s": 0.0,
+          "duration_s": 600,
+          "reused": false
+        },
+        {
+          "offset_s": 598.0,
+          "duration_s": 600,
+          "reused": false
+        },
+        {
+          "offset_s": 1196.0,
+          "duration_s": 600,
+          "reused": false
+        },
+        {
+          "offset_s": 1794.0,
+          "duration_s": 367.5280109999999,
+          "reused": false
+        }
+      ]
+    },
+    {
+      "lesson_id": "fo_ce6134240d753024",
+      "version": 1,
+      "subject": "Física - Teoria",
+      "title": "Unidades de medida e Análise Dimensional",
+      "artifact_sha256": "12fb2e6d36551f7af5fba7ac22b92266e66230260b6a72953070d42dc1f2f99c",
+      "qa_passed": false,
+      "flag_counts": {
+        "non_monotonic": 3,
+        "ambiguous_overlap": 2
+      },
+      "duration_s": 1977.079856,
+      "parameters": {
+        "language": "pt",
+        "threads": 3,
+        "beam_size": 5,
+        "temperature": 0,
+        "temperature_fallback": false,
+        "temperature_increment": 0,
+        "best_of": 5,
+        "no_speech_threshold": 0.6,
+        "max_context": 0,
+        "entropy_threshold": 2.4,
+        "logprob_threshold": -1.0,
+        "vad": false,
+        "chunk_s": 600,
+        "overlap_s": 2,
+        "stitching_version": 1,
+        "checkpoint_version": 1
+      },
+      "segment_count": 560,
+      "chunks": [
+        {
+          "offset_s": 0.0,
+          "duration_s": 600,
+          "reused": true
+        },
+        {
+          "offset_s": 598.0,
+          "duration_s": 600,
+          "reused": true
+        },
+        {
+          "offset_s": 1196.0,
+          "duration_s": 600,
+          "reused": false
+        },
+        {
+          "offset_s": 1794.0,
+          "duration_s": 183.07985600000006,
+          "reused": false
+        }
+      ]
+    }
+  ],
+  "rr_cursor": {
+    "id": 1,
+    "last_discipline": "Geografia",
+    "cycle": 4,
+    "updated_at": 1794013778.405735
+  },
+  "error_retirements": [
+    {
+      "course_id": "57b0cfa5139851ce785e14e9bd584626",
+      "n": 22
+    },
+    {
+      "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+      "n": 34
+    }
+  ],
+  "asr_authorization_present": true,
+  "asr_env_allowlist": {
+    "TRANSCRIPTION_ENABLED": "false"
+  },
+  "services": {
+    "api": {
+      "MainPID": "3026573",
+      "Result": "success",
+      "ExecMainStartTimestamp": "Sat 2026-11-07 01:40:35 UTC",
+      "ExecMainExitTimestamp": "",
+      "ExecMainStatus": "0",
+      "MemoryCurrent": "37232640",
+      "MemoryPeak": "37990400",
+      "Id": "study-hub-fo-api.service",
+      "ActiveState": "active",
+      "SubState": "running",
+      "UnitFileState": "enabled"
+    },
+    "catalog": {
+      "MainPID": "2975859",
+      "Result": "success",
+      "ExecMainStartTimestamp": "Sat 2026-11-07 00:36:01 UTC",
+      "ExecMainExitTimestamp": "",
+      "ExecMainStatus": "0",
+      "MemoryCurrent": "1737203712",
+      "MemoryPeak": "2053226496",
+      "Id": "study-hub-fo-catalog.service",
+      "ActiveState": "activating",
+      "SubState": "start",
+      "UnitFileState": "static"
+    },
+    "materials": {
+      "MainPID": "0",
+      "Result": "signal",
+      "ExecMainStartTimestamp": "Wed 2026-10-28 04:45:08 UTC",
+      "ExecMainExitTimestamp": "Wed 2026-10-28 05:03:13 UTC",
+      "ExecMainStatus": "15",
+      "MemoryCurrent": "[not set]",
+      "MemoryPeak": "[not set]",
+      "Id": "study-hub-fo-materials.service",
+      "ActiveState": "failed",
+      "SubState": "failed",
+      "UnitFileState": "static"
+    },
+    "index": {
+      "MainPID": "0",
+      "Result": "success",
+      "ExecMainStartTimestamp": "Sat 2026-11-07 01:50:06 UTC",
+      "ExecMainExitTimestamp": "Sat 2026-11-07 01:50:14 UTC",
+      "ExecMainStatus": "0",
+      "MemoryCurrent": "[not set]",
+      "MemoryPeak": "[not set]",
+      "Id": "study-hub-fo-index.service",
+      "ActiveState": "inactive",
+      "SubState": "dead",
+      "UnitFileState": "static"
+    },
+    "onedrive": {
+      "MainPID": "0",
+      "Result": "success",
+      "ExecMainStartTimestamp": "Sat 2026-11-07 01:26:46 UTC",
+      "ExecMainExitTimestamp": "Sat 2026-11-07 01:30:05 UTC",
+      "ExecMainStatus": "0",
+      "MemoryCurrent": "[not set]",
+      "MemoryPeak": "[not set]",
+      "Id": "study-hub-fo-onedrive.service",
+      "ActiveState": "inactive",
+      "SubState": "dead",
+      "UnitFileState": "static"
+    },
+    "ocr": {
+      "MainPID": "0",
+      "Result": "success",
+      "ExecMainStartTimestamp": "Sat 2026-11-07 01:55:17 UTC",
+      "ExecMainExitTimestamp": "Sat 2026-11-07 01:55:18 UTC",
+      "ExecMainStatus": "0",
+      "MemoryCurrent": "[not set]",
+      "MemoryPeak": "[not set]",
+      "Id": "study-hub-fo-ocr.service",
+      "ActiveState": "inactive",
+      "SubState": "dead",
+      "UnitFileState": "static"
+    },
+    "videos": {
+      "MainPID": "0",
+      "Result": "success",
+      "ExecMainStartTimestamp": "Sat 2026-11-07 01:01:27 UTC",
+      "ExecMainExitTimestamp": "Sat 2026-11-07 01:01:27 UTC",
+      "ExecMainStatus": "0",
+      "MemoryCurrent": "[not set]",
+      "MemoryPeak": "[not set]",
+      "Id": "study-hub-fo-videos.service",
+      "ActiveState": "inactive",
+      "SubState": "dead",
+      "UnitFileState": "static"
+    },
+    "transcription": {
+      "MainPID": "0",
+      "Result": "success",
+      "ExecMainStartTimestamp": "",
+      "ExecMainExitTimestamp": "",
+      "ExecMainStatus": "0",
+      "MemoryCurrent": "[not set]",
+      "MemoryPeak": "[not set]",
+      "Id": "study-hub-fo-transcription.service",
+      "ActiveState": "inactive",
+      "SubState": "dead",
+      "UnitFileState": "disabled"
+    }
+  },
+  "timers": {
+    "catalog": {
+      "NextElapseUSecRealtime": "Sat 2026-11-07 03:01:13 UTC",
+      "LastTriggerUSec": "Fri 2026-11-06 23:55:03 UTC",
+      "Result": "success",
+      "Id": "study-hub-fo-catalog.timer",
+      "ActiveState": "active",
+      "SubState": "waiting",
+      "UnitFileState": "enabled"
+    },
+    "materials": {
+      "NextElapseUSecRealtime": "",
+      "LastTriggerUSec": "",
+      "Result": "success",
+      "Id": "study-hub-fo-materials.timer",
+      "ActiveState": "inactive",
+      "SubState": "dead",
+      "UnitFileState": "disabled"
+    },
+    "index": {
+      "NextElapseUSecRealtime": "Sat 2026-11-07 02:01:45 UTC",
+      "LastTriggerUSec": "Sat 2026-11-07 01:50:06 UTC",
+      "Result": "success",
+      "Id": "study-hub-fo-index.timer",
+      "ActiveState": "active",
+      "SubState": "waiting",
+      "UnitFileState": "enabled"
+    },
+    "onedrive": {
+      "NextElapseUSecRealtime": "Sat 2026-11-07 02:25:43 UTC",
+      "LastTriggerUSec": "Sat 2026-11-07 01:26:46 UTC",
+      "Result": "success",
+      "Id": "study-hub-fo-onedrive.timer",
+      "ActiveState": "active",
+      "SubState": "waiting",
+      "UnitFileState": "enabled"
+    },
+    "ocr": {
+      "NextElapseUSecRealtime": "Sat 2026-11-07 02:06:19 UTC",
+      "LastTriggerUSec": "Sat 2026-11-07 01:55:17 UTC",
+      "Result": "success",
+      "Id": "study-hub-fo-ocr.timer",
+      "ActiveState": "active",
+      "SubState": "waiting",
+      "UnitFileState": "enabled"
+    },
+    "videos": {
+      "NextElapseUSecRealtime": "Sat 2026-11-07 02:01:53 UTC",
+      "LastTriggerUSec": "Sat 2026-11-07 01:01:27 UTC",
+      "Result": "success",
+      "Id": "study-hub-fo-videos.timer",
+      "ActiveState": "active",
+      "SubState": "waiting",
+      "UnitFileState": "enabled"
+    }
+  },
+  "anki": {
+    "api": {
+      "MainPID": "998234",
+      "Result": "success",
+      "ExecMainStartTimestamp": "Fri 2026-10-23 06:44:53 UTC",
+      "ExecMainExitTimestamp": "",
+      "ExecMainStatus": "0",
+      "MemoryCurrent": "52731904",
+      "MemoryPeak": "53383168",
+      "Id": "anki-vnext-api.service",
+      "ActiveState": "active",
+      "SubState": "running",
+      "UnitFileState": "enabled"
+    },
+    "mcp": {
+      "MainPID": "998235",
+      "Result": "success",
+      "ExecMainStartTimestamp": "Fri 2026-10-23 06:44:53 UTC",
+      "ExecMainExitTimestamp": "",
+      "ExecMainStatus": "0",
+      "MemoryCurrent": "57610240",
+      "MemoryPeak": "59686912",
+      "Id": "anki-vnext-mcp.service",
+      "ActiveState": "active",
+      "SubState": "running",
+      "UnitFileState": "enabled"
+    },
+    "sync": {
+      "MainPID": "998212",
+      "Result": "success",
+      "ExecMainStartTimestamp": "Fri 2026-10-23 06:44:53 UTC",
+      "ExecMainExitTimestamp": "",
+      "ExecMainStatus": "0",
+      "MemoryCurrent": "29523968",
+      "MemoryPeak": "30846976",
+      "Id": "anki-vnext-sync.service",
+      "ActiveState": "active",
+      "SubState": "running",
+      "UnitFileState": "enabled"
+    }
+  },
+  "rr_receipts": [
+    {
+      "index": 0,
+      "started_at": 1794011218.715457,
+      "finished_at": 1794013573.7763083,
+      "result": {
+        "state": "review",
+        "lesson_id": "fo_ce6134240d753024",
+        "version": 1
+      },
+      "cursor_before": {
+        "id": 1,
+        "last_discipline": "Física",
+        "cycle": 2,
+        "updated_at": 1794007542.4405687
+      },
+      "cursor_after": {
+        "id": 1,
+        "last_discipline": "Física",
+        "cycle": 3,
+        "updated_at": 1794011218.7166562
+      },
+      "temporary_entries": 0,
+      "controlled_restart": true
+    }
+  ],
+  "rr_completed": false,
+  "catalog_registry": [
+    {
+      "course_id": "base-intensivo-ufpr-fd3aa635",
+      "title": "Intensivo UFPR 2026",
+      "status": "ok",
+      "last_run_at": "2026-11-07T00:25:56+00:00",
+      "last_ok_at": "2026-11-07T00:25:56+00:00",
+      "last_summary": {
+        "empty_verified": false,
+        "status_counts": {
+          "ok": 424
+        },
+        "total": 424,
+        "traversal_errors": 0,
+        "unknown_branches": 19
+      },
+      "native_empty_evidence": {
+        "verified_no_native_video": null,
+        "media_type_counts": null,
+        "unknown_items": null,
+        "scope": null
+      }
+    },
+    {
+      "course_id": "ciencias-basica-f60c5666",
+      "title": "Ciências Básica",
+      "status": "ok",
+      "last_run_at": "2026-11-07T00:26:38+00:00",
+      "last_ok_at": "2026-11-07T00:26:38+00:00",
+      "last_summary": {
+        "empty_verified": false,
+        "status_counts": {
+          "ok": 27
+        },
+        "total": 27,
+        "traversal_errors": 0,
+        "unknown_branches": 1
+      },
+      "native_empty_evidence": {
+        "verified_no_native_video": null,
+        "media_type_counts": null,
+        "unknown_items": null,
+        "scope": null
+      }
+    },
+    {
+      "course_id": "extensivo-ufpr-2026-ed8a12f0",
+      "title": "Extensivo UFPR 2026",
+      "status": "ok",
+      "last_run_at": "2026-10-30T06:44:33+00:00",
+      "last_ok_at": "2026-10-30T06:44:33+00:00",
+      "last_summary": {
+        "status_counts": {
+          "not_launched": 1,
+          "ok": 1069
+        },
+        "total": 1070,
+        "unknown_branches": 6
+      },
+      "native_empty_evidence": {
+        "verified_no_native_video": null,
+        "media_type_counts": null,
+        "unknown_items": null,
+        "scope": null
+      }
+    },
+    {
+      "course_id": "matematica-basica-cc866fe3",
+      "title": "Matemática Básica",
+      "status": "ok",
+      "last_run_at": "2026-10-30T06:45:23+00:00",
+      "last_ok_at": "2026-10-30T06:45:23+00:00",
+      "last_summary": {
+        "status_counts": {
+          "ok": 25
+        },
+        "total": 25,
+        "unknown_branches": 1
+      },
+      "native_empty_evidence": {
+        "verified_no_native_video": null,
+        "media_type_counts": null,
+        "unknown_items": null,
+        "scope": null
+      }
+    },
+    {
+      "course_id": "materiais-exclusivos-medicina-355aad2b",
+      "title": "Materiais exclusivos de medicina",
+      "status": "ok",
+      "last_run_at": "2026-10-30T06:48:13+00:00",
+      "last_ok_at": "2026-10-30T06:48:13+00:00",
+      "last_summary": {
+        "status_counts": {
+          "ok": 51
+        },
+        "total": 51,
+        "unknown_branches": 21
+      },
+      "native_empty_evidence": {
+        "verified_no_native_video": null,
+        "media_type_counts": null,
+        "unknown_items": null,
+        "scope": null
+      }
+    },
+    {
+      "course_id": "redacao20-ufpr26-a6910cd7",
+      "title": "Redação UFPR 2026",
+      "status": "ok",
+      "last_run_at": "2026-10-30T06:49:41+00:00",
+      "last_ok_at": "2026-10-30T06:49:41+00:00",
+      "last_summary": {
+        "status_counts": {
+          "ok": 24
+        },
+        "total": 24,
+        "unknown_branches": 1
+      },
+      "native_empty_evidence": {
+        "verified_no_native_video": null,
+        "media_type_counts": null,
+        "unknown_items": null,
+        "scope": null
+      }
+    },
+    {
+      "course_id": "semiextensivo-ufpr-2026-0e9bcc74",
+      "title": "Semiextensivo UFPR 2026",
+      "status": "ok",
+      "last_run_at": "2026-10-30T06:55:08+00:00",
+      "last_ok_at": "2026-10-30T06:55:08+00:00",
+      "last_summary": {
+        "status_counts": {
+          "not_launched": 1,
+          "ok": 838
+        },
+        "total": 839,
+        "unknown_branches": 6
+      },
+      "native_empty_evidence": {
+        "verified_no_native_video": null,
+        "media_type_counts": null,
+        "unknown_items": null,
+        "scope": null
+      }
+    },
+    {
+      "course_id": "simuladao-ufpr1-26-3a00f98c",
+      "title": "Simuladão UFPR #01 - Gratuito",
+      "status": "ok",
+      "last_run_at": "2026-10-30T06:55:20+00:00",
+      "last_ok_at": "2026-10-30T06:55:20+00:00",
+      "last_summary": {
+        "status_counts": {
+          "ok": 2
+        },
+        "total": 2,
+        "unknown_branches": 1
+      },
+      "native_empty_evidence": {
+        "verified_no_native_video": null,
+        "media_type_counts": null,
+        "unknown_items": null,
+        "scope": null
+      }
+    },
+    {
+      "course_id": "simuladao-ufpr2-26-568263fb",
+      "title": "Simuladão UFPR #02 - Gratuito",
+      "status": "incomplete",
+      "last_run_at": "2026-11-06T23:36:32+00:00",
+      "last_ok_at": "2026-10-30T06:55:57+00:00",
+      "last_summary": {
+        "empty_verified": false,
+        "status_counts": {},
+        "total": 0,
+        "traversal_errors": 0,
+        "unknown_branches": 0
+      },
+      "native_empty_evidence": {
+        "verified_no_native_video": false,
+        "media_type_counts": {
+          "U": 4,
+          "D": 4,
+          "A": 2
+        },
+        "unknown_items": 1,
+        "scope": "native_portal_video_items_only"
+      }
+    },
+    {
+      "course_id": "simuladao-ufpr3-26-9621094f",
+      "title": "Simuladão UFPR #03 - Gratuito",
+      "status": "ok",
+      "last_run_at": "2026-11-06T23:37:19+00:00",
+      "last_ok_at": "2026-11-06T23:37:19+00:00",
+      "last_summary": {
+        "empty_verified": true,
+        "status_counts": {},
+        "total": 0,
+        "traversal_errors": 0,
+        "unknown_branches": 0
+      },
+      "native_empty_evidence": {
+        "verified_no_native_video": true,
+        "media_type_counts": {
+          "U": 5,
+          "D": 4,
+          "A": 2
+        },
+        "unknown_items": 0,
+        "scope": "native_portal_video_items_only"
+      }
+    },
+    {
+      "course_id": "simulados-resolucao-de-provas-5e115236",
+      "title": "Simulados e Resolução de Provas",
+      "status": "ok",
+      "last_run_at": "2026-10-30T07:47:03+00:00",
+      "last_ok_at": "2026-10-30T07:47:03+00:00",
+      "last_summary": {
+        "status_counts": {
+          "ok": 422
+        },
+        "total": 422,
+        "unknown_branches": 4
+      },
+      "native_empty_evidence": {
+        "verified_no_native_video": null,
+        "media_type_counts": null,
+        "unknown_items": null,
+        "scope": null
+      }
+    }
+  ],
+  "catalog_checkpoints": [
+    {
+      "course_id": "extensivo-ufpr-2026-ed8a12f0",
+      "entries": 878,
+      "mtime": 1794016557.9814258
+    }
+  ],
+  "api_status": {
+    "TRANSCRIPTION_ENABLED": false,
+    "lessons_total": 3311,
+    "lessons_present": 3023,
+    "lessons_missing": 288,
+    "materials_total": 172,
+    "pdf_pages_total": 7818,
+    "pdf_page_quality": {
+      "blocked": 20,
+      "low_text": 4,
+      "ocr_empty": 1,
+      "ocr_review": 523,
+      "text": 7270
+    },
+    "pdf_privacy": {
+      "policy_version": 5,
+      "current_policy_pages": 7818,
+      "v2_pages": 0,
+      "released_pages": 7274,
+      "blocked_pages": 544,
+      "unreviewed_pages": 0,
+      "ocr_pending_pages": 0
+    },
+    "transcripts_validated": 1,
+    "transcription_jobs": {
+      "done": 1,
+      "leased": 1,
+      "queued": 3008,
+      "review": 4,
+      "superseded": 518
+    },
+    "transcription_states": {
+      "queued": 3008,
+      "processing": 1,
+      "validated": 1,
+      "review": 4,
+      "failed": 0,
+      "superseded": 518
+    },
+    "transcription_progress": {
+      "stale_leases": 0,
+      "processing_progress": 0.33021228295945343,
+      "total": 3532,
+      "unknown_states": {}
+    },
+    "last_sync": {
+      "run_id": "a508ffaa781e4f2f9f9463b21083f8f0",
+      "at": "2026-11-07T01:50:12Z",
+      "created": 0,
+      "renamed": 0,
+      "media_changed": 0,
+      "unchanged": 1,
+      "missing": 0
+    },
+    "components": {
+      "index": {
+        "observed_at": 1794016213.9850748,
+        "summary": {
+          "created": 0,
+          "renamed": 0,
+          "media_changed": 0,
+          "unchanged": 3018,
+          "missing": 0,
+          "jobs_queued": 0,
+          "source_videos": 2252,
+          "pdf_new_pages": 0,
+          "privacy_reviewed_pages": 0,
+          "pdf_errors": 0
+        }
+      }
+    },
+    "sources": {
+      "current_queued": 3008,
+      "eligible": 2995,
+      "pending": 13
+    }
+  },
+  "inventory_proof": {
+    "inventory_started_at": 1794014844.5013642,
+    "inventory_sha256": "bed9f1b9d15864bbadefad92431c947e55062b84a4209f012201f1d981b7f436",
+    "updated_at": 1794014806.6359258,
+    "phase": null,
+    "status": null
+  },
+  "inventory_hash_matches": true,
+  "temporary": {
+    "transcription": {
+      "files": 3,
+      "bytes": 104098426
+    },
+    "videos": {
+      "files": 0,
+      "bytes": 0
+    }
+  },
+  "residual_archive_snapshots": 0,
+  "resources": {
+    "MemTotal": 25137336320,
+    "MemAvailable": 16648011776,
+    "cpu_count": 4,
+    "load_average": [
+      4.43505859375,
+      4.29150390625,
+      4.21728515625
+    ],
+    "disk_total": 48715948032,
+    "disk_used": 36797435904,
+    "disk_free": 11901734912
+  },
+  "asr_processes": [
+    {
+      "pid": 3024999,
+      "exe": "whisper-cli"
+    }
+  ]
+}

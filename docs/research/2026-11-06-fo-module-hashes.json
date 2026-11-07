@@ -1,6 +1,6 @@
 {
-  "observed_at": "2026-11-07T00:28:02.395542+00:00",
-  "head": "186963f0470cdb95b80d36af1b1c7e4de7a6d92b",
+  "observed_at": "2026-11-07T01:47:21.922783+00:00",
+  "head": "41c501f751bbfa7a2116614fc4a50106bb9aac48",
   "files": [
     {
       "path": "federal-online/fo_hub/__init__.py",
@@ -29,8 +29,8 @@
     },
     {
       "path": "federal-online/fo_hub/catalog_reconcile.py",
-      "local_sha256": "3eab4a92c1e0de1010038990cfa9ec92e1d8a2aa83e90d47b36cb9847541bcee",
-      "remote_sha256": "3eab4a92c1e0de1010038990cfa9ec92e1d8a2aa83e90d47b36cb9847541bcee"
+      "local_sha256": "b97c5ec1e701936c42ab22ecfd1ac77eda711fa4043d4ab5c245beb59b6e81a2",
+      "remote_sha256": "b97c5ec1e701936c42ab22ecfd1ac77eda711fa4043d4ab5c245beb59b6e81a2"
     },
     {
       "path": "federal-online/fo_hub/disciplines.py",
@@ -39,8 +39,8 @@
     },
     {
       "path": "federal-online/fo_hub/ingest.py",
-      "local_sha256": "9b42cea434fd5cc843c3f5de840059aadb8e34d103a32be0880f59728a9d7248",
-      "remote_sha256": "9b42cea434fd5cc843c3f5de840059aadb8e34d103a32be0880f59728a9d7248"
+      "local_sha256": "31d3e3549d98c33570212b9913d21b2b4dff15868548eaebf030db7a585a76ba",
+      "remote_sha256": "31d3e3549d98c33570212b9913d21b2b4dff15868548eaebf030db7a585a76ba"
     },
     {
       "path": "federal-online/fo_hub/materials_ops.py",
@@ -104,8 +104,8 @@
     },
     {
       "path": "federal-online/fo_hub/store.py",
-      "local_sha256": "4584d61f066eb7069369b4da569b51df4c32d31e1959989c7c9513ff3e22c5bb",
-      "remote_sha256": "4584d61f066eb7069369b4da569b51df4c32d31e1959989c7c9513ff3e22c5bb"
+      "local_sha256": "a6f6aaf062497719b61c03e3259803567bc4183eda460e3efc69891a130eeb3a",
+      "remote_sha256": "a6f6aaf062497719b61c03e3259803567bc4183eda460e3efc69891a130eeb3a"
     },
     {
       "path": "federal-online/fo_hub/transcription.py",
@@ -119,8 +119,8 @@
     },
     {
       "path": "federal-online/fo_hub/worker.py",
-      "local_sha256": "38084d9708f5f0d15aa58e1aff377e10fd56c59598e385c29330c424c444c115",
-      "remote_sha256": "38084d9708f5f0d15aa58e1aff377e10fd56c59598e385c29330c424c444c115"
+      "local_sha256": "1116397bf073b261e16c5c02f91c48fdb93d8ba438a6599e110a9ffba6edc20b",
+      "remote_sha256": "1116397bf073b261e16c5c02f91c48fdb93d8ba438a6599e110a9ffba6edc20b"
     },
     {
       "path": "federal-online/portal/discovery.py",
@@ -143,6 +143,11 @@
       "remote_sha256": "6bb1752301bfa152cf80b5a509c1bb73f0bab3bbc7bc6fae9e32302b932aa151"
     },
     {
+      "path": "federal-online/portal/fo_media_identity.py",
+      "local_sha256": "766ebac77c55311834334d7d384fa553ce752a2d87c9a752e2247717a498e733",
+      "remote_sha256": "766ebac77c55311834334d7d384fa553ce752a2d87c9a752e2247717a498e733"
+    },
+    {
       "path": "federal-online/portal/fo_session_security.py",
       "local_sha256": "f45bbcdf9a04ef07264d8ff2b6a3274abdb4baeb916244eda49ed58018ef475f",
       "remote_sha256": "f45bbcdf9a04ef07264d8ff2b6a3274abdb4baeb916244eda49ed58018ef475f"
@@ -159,8 +164,8 @@
     },
     {
       "path": "federal-online/portal/runtime.py",
-      "local_sha256": "2b610a28ce8c5cd0e6876bd930ffbfbda4592e109f482afad1cc4cd96589d4cf",
-      "remote_sha256": "2b610a28ce8c5cd0e6876bd930ffbfbda4592e109f482afad1cc4cd96589d4cf"
+      "local_sha256": "4aa00a7b9b83cff0cc65fde4c30d031454dacbd20fd0a89e4064172ef5cdc6f8",
+      "remote_sha256": "4aa00a7b9b83cff0cc65fde4c30d031454dacbd20fd0a89e4064172ef5cdc6f8"
     },
     {
       "path": "federal-online/portal/safe_io.py",
@@ -169,15 +174,20 @@
     },
     {
       "path": "federal-online/portal/video_runtime.py",
-      "local_sha256": "225c4bf6e8d59a8bedfbddf63e9c20ad56978ac07a2d7bfa17151530ddf52397",
-      "remote_sha256": "225c4bf6e8d59a8bedfbddf63e9c20ad56978ac07a2d7bfa17151530ddf52397"
+      "local_sha256": "f96550df94dd4bcdb350832d215fedb5b771fa11bff17a77f7fcf7452154020c",
+      "remote_sha256": "f96550df94dd4bcdb350832d215fedb5b771fa11bff17a77f7fcf7452154020c"
     },
     {
       "path": "ops/study-hub/render_units.py",
-      "local_sha256": "9ad501537052494aa7a13bf223c6ffe1fb95391fbde0681b77430cd7b7a3c2d9",
-      "remote_sha256": "9ad501537052494aa7a13bf223c6ffe1fb95391fbde0681b77430cd7b7a3c2d9"
+      "local_sha256": "404b6f6b396fa77383e1c9f5bf0a0bfe1cec8c71a74a1de9a60df5833acd467b",
+      "remote_sha256": "404b6f6b396fa77383e1c9f5bf0a0bfe1cec8c71a74a1de9a60df5833acd467b"
     }
   ],
-  "matched": 35,
-  "total": 35
+  "matched": 36,
+  "total": 36,
+  "asr_systemd_unit": {
+    "path": "/etc/systemd/system/study-hub-fo-transcription.service",
+    "local_sha256": "6ae579cba4fb437a08fd21d54e339b92088330450bf67332fb090974287abd37",
+    "remote_sha256": "6ae579cba4fb437a08fd21d54e339b92088330450bf67332fb090974287abd37"
+  }
 }

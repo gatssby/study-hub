@@ -1,0 +1,62 @@
+{
+  "observed_at": "2026-11-07T01:40:34.963171+00:00",
+  "code_commit": "41c501f751bbfa7a2116614fc4a50106bb9aac48",
+  "scope": "locator_normalization_not_byte_equivalence_or_inference_merge",
+  "proven_same_asset_locators": 100,
+  "unprotected_fallbacks_created_and_retired": 98,
+  "pending_sources_before_repair": 113,
+  "after_repair": {
+    "observed_at": 1794015634.9631715,
+    "reconnected_current_sources": 100,
+    "retired_new_unprotected_fallbacks": 98,
+    "historical_versions_preserved": true,
+    "protected_transcripts_unchanged": true,
+    "lessons": {
+      "total": 3311,
+      "present": 3023,
+      "missing": 288
+    },
+    "jobs": [
+      {
+        "state": "done",
+        "n": 1
+      },
+      {
+        "state": "leased",
+        "n": 1
+      },
+      {
+        "state": "queued",
+        "n": 3008
+      },
+      {
+        "state": "review",
+        "n": 4
+      },
+      {
+        "state": "superseded",
+        "n": 518
+      }
+    ],
+    "pending_lesson_ids": [
+      "fo_4bafd25c15bf6598",
+      "fo_5c623b7dd096e89b",
+      "fo_5d66dfb4bf27853f",
+      "fo_626434837c181089",
+      "fo_6df4907c116802ed",
+      "fo_985aa43ff95b238a",
+      "fo_be0bb4362ced545d",
+      "fo_c02b9e2f9df56c60",
+      "fo_c0b8df75e2eb86fe",
+      "fo_cf08fb1b5d45e70b",
+      "fo_d7c2b39c34abedb8",
+      "fo_e5cb97fa3eaf2d1a",
+      "fo_fcad555740669e31"
+    ]
+  },
+  "private_receipt_sha256": {
+    "pause.json": "81252879bdee1b897e4f5bef11a8d0c1e28eb79a7ebf19f18a8b0344973b1aa7",
+    "before-repair.json": "8c22762aa1e2bb60956d573a8de4446e9bf94c0813918280fdae568916ea93a4",
+    "after-repair.json": "7401add3047e3647710044226318a4b1c03aade312d3c655524fc6011ced8233"
+  }
+}
