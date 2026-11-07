@@ -1,0 +1,212 @@
+{
+  "observed_at": "2026-11-07T00:17:21Z",
+  "transport": "live loopback MCP HTTP",
+  "calls": [
+    {
+      "tool": "fo_list_lessons",
+      "passed": true,
+      "response_keys": [
+        "items"
+      ],
+      "items": 2
+    },
+    {
+      "tool": "fo_get_lesson",
+      "passed": true,
+      "response_keys": [
+        "citation",
+        "course_id",
+        "duration_s",
+        "first_seen",
+        "front",
+        "item_id",
+        "last_seen",
+        "lesson_id",
+        "media_id",
+        "media_type",
+        "module",
+        "present",
+        "revisions",
+        "subject",
+        "title",
+        "version",
+        "video_url"
+      ],
+      "items": null
+    },
+    {
+      "tool": "fo_search_materials",
+      "passed": true,
+      "response_keys": [
+        "items"
+      ],
+      "items": 2
+    },
+    {
+      "tool": "fo_get_pdf_text",
+      "passed": true,
+      "response_keys": [
+        "material_id",
+        "page_count",
+        "pages",
+        "source",
+        "source_observation",
+        "source_reason",
+        "text_provenance",
+        "title",
+        "updated_at",
+        "version"
+      ],
+      "items": null
+    },
+    {
+      "tool": "fo_search_transcripts",
+      "passed": true,
+      "response_keys": [
+        "items"
+      ],
+      "items": 2
+    },
+    {
+      "tool": "fo_get_transcript",
+      "passed": true,
+      "response_keys": [
+        "citation",
+        "lesson_id",
+        "model",
+        "qa",
+        "segments",
+        "version"
+      ],
+      "items": null
+    },
+    {
+      "tool": "fo_get_sync_status",
+      "passed": true,
+      "response_keys": [
+        "TRANSCRIPTION_ENABLED",
+        "components",
+        "last_sync",
+        "lessons_missing",
+        "lessons_present",
+        "lessons_total",
+        "materials_total",
+        "pdf_page_quality",
+        "pdf_pages_total",
+        "pdf_privacy",
+        "sources",
+        "transcription_jobs",
+        "transcription_progress",
+        "transcription_states",
+        "transcripts_validated"
+      ],
+      "items": null
+    }
+  ],
+  "tools": {
+    "total": 26,
+    "fo": [
+      "fo_get_lesson",
+      "fo_get_pdf_text",
+      "fo_get_sync_status",
+      "fo_get_transcript",
+      "fo_list_lessons",
+      "fo_search_materials",
+      "fo_search_transcripts"
+    ],
+    "anki": [
+      "anki_create_deck",
+      "anki_create_note",
+      "anki_delete_deck",
+      "anki_delete_notes",
+      "anki_delete_tag",
+      "anki_get_card",
+      "anki_get_media",
+      "anki_get_note",
+      "anki_get_note_type",
+      "anki_health",
+      "anki_list_decks",
+      "anki_list_note_types",
+      "anki_list_tags",
+      "anki_move_cards",
+      "anki_rename_deck",
+      "anki_rename_tag",
+      "anki_search_cards",
+      "anki_search_notes",
+      "anki_update_note"
+    ]
+  },
+  "pdf_released_page_has_citation": true,
+  "review_blocked": [
+    {
+      "lesson_id": "fo_135c415d8080927f",
+      "state": "fo_not_found",
+      "has_text": false
+    },
+    {
+      "lesson_id": "fo_4cc5e44ffb6dc603",
+      "state": "fo_not_found",
+      "has_text": false
+    },
+    {
+      "lesson_id": "fo_d9f369413fd5cf40",
+      "state": "fo_not_found",
+      "has_text": false
+    }
+  ],
+  "pdf_blocked_response_keys": [
+    "material_id",
+    "page_count",
+    "pages",
+    "source",
+    "source_observation",
+    "source_reason",
+    "text_provenance",
+    "title",
+    "updated_at",
+    "version"
+  ],
+  "pdf_blocked_pages": [
+    {
+      "page": 1,
+      "quality": "ocr_review",
+      "exposure": "blocked",
+      "text": ""
+    }
+  ],
+  "pagination": {
+    "pages": 2,
+    "count_per_page": [
+      2,
+      2
+    ],
+    "disjoint": true
+  },
+  "subjects": [
+    {
+      "subject": "Biologia - Teoria",
+      "items": 2,
+      "citations": true
+    },
+    {
+      "subject": "Física - Teoria",
+      "items": 2,
+      "citations": true
+    },
+    {
+      "subject": "Geografia - Teoria",
+      "items": 2,
+      "citations": true
+    },
+    {
+      "subject": "História - Teoria",
+      "items": 2,
+      "citations": true
+    },
+    {
+      "subject": "Química - Teoria",
+      "items": 2,
+      "citations": true
+    }
+  ]
+}

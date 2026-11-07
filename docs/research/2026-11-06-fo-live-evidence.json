@@ -1,0 +1,2356 @@
+{
+  "sources": [
+    {
+      "baseline_origin": "database_current_not_in_published_catalog",
+      "error_type": "AssertionError",
+      "lesson_id": "fo_d7c2b39c34abedb8",
+      "media_id": "12805",
+      "observed_at": "2026-11-06T23:42:12+00:00",
+      "old_has_url": false,
+      "stage": "exact_item",
+      "state": "observation_failed",
+      "version": 1
+    },
+    {
+      "baseline_origin": "database_current_not_in_published_catalog",
+      "error_type": "AssertionError",
+      "lesson_id": "fo_985aa43ff95b238a",
+      "media_id": "12837",
+      "observed_at": "2026-11-06T23:42:22+00:00",
+      "old_has_url": false,
+      "stage": "exact_item",
+      "state": "observation_failed",
+      "version": 1
+    },
+    {
+      "baseline_origin": "published_catalog",
+      "has_url": true,
+      "lesson_id": "fo_4bafd25c15bf6598",
+      "media_id": "16357",
+      "observed_at": "2026-11-06T23:42:31+00:00",
+      "observed_type": "V",
+      "old_has_url": true,
+      "portal_duration": 1441,
+      "probe_returncode": 1,
+      "stage": "stream_observed",
+      "state": "stream_metadata_failed",
+      "version": 1
+    },
+    {
+      "baseline_origin": "published_catalog",
+      "has_url": true,
+      "lesson_id": "fo_c0b8df75e2eb86fe",
+      "media_id": "16361",
+      "observed_at": "2026-11-06T23:42:41+00:00",
+      "observed_type": "V",
+      "old_has_url": true,
+      "portal_duration": 1294,
+      "probe_returncode": 1,
+      "stage": "stream_observed",
+      "state": "stream_metadata_failed",
+      "version": 1
+    },
+    {
+      "baseline_origin": "published_catalog",
+      "has_url": true,
+      "lesson_id": "fo_6df4907c116802ed",
+      "media_id": "16363",
+      "observed_at": "2026-11-06T23:42:49+00:00",
+      "observed_type": "V",
+      "old_has_url": true,
+      "portal_duration": 1523,
+      "probe_returncode": 1,
+      "stage": "stream_observed",
+      "state": "stream_metadata_failed",
+      "version": 1
+    },
+    {
+      "baseline_origin": "published_catalog",
+      "has_url": true,
+      "lesson_id": "fo_be0bb4362ced545d",
+      "media_id": "16365",
+      "observed_at": "2026-11-06T23:42:56+00:00",
+      "observed_type": "V",
+      "old_has_url": true,
+      "portal_duration": 1230,
+      "probe_returncode": 1,
+      "stage": "stream_observed",
+      "state": "stream_metadata_failed",
+      "version": 1
+    },
+    {
+      "baseline_origin": "published_catalog",
+      "has_url": true,
+      "lesson_id": "fo_5c623b7dd096e89b",
+      "media_id": "16367",
+      "observed_at": "2026-11-06T23:43:03+00:00",
+      "observed_type": "V",
+      "old_has_url": true,
+      "portal_duration": 1783,
+      "probe_returncode": 1,
+      "stage": "stream_observed",
+      "state": "stream_metadata_failed",
+      "version": 1
+    },
+    {
+      "baseline_origin": "published_catalog",
+      "duration_matches_catalog": false,
+      "has_url": true,
+      "lesson_id": "fo_c02b9e2f9df56c60",
+      "media_id": "14423",
+      "observed_at": "2026-11-06T23:43:10+00:00",
+      "observed_type": "V",
+      "old_has_url": true,
+      "portal_duration": 2071,
+      "probe_returncode": 0,
+      "stage": "stream_observed",
+      "state": "source_duration_mismatch",
+      "stream_duration_s": 1610.334459,
+      "version": 1
+    },
+    {
+      "baseline_origin": "published_catalog",
+      "has_url": false,
+      "lesson_id": "fo_e5cb97fa3eaf2d1a",
+      "media_id": "10102",
+      "observed_at": "2026-11-06T23:43:19+00:00",
+      "observed_type": "V",
+      "old_has_url": false,
+      "portal_duration": 1947,
+      "stage": "stream_observed",
+      "state": "no_stream_after_authenticated_click",
+      "version": 1
+    },
+    {
+      "baseline_origin": "published_catalog",
+      "has_url": false,
+      "lesson_id": "fo_5d66dfb4bf27853f",
+      "media_id": "10103",
+      "observed_at": "2026-11-06T23:43:26+00:00",
+      "observed_type": "V",
+      "old_has_url": false,
+      "portal_duration": 2320,
+      "stage": "stream_observed",
+      "state": "no_stream_after_authenticated_click",
+      "version": 1
+    },
+    {
+      "baseline_origin": "published_catalog",
+      "duration_matches_catalog": false,
+      "has_url": true,
+      "lesson_id": "fo_cf08fb1b5d45e70b",
+      "media_id": "4368",
+      "observed_at": "2026-11-06T23:43:32+00:00",
+      "observed_type": "V",
+      "old_has_url": true,
+      "portal_duration": 2949,
+      "probe_returncode": 0,
+      "stage": "stream_observed",
+      "state": "source_duration_mismatch",
+      "stream_duration_s": 2769.03,
+      "version": 1
+    },
+    {
+      "baseline_origin": "published_catalog",
+      "has_url": false,
+      "lesson_id": "fo_fcad555740669e31",
+      "media_id": "12478",
+      "observed_at": "2026-11-06T23:43:42+00:00",
+      "observed_type": "V",
+      "old_has_url": true,
+      "portal_duration": 2463,
+      "stage": "stream_observed",
+      "state": "no_stream_after_authenticated_click",
+      "version": 6
+    },
+    {
+      "baseline_origin": "published_catalog",
+      "has_url": false,
+      "lesson_id": "fo_626434837c181089",
+      "media_id": "12478",
+      "observed_at": "2026-11-06T23:43:52+00:00",
+      "observed_type": "V",
+      "old_has_url": true,
+      "portal_duration": 2463,
+      "stage": "stream_observed",
+      "state": "no_stream_after_authenticated_click",
+      "version": 3
+    }
+  ],
+  "source_http_diagnostics": [
+    {
+      "lesson_id": "fo_4bafd25c15bf6598",
+      "observed_at": "2026-11-07T00:00:35Z",
+      "plain_http_status": 404,
+      "plain_hls_header": false,
+      "portal_referer_http_status": 404,
+      "portal_referer_hls_header": false,
+      "ffprobe_returncode": 1,
+      "stderr_sha256": "40d1ae413245533152d9ad9d3172b3366a5d775e5493d18c4b94f700899b65ad",
+      "ffprobe_http_codes": [
+        "404"
+      ],
+      "known_errors": [
+        "404 Not Found"
+      ]
+    },
+    {
+      "lesson_id": "fo_c0b8df75e2eb86fe",
+      "observed_at": "2026-11-07T00:00:37Z",
+      "plain_http_status": 404,
+      "plain_hls_header": false,
+      "portal_referer_http_status": 404,
+      "portal_referer_hls_header": false,
+      "ffprobe_returncode": 1,
+      "stderr_sha256": "da0be25b8fca454be5cb694fa8c0c4488162483129a82e0606497dff256df69c",
+      "ffprobe_http_codes": [
+        "404"
+      ],
+      "known_errors": [
+        "404 Not Found"
+      ]
+    },
+    {
+      "lesson_id": "fo_6df4907c116802ed",
+      "observed_at": "2026-11-07T00:00:38Z",
+      "plain_http_status": 404,
+      "plain_hls_header": false,
+      "portal_referer_http_status": 404,
+      "portal_referer_hls_header": false,
+      "ffprobe_returncode": 1,
+      "stderr_sha256": "3f02027ede250b187152fbeb5620218af9bb5b7cc0bce3937d44b45f75dad2f9",
+      "ffprobe_http_codes": [
+        "404"
+      ],
+      "known_errors": [
+        "404 Not Found"
+      ]
+    },
+    {
+      "lesson_id": "fo_be0bb4362ced545d",
+      "observed_at": "2026-11-07T00:00:40Z",
+      "plain_http_status": 404,
+      "plain_hls_header": false,
+      "portal_referer_http_status": 404,
+      "portal_referer_hls_header": false,
+      "ffprobe_returncode": 1,
+      "stderr_sha256": "2d519bdc369764ff3b410e3e6f04e0b1d742d3290a66e06085b363f39513a892",
+      "ffprobe_http_codes": [
+        "404"
+      ],
+      "known_errors": [
+        "404 Not Found"
+      ]
+    },
+    {
+      "lesson_id": "fo_5c623b7dd096e89b",
+      "observed_at": "2026-11-07T00:00:41Z",
+      "plain_http_status": 404,
+      "plain_hls_header": false,
+      "portal_referer_http_status": 404,
+      "portal_referer_hls_header": false,
+      "ffprobe_returncode": 1,
+      "stderr_sha256": "27bf9a27e962b3a3957798a78154b5e195c558fc32bd4f7a8bf3d26c418e99c2",
+      "ffprobe_http_codes": [
+        "404"
+      ],
+      "known_errors": [
+        "404 Not Found"
+      ]
+    }
+  ],
+  "source_delayed_attempt": [
+    {
+      "lesson_id": "fo_e5cb97fa3eaf2d1a",
+      "wait_budget_s": 15,
+      "observed_at": "2026-11-07T00:01:51+00:00",
+      "error_type": "TimeoutError"
+    },
+    {
+      "lesson_id": "fo_5d66dfb4bf27853f",
+      "wait_budget_s": 15,
+      "observed_at": "2026-11-07T00:02:36+00:00",
+      "error_type": "TimeoutError"
+    },
+    {
+      "lesson_id": "fo_fcad555740669e31",
+      "wait_budget_s": 15,
+      "observed_at": "2026-11-07T00:03:21+00:00",
+      "error_type": "TimeoutError"
+    },
+    {
+      "lesson_id": "fo_626434837c181089",
+      "wait_budget_s": 15,
+      "observed_at": "2026-11-07T00:03:55+00:00",
+      "error_type": "TimeoutError"
+    }
+  ],
+  "pdf_samples": {
+    "observed_at": "2026-11-06T23:56:23Z",
+    "samples": [
+      {
+        "material_id": "pdf_01e1a5c613c6c529c2a83252",
+        "subject": "Biologia",
+        "bytes": 784251,
+        "byte_sha256": "5f62a055774759bb6f060aef218087115cc8ba93222cbd6bbd1f38254a2b88c9",
+        "fresh_remote_byte_check": true,
+        "content_identity_matches": true,
+        "pages": 6,
+        "extraction_quality": {
+          "ocr_needed": 1,
+          "text": 5
+        },
+        "cached_pages": 6,
+        "released_page_text_changes": 0,
+        "sanitizer_rejections": 0,
+        "temporary_original_cleaned": true,
+        "state": "verified_sample_not_quality_approval"
+      },
+      {
+        "material_id": "pdf_0d7de226ca09daaceee7a9e7",
+        "subject": "Física",
+        "bytes": 5251881,
+        "byte_sha256": "206a4acd7f32fbc4d8c9de7c58c4cd389d45da5dbc110c38994421b299013765",
+        "fresh_remote_byte_check": true,
+        "content_identity_matches": true,
+        "pages": 63,
+        "extraction_quality": {
+          "ocr_needed": 2,
+          "text": 61
+        },
+        "cached_pages": 63,
+        "released_page_text_changes": 0,
+        "sanitizer_rejections": 0,
+        "temporary_original_cleaned": true,
+        "state": "verified_sample_not_quality_approval"
+      },
+      {
+        "material_id": "pdf_7aba84ea32a9a95afff2ad57",
+        "subject": "Geografia",
+        "bytes": 646514,
+        "byte_sha256": "ae084ef5530664def2625be253af8f822e9722665ddd9e90b54c3d770c512d08",
+        "fresh_remote_byte_check": true,
+        "content_identity_matches": true,
+        "pages": 28,
+        "extraction_quality": {
+          "ocr_needed": 1,
+          "text": 27
+        },
+        "cached_pages": 28,
+        "released_page_text_changes": 0,
+        "sanitizer_rejections": 0,
+        "temporary_original_cleaned": true,
+        "state": "verified_sample_not_quality_approval"
+      },
+      {
+        "material_id": "pdf_0ab7a65c156ae277ecf5c4ec",
+        "subject": "História",
+        "bytes": 1259996,
+        "byte_sha256": "b5cde20a448534aef9cf6781d069578fd16382ef387c214b1de8ce91f3184fef",
+        "fresh_remote_byte_check": true,
+        "content_identity_matches": true,
+        "pages": 49,
+        "extraction_quality": {
+          "ocr_needed": 1,
+          "text": 48
+        },
+        "cached_pages": 49,
+        "released_page_text_changes": 0,
+        "sanitizer_rejections": 0,
+        "temporary_original_cleaned": true,
+        "state": "verified_sample_not_quality_approval"
+      },
+      {
+        "material_id": "pdf_9ba100afb02fdf73ba72e1bc",
+        "subject": "Matemática",
+        "bytes": 278985,
+        "byte_sha256": "5e75bdd43e181f65c6dca93f26484d524a84ac73882301390b15d525af479b26",
+        "fresh_remote_byte_check": true,
+        "content_identity_matches": true,
+        "pages": 15,
+        "extraction_quality": {
+          "ocr_needed": 1,
+          "text": 14
+        },
+        "cached_pages": 15,
+        "released_page_text_changes": 0,
+        "sanitizer_rejections": 0,
+        "temporary_original_cleaned": true,
+        "state": "verified_sample_not_quality_approval"
+      },
+      {
+        "material_id": "pdf_b1bc11b1be3b93b0f64179a3",
+        "subject": "Química",
+        "bytes": 2641856,
+        "byte_sha256": "c80fc7c50ce05c9046c7bf79ecb6162b650e4ec16041704c1c02b2eb987e0ce6",
+        "fresh_remote_byte_check": true,
+        "content_identity_matches": true,
+        "pages": 59,
+        "extraction_quality": {
+          "ocr_needed": 1,
+          "text": 58
+        },
+        "cached_pages": 59,
+        "released_page_text_changes": 0,
+        "sanitizer_rejections": 0,
+        "temporary_original_cleaned": true,
+        "state": "verified_sample_not_quality_approval"
+      }
+    ],
+    "classification_changed": false,
+    "visual_or_semantic_gold": false,
+    "raw_or_pii_text_logged": false,
+    "sanitized_export": {
+      "released": 7274,
+      "excluded": 544,
+      "rejected": 0
+    },
+    "sanitized_export_sha256": "8d7d5867259d7bf94384b8d3ef25730c72f6cbe978e4b06ba2983c32308e3abc"
+  },
+  "alias_plan": {
+    "schema_version": 1,
+    "observed_at": "2026-11-07T00:12:59.322673+00:00",
+    "actions": [
+      {
+        "alias": {
+          "lesson_id": "fo_046b10a39dc5d472",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "c1e02744edf03330d423803b3273d4ea",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-8030d90d6cd9b7916af33479cac31dd3",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_11d042d4ac3c0be9",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12479",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-8030d90d6cd9b7916af33479cac31dd3",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 79472044,
+          "available": 1,
+          "remote_handle": "cf65397107260a8f7222eb14"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_0d0dae0490493d39",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "8a2eaa8e377db71fe958bc318c12ddc3",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-39d570706a16a32c22923e6159fee866",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_6332458e0d6340f0",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12485",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-39d570706a16a32c22923e6159fee866",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 88025844,
+          "available": 1,
+          "remote_handle": "4d2194c22e387dfd5011e88a"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_11d344adc84c1baf",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "d8b488f8977c3edfb1ec083befed4e85",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-6f445a610f80392ab33820de6cd4be36",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_cb19eb03bc2d40ed",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "13129",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-6f445a610f80392ab33820de6cd4be36",
+          "media_type": "video",
+          "present": 1,
+          "version": 3
+        },
+        "canonical_source": {
+          "revision": "3",
+          "size": 144380468,
+          "available": 1,
+          "remote_handle": "c539251468eaddc755303081"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_17aa9246ab5f44b8",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "f60dcc2df420d6f7a34f6975638da7c1",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-4322323256a76ff5c6bdc5807e94e55c",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_e47bad6e43cb7a69",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "15673",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-4322323256a76ff5c6bdc5807e94e55c",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 96344223,
+          "available": 1,
+          "remote_handle": "ef32ab32457dc817725ddb8d"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_1dc3bfe59f33763f",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "738c1db285cd1e5db8acd90042ad4a31",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-2b6d20eafb3b71bb00f053e55d8180d0",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_de1ab826514c9450",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12470",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-2b6d20eafb3b71bb00f053e55d8180d0",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 87156435,
+          "available": 1,
+          "remote_handle": "efc8bf44dc989d1315a4971c"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_2cf7ac8dfc2d13f2",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "d98900d841a894ccff21add37476d01c",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-36451a9ece07978cc826f057037bca01",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_a6ef4cbe2a6a9110",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12483",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-36451a9ece07978cc826f057037bca01",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 105005866,
+          "available": 1,
+          "remote_handle": "67ee4ce6e6c31011206f99ca"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_318e2f9611ac375c",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "83bebc8000e8a962a1d925237d16ea6e",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-643a46b83ebe8f9ca99a7613a7ffe62e",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_e8497cdd59a5686c",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "11664",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-643a46b83ebe8f9ca99a7613a7ffe62e",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 100081775,
+          "available": 1,
+          "remote_handle": "b541a917787adba40bff3a7f"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_320191fb32e2b1b7",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "996ff23f2603d18e0ba210849fa921aa",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-67193856eb3d46dc68311e068c2974bd",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_ca718d07e1b068bd",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "15586",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-67193856eb3d46dc68311e068c2974bd",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 117809399,
+          "available": 1,
+          "remote_handle": "b51763b3c7e1d3c352fd7152"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_3b4b332a23b881d4",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "326262b919d87e52fd14d9d029c061c9",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-6cb6a5fe49934ea28111a2915791d294",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_2b3a9b9aefa02389",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "15670",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-6cb6a5fe49934ea28111a2915791d294",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 88064153,
+          "available": 1,
+          "remote_handle": "af778164de6d44386b596cde"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_3d99a99dbc9f2f28",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "8fbc0d744e95f82a95172ac5a4f5458a",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-d99661e2bcdac85d783505684e3cc91e",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_c59b03e6c6ead404",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12476",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-d99661e2bcdac85d783505684e3cc91e",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 72814665,
+          "available": 1,
+          "remote_handle": "daff48e3169e2f0651d82ae4"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_3e1190a06bba528c",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "f314d5402f6bc11ad30c91e965e633b6",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-65ac6fbcc6c3fd2b73abcdfbd9deffa0",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_9ab8c3d06bb18b05",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "14780",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-65ac6fbcc6c3fd2b73abcdfbd9deffa0",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 174722770,
+          "available": 1,
+          "remote_handle": "69dc196de58b62774cbf368a"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_45b67b1b046cb608",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "215744b88c29ff2f08f9f7b5d7972e3f",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-4a3ea2172b6eaeed2c9ce7b4b408194c",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_fa6b5050e79f487f",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "15501",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-4a3ea2172b6eaeed2c9ce7b4b408194c",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 73258484,
+          "available": 1,
+          "remote_handle": "68a59092d34be582eba38ff8"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_4b21b666c79a888f",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "8c5a2df17a15978f25805f64f0893a5a",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-4337516bc6881270e2161a9e1b0f2043",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_4226130442f62c8e",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "15442",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-4337516bc6881270e2161a9e1b0f2043",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 143110146,
+          "available": 1,
+          "remote_handle": "0762049f9192716f2302d9f6"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_5226a442b2ab5a82",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "b7d285055bebba72aad457bf17a50f40",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-024023b3781e77ccafdd3d80a19d6626",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_6864e17ba9141b25",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12481",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-024023b3781e77ccafdd3d80a19d6626",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 103268851,
+          "available": 1,
+          "remote_handle": "9e2ac3acb88f43e0c2aab99f"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_53b129b55cea8848",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "0226e4e131b9d4241bc73bff802fec46",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-9b7c8be196037cb487aa057a3eb20f35",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_851134e954604de1",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "15806",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-9b7c8be196037cb487aa057a3eb20f35",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 56992901,
+          "available": 1,
+          "remote_handle": "ec17c4a3acce6917cdf4bcf6"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_5ad9eab8aa574abd",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "d7efc19514461afbcf8e8043eed64b30",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-98412d69484b22410aa3c21e3d2dabbd",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_964fdd79353aecb0",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "15675",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-98412d69484b22410aa3c21e3d2dabbd",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 103189972,
+          "available": 1,
+          "remote_handle": "9f021216068979865c9a4a5d"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_5d89ced77a52d381",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "a8975bf65597bf82250fa2c3dbca0822",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-945d8197ac3dd36321f376027d4301d6",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_5333d038f84bba97",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "15371",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-945d8197ac3dd36321f376027d4301d6",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 145379437,
+          "available": 1,
+          "remote_handle": "8e7a7ab175832acd1d836eed"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_5dc86927ec0b6180",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "ce6257528ad2a18acad02d5c78cc7966",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-49be68a7775edb13c1c33a1ec34b60f9",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_3f7e48935e5c6797",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12465",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-49be68a7775edb13c1c33a1ec34b60f9",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 89101592,
+          "available": 1,
+          "remote_handle": "6b95f1705234e57f58df9461"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_60bb121db5eed4d7",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "0120b3bc40fbcf691c8c2cce2238b9cc",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-f261076978733ecab024ab590b20a94f",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_d9181af5e2361bd1",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "1983",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-f261076978733ecab024ab590b20a94f",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 193993049,
+          "available": 1,
+          "remote_handle": "c145d8ecdce01503adf75c42"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_64fbffb1166621ab",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "3bce3f90d85162277a44761b359fb45e",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-25b324d655b8c808fb817f4f7bebe654",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_af3f3bbf5874f146",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "11140",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-25b324d655b8c808fb817f4f7bebe654",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 122285334,
+          "available": 1,
+          "remote_handle": "840064bf5791acfebd045a9e"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_68b3d3e69f54cd05",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "ea220743cd0b412e0b3b02b62dd1e309",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-8cce18b5c5baae46cf93b07fa5340d07",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_eb1cb3e9f10f14a2",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "15760",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-8cce18b5c5baae46cf93b07fa5340d07",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 69845997,
+          "available": 1,
+          "remote_handle": "9e8a3a7f7db7d7e84f38bd52"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_71178965bc13a762",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "ddaec993bfc7395ff8ee6f2d63307511",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-d328a87fd6347252c4e7e8e5031556f3",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_6bedac40367de6d3",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12480",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-d328a87fd6347252c4e7e8e5031556f3",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 108523713,
+          "available": 1,
+          "remote_handle": "fe4dabd9d1ed50fa26898e9b"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_7343b97ca02d4763",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "48474dc9206bf361234d6ba7b8241643",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-fc65c08cebc68be9ebb0e56dfa1c9b80",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_86f3b2471d6050ab",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "62",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-fc65c08cebc68be9ebb0e56dfa1c9b80",
+          "media_type": "video",
+          "present": 1,
+          "version": 3
+        },
+        "canonical_source": {
+          "revision": "3",
+          "size": 328264976,
+          "available": 1,
+          "remote_handle": "f6f36c2c5d069ce3cada56a0"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_7784b64230f0134f",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "9c7fa22ffe34b9d42b786790423ae741",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-73075056ac82513a3ac164b4776acaa2",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_e2f31448e12b6175",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12466",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-73075056ac82513a3ac164b4776acaa2",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 74441807,
+          "available": 1,
+          "remote_handle": "bda5245848dad64785af27d1"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_7ff2d34fcae856eb",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "7834fe6ce50925d21505a5f0c876f5c1",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-75c5b510beab12be3348a84a369e22c8",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_18d557b6dd3eef96",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12487",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-75c5b510beab12be3348a84a369e22c8",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 77310676,
+          "available": 1,
+          "remote_handle": "2d2d617f8a79f0f5e3526cec"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_8f26e632e9c59de6",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "96d5d5bec6f872e23c3103d36c10280c",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-6bd7bef57baca91cf67649cabb713cbb",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_9136f8c17aed33bb",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12482",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-6bd7bef57baca91cf67649cabb713cbb",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 127216096,
+          "available": 1,
+          "remote_handle": "f315935cdcbada3c0e45c850"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_9037246092aa7626",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "ced748e04bcf3ad118809269e851d118",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-852c458bcc491bb456794370b01b164f",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_df44ac04c1ba2f0d",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "11139",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-852c458bcc491bb456794370b01b164f",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 124480519,
+          "available": 1,
+          "remote_handle": "cdfde991ca9d391fbd20eae7"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_9211e1641474d861",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "886d05fa8c14eef277195c74ea247cc4",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-c0ab9a5f890a63b327ff4d566a630ad0",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_f2ae9da12a50e148",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "15671",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-c0ab9a5f890a63b327ff4d566a630ad0",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 84156407,
+          "available": 1,
+          "remote_handle": "317bfd7d0f177c34d2bb4198"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_9676b5af895d3241",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "974741bd48a85291fb31925acaa689e3",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-522dca71acda828513bf395c961f6405",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_bacc7e39949310d6",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "15329",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-522dca71acda828513bf395c961f6405",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 128960787,
+          "available": 1,
+          "remote_handle": "333bfc1ccd4d49128dd6d0b8"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_97f89bf4f17e6586",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "3ed916f4eb526b7cd9355e9f5deda467",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-9ced4eae7bd156e89b85e0f1052b4d02",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_659204d740e163b8",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12750",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-9ced4eae7bd156e89b85e0f1052b4d02",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 66501349,
+          "available": 1,
+          "remote_handle": "e7ce4fdc9949383622b7275f"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_9b0c2c5f769533be",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "2a61829cda848bbeb4d8bace11dfd2f3",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-50ee40840d281ba74d420080ee692965",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_c502e7746cf9cf37",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12473",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-50ee40840d281ba74d420080ee692965",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 91804754,
+          "available": 1,
+          "remote_handle": "4e73af0341f194f9f281f72c"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_a08951611ad56ec3",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "95ab2f7e0cdfe0e92d24bcd9f9fba39c",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-43e3c8d82103b51ac50cffa73051c047",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_b88ff262a9c3d8aa",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "1646",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-43e3c8d82103b51ac50cffa73051c047",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 79161375,
+          "available": 1,
+          "remote_handle": "ada560a9ceafc336e6024620"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_a20036390a830efb",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "0f05c348ce3c1bfcba1cbbb9cb78824c",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-45fe2ffb761c1e47a90d0720f06664f4",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_8b7c252780f51c48",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12474",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-45fe2ffb761c1e47a90d0720f06664f4",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 98780778,
+          "available": 1,
+          "remote_handle": "665fc8d53e8c1736b90f8f64"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_a55bf2ecea004b30",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "968096d0b041d24f5780e92836a76d28",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-f657c57adf8919c741f6ca038b237300",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_78118dcb4ec9c448",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12748",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-f657c57adf8919c741f6ca038b237300",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 110420503,
+          "available": 1,
+          "remote_handle": "c9a35dd8c7c68611efaea834"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_a9ef3439c3eae03f",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "17ce8503ccdb0d9ff2aa4a010eb1f55e",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-d87e3e2f83c02016e40c66f3a76fdf2b",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_9741a6402fa0021a",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "15757",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-d87e3e2f83c02016e40c66f3a76fdf2b",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 59269728,
+          "available": 1,
+          "remote_handle": "1ca4eec4e703e282cc3f0cb1"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_b5ee9e5be05d4f31",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "aa2fcd0c14b9cab2dca31788f396d14f",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-2f01bab389d74f2b36d6c32933d2f567",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_db5873e22dea8377",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12471",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-2f01bab389d74f2b36d6c32933d2f567",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 66897300,
+          "available": 1,
+          "remote_handle": "f4d473967be97420e0c69af3"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_bc47e0274aee449d",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "a3bad27017d79f8ff6667277b71757d7",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-7b006dd32e2d1c24246048ac15dd8f5c",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_fdb95c81c57ceea1",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12747",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-7b006dd32e2d1c24246048ac15dd8f5c",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 61822426,
+          "available": 1,
+          "remote_handle": "f89f02f00bce3fd394951fbd"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_bd91821730c3dda9",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "9dddbda2d997787a223f1e620a5a8a40",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-4ab204bbfd7a9f5d063d5db764b1f309",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_6cd6423798a0838d",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "15610",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-4ab204bbfd7a9f5d063d5db764b1f309",
+          "media_type": "video",
+          "present": 1,
+          "version": 3
+        },
+        "canonical_source": {
+          "revision": "3",
+          "size": 61561951,
+          "available": 1,
+          "remote_handle": "2b52b3cb816db5c41338dd2a"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_bfe5aa4f780acef1",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "b64ea7e15c2105f989a7d3d61984c3ba",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-efecb8cdfc05c9e495cb2f3db1552c29",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_3ef2fc941c44a0d5",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "15672",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-efecb8cdfc05c9e495cb2f3db1552c29",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 110839834,
+          "available": 1,
+          "remote_handle": "478c2c9dbe7e5e879c772e7e"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_c0d6965e9dc2f214",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "bd7e712274b9e6afc5b3a5750a0af297",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-2e74c4c26b3312a8c82502e1ed730cc8",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_efa3aef43c7a692b",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12468",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-2e74c4c26b3312a8c82502e1ed730cc8",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 77023613,
+          "available": 1,
+          "remote_handle": "c17cc8afe578c9d6220db096"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_c27f021000cf4582",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "d4a2956f2f6ba94fc2b62b3c868aa27c",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-c48565d60174c65baca15d1eab65340d",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_216b1125a2121a96",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "15725",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-c48565d60174c65baca15d1eab65340d",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 60171436,
+          "available": 1,
+          "remote_handle": "71cb3f8d9a1b743ea9961a4c"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_c38151d13ff76180",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "0a2d21a23816149b1d669c4315b2dbb2",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-3af5371fc7399f3c6478caebaa0f75b9",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_518150240871e48e",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "11964",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-3af5371fc7399f3c6478caebaa0f75b9",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 76718180,
+          "available": 1,
+          "remote_handle": "667ee928e68d01822e912bfd"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_c5756ae3cd18e5e5",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "0df0ad922e6829f85035c21d8065bae3",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-62fe561da25dc446ed256cf0c09b2a02",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_0f8b98985810df9b",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12467",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-62fe561da25dc446ed256cf0c09b2a02",
+          "media_type": "video",
+          "present": 1,
+          "version": 3
+        },
+        "canonical_source": {
+          "revision": "3",
+          "size": 80421113,
+          "available": 1,
+          "remote_handle": "59a789b9810beaa9cb79abfa"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_ca91a0eb9b1c0b71",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "d207d96892eaa17a21742f1b44979cb2",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-edee1d377096daf6b5a55e37169757a7",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_ffc0f3b1c123edb0",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "7036",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-edee1d377096daf6b5a55e37169757a7",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 269660087,
+          "available": 1,
+          "remote_handle": "bc48353b7d488d3d93915be6"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_ccc91ee1ed3fc4ee",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "4108bbbe5c7a6621a4aa8652998ecb0f",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-edf58951e201919d09245d83445eb296",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_4147995ba9ac93c1",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "13951",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-edf58951e201919d09245d83445eb296",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 71397717,
+          "available": 1,
+          "remote_handle": "0432ae6f57e5d7328932fb2c"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_d013c947d2ad7675",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "3a98de9135e9e2372a6dafb4c36acbc1",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-71383792a50883f668699685ac590ee5",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_d1c146bcb47151c0",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "15758",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-71383792a50883f668699685ac590ee5",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 65263312,
+          "available": 1,
+          "remote_handle": "5490cc318e1304a7a845757f"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_d7f2114ba1a44eb3",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "743432541e3ec6d84f5f8c4c114866d5",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-d5a4d1f0e050f4b5e96ef58ccc744444",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_d582bcb30f092fd6",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "15674",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-d5a4d1f0e050f4b5e96ef58ccc744444",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 100904558,
+          "available": 1,
+          "remote_handle": "ede542caf03d848d86ab4aa5"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_e29db6394b44e91f",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "df28ac8043144553c88ef6fa2ec8576b",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-c8556b47f8fb575ce0bf342f4a79a6d9",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_4233ea38c9f971b2",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "13132",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-c8556b47f8fb575ce0bf342f4a79a6d9",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 68187523,
+          "available": 1,
+          "remote_handle": "ad50afa1414b9bc2d2d7639f"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_e58ce991e4f156e3",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "fe508df4618d2eb3768305e579c95b08",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-3e018a25ba5bffcc3cad79969f6994bd",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_5427778644d81b80",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12749",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-3e018a25ba5bffcc3cad79969f6994bd",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 69369405,
+          "available": 1,
+          "remote_handle": "68e780b5a665b60faf7fff09"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_e64fa68eddf6e5bd",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "b8121c84e6ad3c967e8e979ed153b855",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-e80770ef91751eb7583fbf8bdfa9a864",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_9345b0ab2826af1c",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12484",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-e80770ef91751eb7583fbf8bdfa9a864",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 76738617,
+          "available": 1,
+          "remote_handle": "c473bfa1834d76640a060f9f"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_edc65db1e3ecb656",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "31cacf21c2ae473cf3a5a3cbfc5212e9",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-6e28e955d5af03804d6afcccd57a56a1",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_1334d77208d9603e",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "15676",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-6e28e955d5af03804d6afcccd57a56a1",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 77945864,
+          "available": 1,
+          "remote_handle": "43aebaa4c19b0ce30ef7f21d"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_f090bfc3fa126fbe",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "c83cb8d933d7fa00aa61850d7502b527",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-81701da3cd6faf9c6987932f73f8aec1",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_8ecb4056b40d9aeb",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12460",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-81701da3cd6faf9c6987932f73f8aec1",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 89722188,
+          "available": 1,
+          "remote_handle": "66a18877f39b6ebe6fb3ed75"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_f2ef1f3218269337",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "f9957490f7fff6d9ee0ee039d301eb53",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-515794596dff020edf09b9a3ae899662",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_c8c587d75937fff8",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12472",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-515794596dff020edf09b9a3ae899662",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 75488944,
+          "available": 1,
+          "remote_handle": "55ffde4c0db68ca9ec7ad3a3"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_f4fb4172ce8f27ef",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "83fdd6c296767b9931bf71df11c178e1",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-992069c2ae96e227ad6801029e330dec",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_d8bcb9eac540de68",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12486",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-992069c2ae96e227ad6801029e330dec",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 104253927,
+          "available": 1,
+          "remote_handle": "47f7a1e67854ae95738c325e"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_f7060fd1d439e7f2",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "6e5104f7aa264ee7fbeaa5c26a2a5866",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-aef86d583cb5360a7b405c45b79521ca",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_f4e98b3fb31980da",
+          "course_id": "9bbed11090d3836bfb18c82f34ddcc70",
+          "media_id": "12477",
+          "item_id": "item-9bbed11090d3836bfb18c82f34ddcc70-aef86d583cb5360a7b405c45b79521ca",
+          "media_type": "video",
+          "present": 1,
+          "version": 1
+        },
+        "canonical_source": {
+          "revision": "1",
+          "size": 84803903,
+          "available": 1,
+          "remote_handle": "fc10b21988d2901f74cbf2e9"
+        }
+      },
+      {
+        "alias": {
+          "lesson_id": "fo_f82ef5cdef918202",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "40c1c059387fbc9c2e94e3251f3cafd6",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-a24b9466430aa5de087470168cbd2efb",
+          "media_type": "error",
+          "present": 1,
+          "version": 1
+        },
+        "alias_source": {
+          "revision": null,
+          "size": null,
+          "available": null,
+          "remote_handle": null
+        },
+        "canonical": {
+          "lesson_id": "fo_e53b7bd8eed6067e",
+          "course_id": "57b0cfa5139851ce785e14e9bd584626",
+          "media_id": "15262",
+          "item_id": "item-57b0cfa5139851ce785e14e9bd584626-a24b9466430aa5de087470168cbd2efb",
+          "media_type": "video",
+          "present": 1,
+          "version": 3
+        },
+        "canonical_source": {
+          "revision": "3",
+          "size": 74693164,
+          "available": 1,
+          "remote_handle": "95710b008a3073cc36d78038"
+        }
+      }
+    ],
+    "plan_sha256": "113554e6a26257237d7bc221ad60fdea75d668877d33dbbeecebb85af092f29f",
+    "blocked": [
+      {
+        "lesson_id": "fo_630e1b4d2a0089f5",
+        "reason": "canonical_not_unique_or_unavailable"
+      }
+    ],
+    "blocked_counts": {
+      "canonical_not_unique_or_unavailable": 1
+    },
+    "scope": "failed_observation_metadata_only_no_media_identity_merge"
+  },
+  "alias_receipt": {
+    "observed_at": "2026-11-07T00:13:30Z",
+    "before": {
+      "lessons": {
+        "total": 3213,
+        "present": 3079
+      },
+      "jobs": {
+        "done": 1,
+        "leased": 1,
+        "queued": 3009,
+        "review": 3,
+        "superseded": 320
+      },
+      "alias_jobs": 0
+    },
+    "apply": {
+      "retired": 56,
+      "already_applied": false,
+      "plan_sha256": "113554e6a26257237d7bc221ad60fdea75d668877d33dbbeecebb85af092f29f"
+    },
+    "after": {
+      "lessons": {
+        "total": 3213,
+        "present": 3023
+      },
+      "jobs": {
+        "done": 1,
+        "leased": 1,
+        "queued": 3009,
+        "review": 3,
+        "superseded": 320
+      },
+      "ledger_count": 56
+    },
+    "all_aliases_and_canonicals_verified": true,
+    "actions_verified": 56
+  },
+  "sim02_handlers": {
+    "tag": "LI",
+    "own_attr_names": [
+      "style"
+    ],
+    "own_handler_names": [],
+    "children": [
+      {
+        "tag": "SPAN",
+        "attrs": [],
+        "handler_names": []
+      },
+      {
+        "tag": "I",
+        "attrs": [
+          "id",
+          "class",
+          "data-documento",
+          "onclick",
+          "data-toggle",
+          "data-placement",
+          "title",
+          "aria-hidden"
+        ],
+        "handler_names": [
+          "marcarVistoDocumentoEvent4"
+        ]
+      },
+      {
+        "tag": "SPAN",
+        "attrs": [
+          "class"
+        ],
+        "handler_names": []
+      },
+      {
+        "tag": "SPAN",
+        "attrs": [],
+        "handler_names": []
+      },
+      {
+        "tag": "SPAN",
+        "attrs": [],
+        "handler_names": []
+      },
+      {
+        "tag": "SPAN",
+        "attrs": [],
+        "handler_names": []
+      },
+      {
+        "tag": "SPAN",
+        "attrs": [],
+        "handler_names": []
+      },
+      {
+        "tag": "I",
+        "attrs": [
+          "class",
+          "aria-hidden"
+        ],
+        "handler_names": []
+      },
+      {
+        "tag": "SPAN",
+        "attrs": [],
+        "handler_names": []
+      },
+      {
+        "tag": "SPAN",
+        "attrs": [],
+        "handler_names": []
+      },
+      {
+        "tag": "SPAN",
+        "attrs": [],
+        "handler_names": []
+      },
+      {
+        "tag": "SPAN",
+        "attrs": [],
+        "handler_names": []
+      }
+    ]
+  },
+  "pdf_sample_totals": {
+    "subjects": 6,
+    "materials": 6,
+    "pages": 220,
+    "bytes": 10863483,
+    "all_byte_checks_passed": true,
+    "all_owned_originals_cleaned": true
+  },
+  "source_outcome_counts": {
+    "observation_failed": 2,
+    "stream_metadata_failed": 5,
+    "source_duration_mismatch": 2,
+    "no_stream_after_authenticated_click": 4
+  }
+}
