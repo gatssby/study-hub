@@ -130,6 +130,7 @@ def main():
                 manifest['items'][key]={'revision':version,'status':'existing_remote_verified','remote_path':legacy['remote_path'],'size':observed['Size'],'source':'preexisting_upload_manifest_and_remote_inventory','checked_at':time.time()}
                 atomic_json(manifest_path,manifest)
                 continue
+        wrote_partial = False
         try:
             allowed_bytes(shutil.disk_usage(tmp).free)
             course=core.sanitize_name(urlsplit(row['course_url']).path.rstrip('/').split('/')[-1],fallback='course')
@@ -162,11 +163,18 @@ def main():
                     try:
                         while process.poll() is None:
                             if shutil.disk_usage(tmp).free<RESERVE:
-                                process.terminate();raise RuntimeError('Storage reserve reached during download')
+                                raise RuntimeError('Storage reserve reached during download')
                             time.sleep(2)
                         if process.returncode:raise RuntimeError('FFmpeg download failed; retry after catalog refresh')
                     finally:
-                        if process.poll() is None:process.terminate();process.wait(timeout=30)
+                        if process.poll() is None:
+                            process.terminate()
+                            try:
+                                process.wait(timeout=30)
+                            except subprocess.TimeoutExpired:
+                                process.kill()
+                                process.wait()
+                        wrote_partial = True  # This invocation's writer has exited.
                 probe=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','json',str(candidate.tmp_partial_path)],capture_output=True,text=True,check=True,timeout=30)
                 duration=float(json.loads(probe.stdout)['format']['duration'])
                 expected=float(row.get('duracao_segundos') or 0)
@@ -186,10 +194,14 @@ def main():
                                         'error_type':type(exc).__name__,'attempts':attempts,
                                         'checked_at':time.time(),'retry_at':time.time()+86400}
                 atomic_json(manifest_path,manifest)
+                if wrote_partial:
+                    discard_recoverable_partial(tmp, key, log, revision=version)
                 continue
             delay=21600 if isinstance(exc,SourceDurationMismatch) else min(86400,60*2**min(attempts,10))
             manifest['items'][key]={'revision':version,'status':'error','error_type':type(exc).__name__,'attempts':attempts,'retry_at':time.time()+delay}
             atomic_json(manifest_path,manifest)
+            if wrote_partial:
+                discard_recoverable_partial(tmp, key, log, revision=version)
             # A failed staged upload must not accumulate videos from other jobs.
             break
     print(json.dumps({'video_states':{status:sum(x.get('status')==status for x in manifest['items'].values()) for status in ('verified','existing_remote_verified','unavailable','error')}}))

@@ -89,3 +89,32 @@ def test_partial_cleanup_preserves_other_revisions_of_same_lesson(tmp_path):
     logger = type('Log', (), {'log': lambda *args: None})()
     assert runtime.discard_recoverable_partial(tmp_path, 'lesson', logger, revision='current') == 1
     assert old.read_bytes() == b'needs classification'
+
+
+def test_failed_fresh_download_discards_only_its_partial(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    row = {'course_url': 'https://example.test/course', 'media_id': '42',
+           'video_stream_url': 'https://example.test/stream', 'duracao_segundos': 100}
+    key, version = runtime.identity(row), runtime.revision(row)
+    media = tmp_path / 'tmp/videos'
+    media.mkdir(parents=True)
+    retained = media / f'{key}-retained.mp4'
+    retained.write_bytes(b'completed other revision')
+    monkeypatch.setattr(runtime, 'STATE', tmp_path)
+    monkeypatch.setattr(runtime, 'rows_from_catalog', lambda: [row])
+    real_exists = Path.exists
+    monkeypatch.setattr(Path, 'exists', lambda p: True if str(p) == '/home/ubuntu/anki-vnext' else real_exists(p))
+    monkeypatch.setattr(runtime.shutil, 'disk_usage', lambda p: SimpleNamespace(free=10 * 1024**3))
+    monkeypatch.setattr(runtime.core, 'build_candidates', lambda *a, **kw: [SimpleNamespace()])
+    monkeypatch.setattr(runtime.core, 'choose_stream_selection', lambda *a: SimpleNamespace(video_stream_index=0, audio_stream_index=None))
+    monkeypatch.setattr(runtime.core, 'title_from_aula', lambda row: 'Lesson')
+    monkeypatch.setattr(runtime.core, 'source_ref_from_aula', lambda row: None)
+    monkeypatch.setattr(runtime.core, 'source_ref_to_parts', lambda ref: ['Course'])
+    def failed_process(cmd, **kwargs):
+        Path(cmd[-1]).write_bytes(b'incomplete video')
+        return SimpleNamespace(poll=lambda: 1, returncode=1)
+    monkeypatch.setattr(runtime.subprocess, 'Popen', failed_process)
+    runtime.main()
+    assert list(media.iterdir()) == [retained]
+    manifest = json.loads((tmp_path / 'videos.json').read_text())['items'][key]
+    assert manifest['status'] == 'error' and manifest['revision'] == version
