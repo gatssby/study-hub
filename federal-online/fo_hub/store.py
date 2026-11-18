@@ -478,7 +478,7 @@ class FOStore:
                 "JOIN lessons l ON l.lesson_id=d.lesson_id AND l.version=d.version AND l.present=1 "
                 "JOIN lesson_video_sources s ON s.lesson_id=d.lesson_id AND s.revision=CAST(d.version AS TEXT) "
                 "WHERE d.remote_path IS s.remote_path AND d.size IS s.size AND d.retry_after>?", (time.time(),)).fetchall()
-            allowed_reasons = {'remote_object_not_found', 'source_duration_mismatch', 'hls_404',
+            allowed_reasons = {'remote_object_not_found', 'source_duration_mismatch', 'source_download_size_mismatch', 'hls_404',
                                'authenticated_observation_failed', 'stream_not_captured'}
             for reason, available in deferred_rows:
                 public_reason = reason if reason in allowed_reasons else 'source_pending_verification'

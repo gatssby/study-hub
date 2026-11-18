@@ -461,15 +461,20 @@ class Worker:
         video=work/'source.mp4'
         self.record_phase(job,'downloading')
         try:
-            self.command(['rclone','copyto',source['remote_path'],video,'--retries','3','--transfers','1',
+            # A rejected copy is not resumable. Let known source failures use the
+            # revision-scoped backoff rather than re-copying in this lease.
+            self.command(['rclone','copyto',source['remote_path'],video,'--retries','1','--transfers','1',
                           '--max-transfer',f'{size+1024**2}B','--cutoff-mode','HARD'])
         except subprocess.CalledProcessError as exc:
             detail=str(exc.stderr or '').casefold()
             missing=any(x in detail for x in ('object not found','directory not found','file not found','404 not found'))
-            denied=any(x in detail for x in ('unauthorized','forbidden','token','401','403'))
+            denied=any(x in detail for x in ('unauthorized','forbidden','token expired',
+                                             'invalid token','status code 401','status code 403'))
             if missing and not denied:raise SourceUnavailable('remote_object_not_found') from exc
+            if 'corrupted on transfer: sizes differ' in detail and not denied:
+                raise SourceUnavailable('source_download_size_mismatch') from exc
             raise
-        if video.stat().st_size!=size:raise RuntimeError('source download size mismatch')
+        if video.stat().st_size!=size:raise SourceUnavailable('source_download_size_mismatch')
         self.record_phase(job,'hashing')
         source_sha256=file_sha256(video)
         self.record_phase(job,'probing')

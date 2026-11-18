@@ -54,6 +54,30 @@ def test_authentication_error_remains_real_failure_not_unavailability(tmp_path):
     assert store.conn.execute('SELECT consecutive_failures FROM transcription_breaker').fetchone()[0] == 1
 
 
+def test_short_transfer_is_isolated_and_not_retried_in_same_cycle(tmp_path):
+    calls = []
+    def short(cmd, **kwargs):
+        calls.append(cmd)
+        Path(cmd[3]).write_bytes(b'x')
+        return SimpleNamespace(stdout='', stderr='')
+    worker, store, _ = worker_with_source(tmp_path, short)
+    assert worker.run_once()['state'] == 'deferred_source'
+    assert worker.run_once()['state'] == 'idle'
+    assert calls[0][4:6] == ['--retries', '1']
+    assert len(calls) == 1
+    assert store.conn.execute('SELECT reason FROM transcription_source_deferrals').fetchone()[0] == 'source_download_size_mismatch'
+    assert store.conn.execute('SELECT COUNT(*) FROM transcription_breaker').fetchone()[0] == 0
+    assert not list((tmp_path/'tmp/transcription').glob('*'))
+
+
+def test_rclone_rejected_transfer_is_isolated(tmp_path):
+    def corrupt(cmd, **kwargs):
+        raise subprocess.CalledProcessError(1, cmd, stderr='Failed to copy: corrupted on transfer: sizes differ src(OneDrive root) 9 vs dst(Local file system) 585')
+    worker, store, _ = worker_with_source(tmp_path, corrupt)
+    assert worker.run_once()['state'] == 'deferred_source'
+    assert store.conn.execute('SELECT reason FROM transcription_source_deferrals').fetchone()[0] == 'source_download_size_mismatch'
+
+
 def test_incompatible_duration_is_deferred_before_decoder_and_recoverable(tmp_path):
     calls = []
     def run(cmd, **kwargs):
