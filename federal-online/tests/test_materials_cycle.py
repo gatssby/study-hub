@@ -46,6 +46,36 @@ def test_failed_upload_keeps_original_and_no_index(tmp_path):
     assert not (tmp_path / 'hub.sqlite3').exists()
 
 
+def test_pending_receipt_replayed_without_acquisition(tmp_path):
+    def fail(*a, **kw):
+        raise subprocess.CalledProcessError(1, a[0])
+    with pytest.raises(subprocess.CalledProcessError):
+        materials_cycle.run_cycle(tmp_path, producer, runner=fail, reserve=0)
+    events = []
+    result = materials_cycle.run_cycle(tmp_path, lambda _: pytest.fail('must replay first'),
+        runner=lambda argv, **kw: events.append(argv[1]), reserve=0)
+    assert result['recovered'] and result['byte_verified'] and result['cleanup']
+    assert events == ['copy', 'check']
+    assert not list((tmp_path / 'tmp').glob('materials-cycle-*'))
+    store = FOStore(tmp_path / 'hub.sqlite3')
+    assert store.conn.execute('SELECT count(*) FROM pdf_pages').fetchone()[0] == 1
+    store.conn.close()
+
+
+def test_changed_pending_bytes_cannot_be_uploaded(tmp_path):
+    def fail(*a, **kw):
+        raise subprocess.CalledProcessError(1, a[0])
+    with pytest.raises(subprocess.CalledProcessError):
+        materials_cycle.run_cycle(tmp_path, producer, runner=fail, reserve=0)
+    obj = next((tmp_path / 'tmp').glob('materials-cycle-*/objects/*.pdf'))
+    obj.write_bytes(b'x' * obj.stat().st_size)
+    with pytest.raises(ValueError, match='pending'):
+        materials_cycle.run_cycle(tmp_path, lambda _: pytest.fail('no acquisition'),
+            runner=lambda *a, **kw: pytest.fail('no upload'), reserve=0)
+    assert obj.exists()
+    assert not (tmp_path / 'hub.sqlite3').exists()
+
+
 def test_real_local_rclone_and_repeat_preserves_blocked(tmp_path):
     import shutil
     if shutil.which('rclone') is None:

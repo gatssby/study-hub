@@ -83,6 +83,19 @@ def test_rotation_visits_all_branches_rows_and_rediscovers(tmp_path):
     assert Rotation(path).branch(options)['course_value'] == 'c'
 
 
+def test_replaying_committed_receipt_does_not_advance_cursor_twice(tmp_path):
+    path = tmp_path / 'rotation.json'
+    files = [{'sha256': 'a' * 64}]
+    items = [{'observation_id': 'row', 'source_url': 'observed-source', 'course_value': 'a',
+              'discipline_value': 'x', 'portal_subject': 'X', 'file_name': 'one', 'material_type': 'PDF',
+              'rotation_sequence': 0, 'course_label': 'A', 'row_meta': {'title': 'one'}}]
+    Rotation(path).resume(files, items)
+    Rotation(path).resume(files, items)
+    state = Rotation(path).state
+    assert state['sequence'] == 1
+    assert state['rows']['row']['hashes'] == ['a' * 64]
+
+
 def test_rotation_new_rows_and_byte_revisions_are_retained(tmp_path):
     import json
     options = [{'value': 'a', 'label': 'A', 'disciplines': [{'value': 'x', 'label': 'X'}]}]

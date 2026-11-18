@@ -2,21 +2,24 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 from types import SimpleNamespace
 
-from .materials_ops import locked, snapshot
+from .materials_ops import locked, safe_path, snapshot
 from .pdf_privacy import PRIVACY_POLICY_VERSION, sanitize_page
 from .store import FOStore
 
 
 def run_cycle(state, producer, *, runner=subprocess.run, max_bytes=256 * 1024**2,
-              max_files=1, max_pages=1000, reserve=4 * 1024**3, on_success=None):
+              max_files=1, max_pages=1000, reserve=4 * 1024**3, on_success=None,
+              on_recovery=None):
     """Producer writes only invocation-owned files. Failures retain them for recovery.
 
     Budgets constrain accepted output; producer/network limits are independent.
@@ -32,14 +35,30 @@ def run_cycle(state, producer, *, runner=subprocess.run, max_bytes=256 * 1024**2
     if work.is_symlink():
         raise ValueError('temporary root symlink rejected')
     with locked(state / 'locks/materials.lock'), locked(state / 'locks/materials-publication.lock'), locked(state / 'locks/index.lock'):
-        if any(work.glob('materials-cycle-*')):
-            raise ValueError('pending materials cycle requires recovery')
+        pending = list(work.glob('materials-cycle-*'))
+        if pending:
+            if len(pending) != 1:
+                raise ValueError('multiple pending materials cycles require recovery')
+            owned = pending[0]
+            receipt, items = pending_receipt(owned, max_files, max_bytes)
+            if shutil.disk_usage(work).free < reserve:
+                raise ValueError('disk reserve')
+            result = publish_cycle(state, owned, receipt, items, runner, max_pages,
+                                   (lambda files: on_recovery(files, items)) if on_recovery else None)
+            return {**result, 'recovered': True}
         if shutil.disk_usage(work).free < reserve + 2 * max_bytes:
             raise ValueError('disk reserve')
         owned = Path(tempfile.mkdtemp(prefix='materials-cycle-', dir=work))
         acquired = owned / 'acquired'
         acquired.mkdir(mode=0o700)
-        items = producer(acquired)
+        try:
+            items = producer(acquired)
+        except Exception:
+            # No receipt and no bytes written: nothing could have been published.
+            if not any(acquired.iterdir()):
+                acquired.rmdir()
+                owned.rmdir()
+            raise
         if not items and on_success is not None:
             on_success([])
             shutil.rmtree(owned)
@@ -55,45 +74,97 @@ def run_cycle(state, producer, *, runner=subprocess.run, max_bytes=256 * 1024**2
         objects.mkdir(mode=0o700)
         for item in receipt:
             os.link(staging / item['path'], objects / (item['sha256'] + '.pdf')) if not (objects / (item['sha256'] + '.pdf')).exists() else None
-        (owned / 'receipt.json').write_text(json.dumps({'files': receipt, 'items': items}))
-        remote = 'onedrive:Federal Online PDFs/objects/sha256'
-        for command in (
-            ['rclone', 'copy', str(objects), remote, '--immutable', '--checksum', '--transfers', '1', '--retries', '2'],
-            ['rclone', 'check', str(objects), remote, '--one-way', '--download', '--checkers', '1', '--retries', '2'],
-        ):
-            runner(command, check=True, capture_output=True, text=True, timeout=1800)
-        from pypdf import PdfReader
-        pages = []
-        for entry, meta in zip(receipt, items):
-            reader = PdfReader(objects / (entry['sha256'] + '.pdf'))
-            if len(reader.pages) + len(pages) > max_pages:
-                raise ValueError('page budget')
-            for number, page in enumerate(reader.pages, 1):
-                pages.append((entry['sha256'], number, sanitize_page(page.extract_text() or '')))
-        store = FOStore(state / 'hub.sqlite3')
+        atomic_json(owned / 'receipt.json', {'files': receipt, 'items': items})
+        return publish_cycle(state, owned, receipt, items, runner, max_pages, on_success)
+
+
+def pending_receipt(owned, max_files, max_bytes):
+    try:
+        path = owned / 'receipt.json'
+        if owned.is_symlink() or path.is_symlink() or not path.is_file() or path.stat().st_size > 1024**2:
+            raise ValueError('missing or invalid receipt')
+        data = json.loads(path.read_text())
+        files, items = data['files'], data['items']
+        if not 0 < len(files) == len(items) <= max_files:
+            raise ValueError('file budget')
+        expected = set()
+        total = 0
+        for entry, item in zip(files, items):
+            digest = entry['sha256']
+            if not re.fullmatch(r'[0-9a-f]{64}', digest) or entry['path'] != item['relative_path']:
+                raise ValueError('invalid receipt identity')
+            total += entry['bytes']
+            if entry['bytes'] <= 0 or total > max_bytes:
+                raise ValueError('byte budget')
+            name = digest + '.pdf'
+            expected.add(name)
+            for root, relative in (('objects', name), ('snapshot', entry['path']), ('acquired', entry['path'])):
+                local = safe_path(owned / root, relative)
+                if local.stat().st_size != entry['bytes']:
+                    raise ValueError('receipt size mismatch')
+                with local.open('rb') as handle:
+                    if hashlib.file_digest(handle, 'sha256').hexdigest() != digest:
+                        raise ValueError('receipt digest mismatch')
+        if {p.name for p in (owned / 'objects').iterdir()} != expected:
+            raise ValueError('unexpected staged objects')
+        return files, items
+    except (KeyError, TypeError, ValueError, OSError) as exc:
+        raise ValueError('invalid pending materials receipt; staging preserved') from exc
+
+
+def publish_cycle(state, owned, receipt, items, runner, max_pages, on_success):
+    objects = owned / 'objects'
+    remote = 'onedrive:Federal Online PDFs/objects/sha256'
+    for command in (
+        ['rclone', 'copy', str(objects), remote, '--immutable', '--checksum', '--transfers', '1', '--retries', '2'],
+        ['rclone', 'check', str(objects), remote, '--one-way', '--download', '--checkers', '1', '--retries', '2'],
+    ):
         try:
-            c = store.conn
-            c.execute('CREATE TABLE IF NOT EXISTS pdf_page_quality(material_id TEXT,page INTEGER,quality TEXT,exposure TEXT,extracted_chars INTEGER,pii_redacted INTEGER,updated_at TEXT,policy_version INTEGER,PRIMARY KEY(material_id,page))')
-            with c:
-                for entry, meta in zip(receipt, items):
-                    mid = 'pdf_' + entry['sha256'][:24]
-                    # Never replace provenance or quality for an existing indexed hash.
-                    if c.execute('SELECT 1 FROM materials WHERE material_id=?', (mid,)).fetchone():
+            runner(command, check=True, capture_output=True, text=True, timeout=1800)
+        except subprocess.CalledProcessError as exc:
+            # Keep status in the journal without logging private rclone diagnostics.
+            detail = str(exc.stderr or '').casefold()
+            reason = next((label for text, label in (
+                ('unauthorized', 'auth'), ('forbidden', 'auth'), ('quota', 'quota'),
+                ('immutable', 'immutable_conflict'), ('not found', 'not_found'),
+                ('corrupted on transfer', 'transfer_integrity')) if text in detail), 'unclassified')
+            exc.add_note(f'materials {command[1]} failed: {reason}; staging preserved')
+            raise
+    from pypdf import PdfReader
+    pages = []
+    for entry in receipt:
+        reader = PdfReader(objects / (entry['sha256'] + '.pdf'))
+        if len(reader.pages) + len(pages) > max_pages:
+            raise ValueError('page budget')
+        for number, page in enumerate(reader.pages, 1):
+            pages.append((entry['sha256'], number, sanitize_page(page.extract_text() or '')))
+    store = FOStore(state / 'hub.sqlite3')
+    try:
+        c = store.conn
+        c.execute('CREATE TABLE IF NOT EXISTS pdf_page_quality(material_id TEXT,page INTEGER,quality TEXT,exposure TEXT,extracted_chars INTEGER,pii_redacted INTEGER,updated_at TEXT,policy_version INTEGER,PRIMARY KEY(material_id,page))')
+        with c:
+            for entry, meta in zip(receipt, items):
+                mid = 'pdf_' + entry['sha256'][:24]
+                # Never replace provenance or quality for an existing indexed hash.
+                existing = c.execute('SELECT sha256 FROM materials WHERE material_id=?', (mid,)).fetchone()
+                if existing:
+                    if existing[0] != entry['sha256']:
+                        raise ValueError('material ID conflicts with existing digest')
+                    continue
+                cols = ('material_id','subject','front','module','title','material_type','relative_path','sha256')
+                values = (mid, meta.get('output_subject') or meta.get('portal_subject'), meta.get('portal_subject'), meta.get('group'), Path(meta.get('file_name') or entry['path']).stem, meta.get('material_type'), None, entry['sha256'])
+                c.execute(f"INSERT INTO materials({','.join(cols)}) VALUES({','.join('?' for _ in cols)})", values)
+                for digest, number, page in pages:
+                    if digest != entry['sha256']:
                         continue
-                    cols = ('material_id','subject','front','module','title','material_type','relative_path','sha256')
-                    values = (mid, meta.get('output_subject') or meta.get('portal_subject'), meta.get('portal_subject'), meta.get('group'), Path(meta.get('file_name') or entry['path']).stem, meta.get('material_type'), None, entry['sha256'])
-                    c.execute(f"INSERT INTO materials({','.join(cols)}) VALUES({','.join('?' for _ in cols)})", values)
-                    for digest, number, page in pages:
-                        if digest != entry['sha256']:
-                            continue
-                        c.execute('INSERT INTO pdf_pages(material_id,page,text) VALUES(?,?,?)', (mid, number, page.text))
-                        c.execute("INSERT INTO pdf_page_quality VALUES(?,?,?,?,?,?,datetime('now'),?)", (mid, number, page.quality, page.exposure, len(page.text), int(page.pii_redacted), PRIVACY_POLICY_VERSION))
-        finally:
-            store.conn.close()
-        if on_success is not None:
-            on_success(receipt)
-        shutil.rmtree(owned)
-        return {'files': len(items), 'pages': len(pages), 'byte_verified': True, 'cleanup': True}
+                    c.execute('INSERT INTO pdf_pages(material_id,page,text) VALUES(?,?,?)', (mid, number, page.text))
+                    c.execute("INSERT INTO pdf_page_quality VALUES(?,?,?,?,?,?,datetime('now'),?)", (mid, number, page.quality, page.exposure, len(page.text), int(page.pii_redacted), PRIVACY_POLICY_VERSION))
+    finally:
+        store.conn.close()
+    if on_success is not None:
+        on_success(receipt)
+    shutil.rmtree(owned)
+    return {'files': len(items), 'pages': len(pages), 'byte_verified': True, 'cleanup': True}
 
 
 class Rotation:
@@ -153,6 +224,31 @@ class Rotation:
                          'material_type': row.material_type, 'raw_date': row.raw_date}
         return row
 
+    def resume(self, receipt, items):
+        item, = items
+        row = item.get('observation_id')
+        if row is None:  # Explicit single-row publication has no rotation cursor.
+            return
+        branch = self.identity([item['course_value'], item['discipline_value']])
+        previous = self.state['rows'].get(row, {})
+        if item.get('rotation_sequence', self.state['sequence']) != self.state['sequence']:
+            if (previous.get('branch_id') == branch and previous.get('checked') == self.state['sequence']
+                    and receipt[0]['sha256'] in previous.get('hashes', [])):
+                return  # Crash after cursor replacement, before staging cleanup.
+            raise ValueError('pending materials rotation sequence conflicts with checkpoint')
+        if ('rotation_sequence' not in item and previous.get('branch_id') == branch
+                and receipt[0]['sha256'] in previous.get('hashes', [])):
+            return  # Legacy receipt lacks a cursor snapshot.
+        self.branch_id, self.row_id, self.source_url = branch, row, item['source_url']
+        # Legacy receipts do not have the label or raw date; do not invent them.
+        self.branch_meta = {**self.state['branches'].get(branch, {}),
+                            'course_value': item['course_value'], 'discipline_value': item['discipline_value'],
+                            'discipline': item['portal_subject']}
+        if 'course_label' in item:
+            self.branch_meta['course_label'] = item['course_label']
+        self.row_meta = item.get('row_meta', {'title': item['file_name'], 'material_type': item['material_type']})
+        self.commit(receipt)
+
     def commit(self, receipt):
         # Called only inside the acquisition lock, after byte check and DB commit.
         self.state['sequence'] += 1
@@ -170,18 +266,25 @@ class Rotation:
                     'remote': 'onedrive:Federal Online PDFs/objects/sha256/' + item['sha256'] + '.pdf'}
                 if item['sha256'] not in entry['hashes']:
                     entry['hashes'].append(item['sha256'])
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self.path.with_suffix('.tmp')
-        with temporary.open('w') as handle:
-            json.dump(self.state, handle)
+        atomic_json(self.path, self.state)
+
+
+def atomic_json(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=f'.{path.name}-')
+    try:
+        with os.fdopen(fd, 'w') as handle:
+            json.dump(data, handle)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, self.path)
-        fd = os.open(self.path.parent, os.O_RDONLY)
+        os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY)
         try:
-            os.fsync(fd)
+            os.fsync(directory)
         finally:
-            os.close(fd)
+            os.close(directory)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
 
 
 def collect_one(args, root, *, rotation=None):
@@ -213,10 +316,12 @@ def collect_one(args, root, *, rotation=None):
         source = mat.download_material_row(page, session.mat_config, session.logger, discipline, row, destination)
         if rotation is not None:
             rotation.source_url = source
+        rotation_meta = {'rotation_sequence': rotation.state['sequence'], 'row_meta': rotation.row_meta,
+                         'course_label': branch['course_label']} if rotation is not None else {}
         return [{'relative_path': destination.name, 'file_name': row.title_text or mat.filename_for_row(discipline, row.material_type),
                  'portal_subject': discipline, 'material_type': row.material_type, 'source_url': source,
                  'course_value': branch['course_value'], 'discipline_value': branch.get('discipline_value'),
-                 'observation_id': rotation.row_id if rotation is not None else None}]
+                 'observation_id': rotation.row_id if rotation is not None else None, **rotation_meta}]
     finally:
         if page is not None:
             page.close()
@@ -245,7 +350,8 @@ def main():
             holder['rotation'] = Rotation(args.state / 'materials-rotation.json')
             return collect_one(args, root, rotation=holder['rotation'])
         result = run_cycle(args.state, producer,
-                           on_success=lambda receipt: holder['rotation'].commit(receipt))
+                           on_success=lambda receipt: holder['rotation'].commit(receipt),
+                           on_recovery=lambda files, items: Rotation(args.state / 'materials-rotation.json').resume(files, items))
     print(json.dumps(result))
 
 
