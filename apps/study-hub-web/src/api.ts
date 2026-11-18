@@ -1,7 +1,7 @@
 export type Count = number | null;
 export interface Snapshot {
   observed_at: string;
-  transcription: { done: Count; queued: Count; review: Count; processing: Count; current_progress: Count };
+  transcription: { done: Count; queued: Count; review: Count; processing: Count; current_progress: Count; last_validated_at?: Count };
   queue_scope?: { active: Count; archived: Count; ignored: Count };
   pdf: { materials: Count; pages: Count; released: Count; blocked: Count };
   video: { available_sources: Count; indexed_objects: Count; pending_sources: Count };

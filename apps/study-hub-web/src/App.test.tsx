@@ -99,6 +99,12 @@ describe('Dashboard read-only', () => {
     await screen.findByText('Materiais: falhou');
     expect(screen.getByText('Catálogo: iniciando')).toBeTruthy();
   });
+  it('shows the last approval and distinguishes a scheduled collector from a running one', async () => {
+    const last = 1794074400;
+    render(<App load={async () => ({ ...snapshot, transcription: { ...snapshot.transcription, last_validated_at: last }, services: { ...snapshot.services, materials: 'scheduled' } })} />);
+    await screen.findByText(`Última transcrição aprovada: ${new Date(last * 1000).toLocaleString('pt-BR')}`);
+    expect(screen.getByText('Materiais: agendado')).toBeTruthy();
+  });
 });
 it('does not render non-finite or out-of-range progress as a real percentage', () => {
   render(<Progress label="Unknown" value={NaN} />);

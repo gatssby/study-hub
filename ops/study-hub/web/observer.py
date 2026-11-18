@@ -117,7 +117,7 @@ def main():
 
 
 SERVICES = ('transcription', 'catalog', 'materials', 'videos', 'index', 'onedrive', 'ocr')
-STATES = frozenset(('active', 'inactive', 'failed', 'activating', 'deactivating', 'reloading', 'unknown'))
+STATES = frozenset(('active', 'inactive', 'failed', 'activating', 'deactivating', 'reloading', 'scheduled', 'unknown'))
 
 
 def mapping(value):
@@ -205,6 +205,7 @@ def project(raw):
         'observed_at': datetime.now(timezone.utc).isoformat(),
         'transcription': {**{key: count(jobs.get(key)) for key in ('done', 'queued', 'review')},
                           'processing': count(jobs.get('leased', jobs.get('processing'))),
+                          'last_validated_at': count(raw.get('last_validated_at')),
                           'current_progress': progress, 'eta_seconds': None},
         'queue_scope': {key: count(mapping(raw.get('queue_scope')).get(key))
                         for key in ('active', 'archived', 'ignored')},

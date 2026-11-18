@@ -50,8 +50,28 @@ def read_database(path):
             WHERE l.present=1 AND j.version=l.version AND j.state='leased' LIMIT 2''')]
         sources = db.execute('''SELECT COUNT(*) FROM lesson_video_sources s
             JOIN lessons l ON s.lesson_id=l.lesson_id WHERE s.available=1 AND l.present=1''').fetchone()[0]
+        last_validated_at = db.execute('''SELECT MAX(unixepoch(t.created_at)) FROM transcripts t
+            JOIN lessons l USING (lesson_id, version)
+            WHERE l.present=1 AND t.corpus='generated_v2'
+              AND CASE WHEN json_valid(t.qa_json) THEN json_type(t.qa_json,'$.passed')='true' ELSE 0 END
+              AND EXISTS (SELECT 1 FROM lesson_video_sources s WHERE s.lesson_id=l.lesson_id
+                  AND s.available=1 AND s.revision=CAST(l.version AS TEXT) AND s.remote_path IS NOT NULL)''').fetchone()[0]
     return {'queue_scope': scopes, 'active': active, 'available_sources': sources,
-            'current_jobs': jobs}
+            'current_jobs': jobs, 'last_validated_at': last_validated_at}
+
+
+def materials_state(service, timer):
+    active = observer.state(service.get('ActiveState'))
+    result = service.get('Result')
+    if active == 'failed' or (active == 'inactive' and result not in (None, '', 'success')):
+        return 'failed'
+    if active != 'inactive':
+        return active
+    if result != 'success' or not timer.get('ActiveState') or not timer.get('UnitFileState'):
+        return 'unknown'
+    if timer['ActiveState'] == 'failed':
+        return 'failed'
+    return 'scheduled' if timer['ActiveState'] == 'active' and timer['UnitFileState'] == 'enabled' else 'inactive'
 
 
 def collect_local(state=STATE):
@@ -67,14 +87,19 @@ def collect_local(state=STATE):
     raw['status'] = {**observer.mapping(raw['status']), 'transcription_jobs': raw.pop('current_jobs')}
     units = ['study-hub-fo-' + name + ('.service' if name == 'transcription' else '.timer')
              for name in observer.SERVICES]
-    result = subprocess.run(['systemctl', 'show', '--property=Id,ActiveState', *units],
+    materials_unit = 'study-hub-fo-materials.service'
+    result = subprocess.run(['systemctl', 'show', '--property=Id,ActiveState,Result,UnitFileState',
+                             *units, materials_unit],
                             capture_output=True, text=True, timeout=3, check=False)
-    raw['units'] = {}
+    by_id = {}
     for block in result.stdout.split('\n\n'):
         fields = dict(line.split('=', 1) for line in block.splitlines() if '=' in line)
-        for name, unit in zip(observer.SERVICES, units):
-            if fields.get('Id') == unit:
-                raw['units'][name] = fields.get('ActiveState')
+        if 'Id' in fields:
+            by_id[fields['Id']] = fields
+    raw['units'] = {name: by_id.get(unit, {}).get('ActiveState')
+                    for name, unit in zip(observer.SERVICES, units)}
+    raw['units']['materials'] = materials_state(by_id.get(materials_unit, {}),
+                                               by_id.get('study-hub-fo-materials.timer', {}))
     for key, receipt in (('onedrive_receipt', state / 'onedrive-status.json'),
                          ('storage_receipt', state / 'telemetry/storage.json')):
         try:
@@ -124,6 +149,7 @@ class ProjectedCache(observer.SnapshotCache):
                            'components': {'index': {'summary': {'source_videos': p['video']['indexed_objects']}}},
                            'sources': {'pending': p['video']['pending_sources']}},
                 'active': [{'progress': p['transcription']['current_progress']}],
+                'last_validated_at': p['transcription'].get('last_validated_at'),
                 'queue_scope': p['queue_scope'], 'units': p['services'],
                 'storage_receipt': {**p['storage'], 'observed_at': p['storage']['sample_observed_at']},
                 'onedrive_receipt': p['onedrive'],

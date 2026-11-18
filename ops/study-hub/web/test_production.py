@@ -11,6 +11,18 @@ import production
 
 
 class ProductionTests(unittest.TestCase):
+    def test_materials_health_uses_service_result_before_timer(self):
+        timer = {'ActiveState': 'active', 'UnitFileState': 'enabled'}
+        for active, result, schedule, expected in [
+            ('failed', 'exit-code', timer, 'failed'),
+            ('inactive', 'exit-code', timer, 'failed'),
+            ('activating', 'success', timer, 'activating'),
+            ('inactive', 'success', timer, 'scheduled'),
+            ('inactive', 'success', {**timer, 'UnitFileState': 'disabled'}, 'inactive'),
+            ('inactive', 'success', {}, 'unknown'),
+        ]:
+            self.assertEqual(production.materials_state({'ActiveState': active, 'Result': result}, schedule), expected)
+
     def test_wsgi_production_origin_and_exact_route_fail_closed(self):
         calls = []
         app = production.DashboardApplication(observer.SnapshotCache(lambda: calls.append(1) or {'disk_free': 4}))
@@ -42,17 +54,25 @@ class ProductionTests(unittest.TestCase):
             c = sqlite3.connect(db)
             c.executescript('CREATE TABLE lessons(lesson_id TEXT, version INT, present INT);'
                             'CREATE TABLE transcription_jobs(lesson_id TEXT,version INT,state TEXT,progress REAL);'
-                            'CREATE TABLE lesson_video_sources(lesson_id TEXT,available INT);')
+                            'CREATE TABLE lesson_video_sources(lesson_id TEXT,available INT,revision TEXT,remote_path TEXT);'
+                            'CREATE TABLE transcripts(lesson_id TEXT,version INT,corpus TEXT,qa_json TEXT,created_at TEXT);')
             c.executemany('INSERT INTO lessons VALUES(?,?,?)', [('a', 2, 1), ('b', 1, 0), ('c', 1, 1)])
             c.executemany('INSERT INTO transcription_jobs VALUES(?,?,?,?)',
                           [('a', 1, 'done', 1), ('a', 2, 'leased', .3), ('b', 1, 'queued', 0), ('c', 1, 'ignored', 0)])
-            c.execute('INSERT INTO lesson_video_sources VALUES(?,?)', ('a', 1))
+            c.execute('INSERT INTO lesson_video_sources VALUES(?,?,?,?)', ('a', 1, '2', 'private'))
+            c.executemany('INSERT INTO transcripts VALUES(?,?,?,?,?)', [
+                ('a', 2, 'generated_v2', '{"passed":true}', '2026-11-07T18:00:00Z'),
+                ('a', 1, 'generated_v2', '{"passed":true}', '2026-11-08T18:00:00Z'),
+                ('a', 2, 'generated_v2', 'invalid', '2026-11-09T18:00:00Z'),
+                ('a', 2, 'other', '{"passed":true}', '2026-11-10T18:00:00Z'),
+            ])
             c.commit(); c.close()
             before = db.read_bytes()
             result = production.read_database(db)
             self.assertEqual(result['queue_scope'], {'active': 1, 'archived': 2, 'ignored': 1})
             self.assertEqual(result['active'], [{'progress': .3}])
             self.assertEqual(result['available_sources'], 1)
+            self.assertEqual(result['last_validated_at'], 1794074400)
             self.assertEqual(db.read_bytes(), before)
             self.assertFalse((Path(d) / 'missing.db').exists())
             with self.assertRaises(sqlite3.Error):
@@ -96,7 +116,8 @@ class ProductionTests(unittest.TestCase):
                                  'transcript_files': 12, 'remote_videos': 2253, 'remote_video_bytes': 7, 'inventory_sha256': 'h'},
                     'reviews': [{'discipline': 'Química', 'severity': 'grave', 'reasons': {'bad_timestamp': 2},
                                  'intervals': [[2091.0, 2121.0]], 'state': 'review', 'text': 'SECRET'}] * 30}
-        projected = observer.project({'pipeline': pipeline})
+        projected = observer.project({'pipeline': pipeline, 'last_validated_at': 123,
+                                      'units': {'materials': 'scheduled'}})
         text = json.dumps(projected)
         for leaked in ('fo_secret', 'SECRET', 'inventory_sha256', '"path"'):
             self.assertNotIn(leaked, text)
@@ -111,6 +132,8 @@ class ProductionTests(unittest.TestCase):
         with patch('production.fetch_local', return_value=projected):
             again = cache.get()
         self.assertEqual(again['pace'], projected['pace'])
+        self.assertEqual(again['transcription']['last_validated_at'], 123)
+        self.assertEqual(again['services']['materials'], 'scheduled')
         self.assertEqual(again['reviews'], projected['reviews'])
         self.assertLess(len(json.dumps(again)), 16384)
         self.assertIsNone(observer.project({})['pace']['eta_seconds'])
