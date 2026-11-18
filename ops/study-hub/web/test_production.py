@@ -100,7 +100,7 @@ class ProductionTests(unittest.TestCase):
             self.assertEqual(result['warning'], 'low_reserve')
             self.assertEqual(result['sample_observed_at'], 9990)
             self.assertNotIn('token', json.dumps(result))
-            receipt['observed_at'] = 6400
+            receipt['observed_at'] = 6400.25
             self.assertEqual(observer.project({'storage_receipt': receipt})['storage']['study_hub_bytes'], 42)
             for timestamp in (0, 10001, float('nan'), '9990'):
                 receipt['observed_at'] = timestamp
