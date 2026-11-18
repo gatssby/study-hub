@@ -138,8 +138,9 @@ def state(value):
 
 def storage_projection(raw):
     receipt = mapping(raw.get('storage_receipt'))
-    stamp = receipt.get('observed_at')
-    fresh = type(stamp) in (int, float) and math.isfinite(stamp) and 0 <= time.time() - stamp <= 900
+    stamp = count(receipt.get('observed_at'))
+    # Storage telemetry is sampled hourly; allow one interval plus 15 minutes.
+    fresh = stamp is not None and 0 <= time.time() - stamp <= 4500
     if not fresh:
         receipt = {}
     growth = receipt.get('growth_bytes_per_day')

@@ -21,6 +21,7 @@ import observer
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pipeline_telemetry  # noqa: E402  (pure reader; no FO producer imports)
+from storage_telemetry import storage_warning  # noqa: E402
 
 STATE = Path('/home/ubuntu/study-hub-state/federal-online')
 MAX_INPUT = 1024 * 1024
@@ -114,6 +115,10 @@ def collect_local(state=STATE):
     collect_pipeline(raw, state)
     usage = shutil.disk_usage(state)
     raw.update(disk_free=usage.free, disk_total=usage.total)
+    receipt = observer.mapping(raw.get('storage_receipt'))
+    reserve = observer.count(receipt.get('whisper_reserve_bytes'))
+    if reserve is not None:
+        receipt['warning'] = storage_warning(usage.free, reserve, observer.finite(receipt.get('growth_bytes_per_day')))
     return raw
 
 
