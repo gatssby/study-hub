@@ -2,6 +2,7 @@ import io
 import json
 import sqlite3
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -11,6 +12,17 @@ import production
 
 
 class ProductionTests(unittest.TestCase):
+    def test_optional_telemetry_timeout_preserves_core_observation(self):
+        raw = {'queue_scope': {'active': 4, 'ignored': 1},
+               'status': {'transcription_jobs': {'queued': 3}}}
+        with patch('production.OPTIONAL_TELEMETRY_TIMEOUT', .01), \
+             patch('production.pipeline_telemetry._queue', return_value=(0, 2, 0, {}, {}, [])), \
+             patch('production.pipeline_telemetry.build', side_effect=lambda *a, **k: time.sleep(1)):
+            production.collect_pipeline(raw, Path('.'))
+        self.assertEqual(raw['queue_scope'], {'active': 2, 'ignored': 3})
+        self.assertEqual(raw['status']['transcription_jobs']['queued'], 1)
+        self.assertEqual(raw['pipeline'], {})
+
     def test_materials_health_uses_service_result_before_timer(self):
         timer = {'ActiveState': 'active', 'UnitFileState': 'enabled'}
         for active, result, schedule, expected in [

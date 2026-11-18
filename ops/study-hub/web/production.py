@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import sqlite3
 import subprocess
 import sys
@@ -25,6 +26,7 @@ STATE = Path('/home/ubuntu/study-hub-state/federal-online')
 MAX_INPUT = 1024 * 1024
 MAX_PAYLOAD = 16384
 COLLECTION_TIMEOUT = 12
+OPTIONAL_TELEMETRY_TIMEOUT = 5
 
 
 def read_database(path):
@@ -109,18 +111,41 @@ def collect_local(state=STATE):
                 raw[key] = json.loads(body)
         except (OSError, ValueError):
             pass
+    collect_pipeline(raw, state)
+    usage = shutil.disk_usage(state)
+    raw.update(disk_free=usage.free, disk_total=usage.total)
+    return raw
+
+
+def collect_pipeline(raw, state):
+    # Only called in the single-threaded --collect child. Keep the essential
+    # dashboard available if historical artifact decoding outgrows its budget.
+    def deadline(_signum, _frame):
+        raise RuntimeError('optional telemetry deadline')
+
+    db = state / 'hub.sqlite3'
+    handler = signal.signal(signal.SIGALRM, deadline)
     try:
+        signal.setitimer(signal.ITIMER_REAL, OPTIONAL_TELEMETRY_TIMEOUT)
         raw['pipeline'] = pipeline_telemetry.build(state)
-        ignored = raw['pipeline']['transcription']['ignored_jobs']
+    except Exception:
+        raw['pipeline'] = {}  # unknown stays null; never fabricated
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, handler)
+    try:
+        if raw['pipeline']:
+            ignored = raw['pipeline']['transcription']['ignored_jobs']
+        else:
+            _, ignored, *_ = pipeline_telemetry._queue(db, None)
         scope = raw['queue_scope']
         # Ignored = queued/leased jobs of owner-excluded disciplines (preserved, not done).
         scope['active'], scope['ignored'] = scope['active'] - ignored, scope['ignored'] + ignored
         raw['status']['transcription_jobs']['queued'] -= ignored
     except Exception:
-        raw['pipeline'] = {}  # unknown stays null; never fabricated
-    usage = shutil.disk_usage(state)
-    raw.update(disk_free=usage.free, disk_total=usage.total)
-    return raw
+        # Without the exclusion count, don't label all queued jobs eligible.
+        raw['queue_scope'].update(active=None, ignored=None)
+        raw['status']['transcription_jobs']['queued'] = None
 
 
 def fetch_local():
