@@ -33,6 +33,8 @@ from .scheduler import EXCLUDABLE_DISCIPLINES, choose, discipline, discipline_ke
 from .transcription import AUTH_PHRASE, DEFAULT_AUTH_FILE, DEFAULT_PLATFORM_MARKER, TranscriptionQueue, qa_segments, classify_qa, QA_POLICY_VERSION
 
 RESERVE=4*1024**3
+REVIEW_ERROR_COOLDOWN_S=86400
+REVIEW_ERROR_MAX_ATTEMPTS=3
 PHASES=('downloading','hashing','probing','decoding','stitching','repetition_check','qa','publishing','finished')
 HEARTBEAT_INTERVAL_S=60
 MODEL_SHA256='64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2'
@@ -339,6 +341,9 @@ class Worker:
         self.c.execute('CREATE TABLE IF NOT EXISTS transcription_discipline_exclusions(discipline TEXT PRIMARY KEY,reason TEXT,created_at REAL)')
         # Observable phase telemetry; one row per job version, best effort.
         self.c.execute('CREATE TABLE IF NOT EXISTS transcription_job_phases(lesson_id TEXT,version INTEGER,phase TEXT,phase_started_at REAL,chunk_index INTEGER,chunk_total INTEGER,updated_at REAL,PRIMARY KEY(lesson_id,version))')
+        # One reassessment outcome per review job version; unchanged deterministic
+        # failures are never reprocessed, errors back off and stop after a limit.
+        self.c.execute('CREATE TABLE IF NOT EXISTS transcription_review_log(lesson_id TEXT,version INTEGER,input_sha256 TEXT,policy_version INTEGER,outcome TEXT,detail TEXT,attempts INTEGER NOT NULL DEFAULT 1,at REAL,PRIMARY KEY(lesson_id,version))')
         self.c.commit()
 
     def excluded_disciplines(self):
@@ -700,6 +705,46 @@ class Worker:
                 'input_sha256':artifact['reassessment']['input_sha256'],'artifact':str(path),
                 'warnings':len(qa['warnings']),'blockers':len(qa['blockers'])}
 
+    def review_pass(self,limit=2,now=None):
+        """Bounded evidence-only reassessment of pending reviews.
+
+        Caller holds transcription.lock (the run loop does). Never downloads,
+        decodes or touches the circuit breaker. A review whose saved bytes and
+        QA policy are unchanged since a blocking outcome is deterministic: skip
+        it. Errors back off for a day and stop after three attempts until the
+        input or policy changes. Excluded disciplines stay untouched.
+        """
+        now=time.time() if now is None else now
+        if limit<1:raise ValueError('invalid review budget')
+        excluded=self.excluded_disciplines()
+        rows=self.c.execute("SELECT j.lesson_id,j.version,l.subject,l.front,l.module FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version WHERE j.state='review' AND l.present=1 ORDER BY CAST(j.updated_at AS REAL),j.lesson_id").fetchall()
+        processed=[]
+        for row in rows:
+            if len(processed)>=limit:break
+            job=dict(row)
+            if discipline(job) in excluded:continue
+            path=self.cfg.state/'transcripts/review'/job['lesson_id']/f"v{job['version']}.json.gz"
+            try:
+                digest=hashlib.sha256(path.read_bytes()).hexdigest()
+            except OSError:digest=None
+            log=self.c.execute('SELECT * FROM transcription_review_log WHERE lesson_id=? AND version=?',(job['lesson_id'],job['version'])).fetchone()
+            unchanged=log is not None and log['input_sha256']==digest and log['policy_version']==QA_POLICY_VERSION
+            if unchanged:
+                if log['outcome']=='review':continue
+                if log['outcome']=='error' and (log['attempts']>=REVIEW_ERROR_MAX_ATTEMPTS or now-log['at']<REVIEW_ERROR_COOLDOWN_S):continue
+            detail=None
+            try:
+                outcome=self.reassess_review(job['lesson_id'])['state']
+            except Exception as exc:
+                outcome,detail='error',type(exc).__name__
+            attempts=(log['attempts'] if unchanged else 0)+1
+            with self.c:self.c.execute('INSERT OR REPLACE INTO transcription_review_log VALUES(?,?,?,?,?,?,?,?)',
+                                       (job['lesson_id'],job['version'],digest,QA_POLICY_VERSION,outcome,detail,attempts,now))
+            entry={'lesson_id':job['lesson_id'],'version':job['version'],'outcome':outcome}
+            if detail:entry['detail']=detail
+            processed.append(entry)
+        return {'processed':processed}
+
     def verify_repetitions(self,video,work,segments,qa,chunks):
         """Resolve isolated duplicate rows only with independent acoustic proof.
 
@@ -961,6 +1006,14 @@ def main(argv=None):
             result=worker.run_once(a.lesson_id);print(json.dumps(result),flush=True)
             if result['state']=='breaker_open':return 5
             if result['state']=='blocked':return 3
+            # Bounded evidence-only review automation between jobs; it must
+            # never destabilize the ASR loop, so systemic errors are contained.
+            if result['state'] in ('done','review','idle') and a.lesson_id is None:
+                try:
+                    passed=worker.review_pass()
+                    if passed['processed']:print(json.dumps({'state':'review_pass',**passed}),flush=True)
+                except Exception as exc:
+                    print(json.dumps({'state':'review_pass_error','error_type':type(exc).__name__}),flush=True)
             if not a.loop:return 0
             if result['state'] in ('idle','retry','failed','paused_storage'):time.sleep(60)
 
