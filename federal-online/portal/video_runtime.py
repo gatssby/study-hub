@@ -86,6 +86,34 @@ def discard_recoverable_partial(tmp_dir: Path, key: str, logger: core.Logger, re
     return removed
 
 
+def sweep_stale_partials(tmp_dir: Path, manifest: dict, logger, *, now=None, max_files=4, min_age_s=3600):
+    """Remove abandoned incomplete transfers of NON-current revisions only.
+
+    The collector never writes a non-current revision again, so its partial is
+    neither resumable nor evidence. Current-revision partials (resume/evidence),
+    complete originals (possibly the only copy of a superseded revision) and
+    unknown keys are always preserved. Fresh files may still have a writer.
+    """
+    now=time.time() if now is None else now
+    removed=[]
+    for partial in sorted(tmp_dir.glob('*.partial.mp4')):
+        if len(removed)>=max_files:break
+        key,_,version=partial.name[:-len('.partial.mp4')].rpartition('-')
+        item=manifest.get('items',{}).get(key)
+        if not key or not version or not item or item.get('revision')==version:continue
+        if partial.is_symlink() or not partial.is_file():continue
+        try:stat=partial.stat()
+        except OSError:continue
+        if now-stat.st_mtime<min_age_s:continue
+        try:
+            partial.unlink()
+            removed.append({'key':key,'revision':version,'bytes':stat.st_size})
+            logger.log(f"[sweep] partial obsoleto removido key={key} revision={version}")
+        except OSError as exc:
+            logger.log(f"[sweep] partial preservado key={key} erro={type(exc).__name__}")
+    return removed
+
+
 def rows_from_catalog():
     paths = sorted((STATE/'catalog').rglob('aulas_index*.json'))
     paths += sorted((STATE/'catalogs').rglob('aulas_index*.json'))
@@ -117,6 +145,7 @@ def main():
     remote={x['Path']:x for x in json.loads(remote_path.read_text())} if remote_path.exists() else {}
     old_by_stream={canonical_url(x.get('video_stream_url','')):x for x in old}
     log=core.Logger([])
+    swept=sweep_stale_partials(tmp,manifest,log)
     for row in rows_from_catalog():
         key=identity(row);version=revision(row);previous=manifest['items'].get(key,{})
         if previous.get('revision')==version and previous.get('status') in ('verified','existing_remote_verified'):continue
@@ -204,7 +233,7 @@ def main():
                 discard_recoverable_partial(tmp, key, log, revision=version)
             # A failed staged upload must not accumulate videos from other jobs.
             break
-    print(json.dumps({'video_states':{status:sum(x.get('status')==status for x in manifest['items'].values()) for status in ('verified','existing_remote_verified','unavailable','error')}}))
+    print(json.dumps({'stale_partials_removed':swept,'video_states':{status:sum(x.get('status')==status for x in manifest['items'].values()) for status in ('verified','existing_remote_verified','unavailable','error')}}))
 
 
 if __name__=='__main__':main()
