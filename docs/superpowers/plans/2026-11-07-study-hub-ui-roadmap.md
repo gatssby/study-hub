@@ -33,12 +33,17 @@ Comando: cd "$HOME/Workspace/Study Hub" && python3 ops/study-hub/fo_monitor.py -
 - [x] API agregada autenticada de monitoramento, separada das sete rotas FO/MCP; não expor URLs assinadas, nomes pessoais, PDFs brutos, dados privados de review ou segredos.
 - [x] Smoke no cliente real: normal, sem conexão, partial/incomplete, job que muda de estado, review fail-closed, privacidade.
 
-## M2 — Biblioteca e aula (P1)
+## M2 — Biblioteca e aula (MVP entregue em 20/11/2026)
 
-- [ ] Navegar curso → disciplina → frente → módulo → aula por ordem do portal; filtros e pesquisa.
-- [ ] Mostrar claramente disponível, não lançado, vídeo inacessível, fila, transcrevendo, validado e revisão, com motivo/cooldown/última verificação.
-- [ ] Página de aula com informações, transcrição validada e citável, timestamps, avisos QA v4 e relações com materiais oficiais. Reviews privados não ficam legíveis.
+- [x] Navegar curso → disciplina → módulo → aula no catálogo existente, com pesquisa sem distinção de acentos e filtro de disciplina.
+- [x] Distinguir validada, na fila, em processamento, em revisão, indisponível e ainda não lançada.
+- [x] Exibir metadados e segmentos com timestamps somente da revisão atual aprovada e com fonte vigente. Nenhuma transcrição privada de revisão é servida. Aulas legadas que só têm nomes derivados de caminhos privados aparecem com rótulos neutros.
+- [ ] Fora deste MVP: frente e ordem do portal, motivo/cooldown/última verificação, avisos QA e relações com materiais oficiais.
 - [ ] Incorporar reprodução/autorização de vídeo somente depois de definir contrato seguro para originais e URLs temporárias.
+
+Publicado em `study.gatssby.com.br` no release `library-mvp-PQlJ1e9c`. O mesmo Basic Auth e HTTPS protegem o frontend e os dois novos GETs do observador SQLite somente leitura: `/api/library` e `/api/lessons/<id>`. O painel existente permanece acessível.
+
+Aceite em produção (20/11/2026, 22:20 UTC): navegador autenticado navegou do painel pela biblioteca, selecionou curso, disciplina e módulo, pesquisou e abriu uma aula validada com 237 segmentos exibidos com timestamps. Catálogo: 3.060 aulas, 105 validadas na verificação pré-publicação. Aula em revisão retornou zero segmentos; rotas protegidas sem credencial retornaram 401; TLS válido. Suite focada: 46 testes Python, 23 frontend e build TypeScript/Vite aprovados. Observer, FO e n8n responderam; worker de transcrição e Anki mantiveram os mesmos PIDs, e os sete timers dos coletores permaneceram registrados.
 
 ## M3 — PDFs e pesquisa (P1)
 
@@ -125,4 +130,4 @@ Cinco melhorias incrementais entregues, testadas e implantadas na VPS sem novos 
 - Instrumentação de bytes/velocidade de download em tempo real ausente; série temporal de 7 dias pendente.
 - Reconciliação por ID entre fontes pending e deferrals históricos (14 vs 13) ainda aberta; snapshots SQLite históricos e janelas ASR de validação aguardam classificação/arquivamento.
 - Margem de disco estreita (~6,2 GiB livres vs reserva ~4,75 GiB); crescimento atual negativo, mas a retenção de temporários precisa de monitoramento contínuo.
-- M2 (Biblioteca/Aula), M3 (PDFs/Busca) e M4 (Anki) não iniciados; o dashboard atual é a Visão geral operacional read-only.
+- O MVP da Biblioteca/Aula (M2) foi publicado no mesmo host; M3 (PDFs/Busca) e M4 (Anki) seguem pendentes.

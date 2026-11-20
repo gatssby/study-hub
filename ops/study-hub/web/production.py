@@ -1,6 +1,6 @@
-"""Read-only VPS WSGI dashboard; run under the dedicated Gunicorn unit.
+"""Read-only VPS dashboard and library; run under the dedicated Gunicorn unit.
 
-No SSH, FO producer imports (only the pure discipline mapper), credentials, review artifacts, media or producer commands.
+No SSH, FO producers, credentials, review artifacts, media or producer commands.
 """
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ import observer
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pipeline_telemetry  # noqa: E402  (pure reader; no FO producer imports)
 from storage_telemetry import storage_warning  # noqa: E402
+import library  # noqa: E402  (after the FO discipline mapper sets the import path)
 
 STATE = Path('/home/ubuntu/study-hub-state/federal-online')
 MAX_INPUT = 1024 * 1024
@@ -193,11 +194,16 @@ class ProjectedCache(observer.SnapshotCache):
 
 
 class DashboardApplication:
-    def __init__(self, cache=None):
+    def __init__(self, cache=None, *, state=STATE):
         self.cache = cache if cache is not None else ProjectedCache()
+        self.state = state
 
     def __call__(self, environ, start_response):
-        code, payload = 200, None
+        code, body = 200, b''
+        limit = MAX_PAYLOAD
+        path = environ.get('PATH_INFO', '')
+        lesson_id = path.removeprefix('/api/lessons/') if path.startswith('/api/lessons/') else ''
+        is_detail = bool(library.LESSON_ID.fullmatch(lesson_id))
         origin = environ.get('HTTP_ORIGIN')
         if (environ.get('HTTP_HOST') != 'localhost'
                 or (origin is not None and origin != 'https://study.gatssby.com.br')
@@ -205,22 +211,30 @@ class DashboardApplication:
             code = 403
         elif environ.get('REQUEST_METHOD') != 'GET':
             code = 405
-        elif (environ.get('PATH_INFO') != '/api/dashboard'
-              or environ.get('RAW_URI', '/api/dashboard').split('?', 1)[0] != '/api/dashboard'):
+        elif ((path not in ('/api/dashboard', '/api/library') and not is_detail)
+              or environ.get('RAW_URI', path).split('?', 1)[0] != path):
             code = 404
         elif (environ.get('QUERY_STRING') or environ.get('CONTENT_LENGTH', '') not in ('', '0')
               or environ.get('HTTP_TRANSFER_ENCODING')):
             code = 400
         else:
             try:
-                payload = self.cache.get()
+                if path == '/api/dashboard':
+                    payload = self.cache.get()
+                else:
+                    limit = 2 * library.MAX_TRANSCRIPT_BYTES if is_detail else library.MAX_CATALOG_BYTES
+                    payload = library.read(self.state, lesson_id if is_detail else None)
+                    if payload is None:
+                        code = 404
+                if payload is not None:
+                    body = json.dumps(payload, allow_nan=False, ensure_ascii=False, separators=(',', ':')).encode()
+                    if len(body) > limit:
+                        code = 503
             except Exception:
                 code = 503
-        if payload is None:
-            payload = {'error': 'observation_unavailable' if code == 503 else HTTPStatus(code).phrase.lower().replace(' ', '_')}
-        body = json.dumps(payload, allow_nan=False, separators=(',', ':')).encode()
-        if len(body) > MAX_PAYLOAD:
-            code, body = 503, b'{"error":"observation_unavailable"}'
+        if code != 200:
+            error = 'observation_unavailable' if code == 503 else HTTPStatus(code).phrase.lower().replace(' ', '_')
+            body = json.dumps({'error': error}, separators=(',', ':')).encode()
         start_response(f'{code} {HTTPStatus(code).phrase}', [
             ('Content-Type', 'application/json; charset=utf-8'), ('Content-Length', str(len(body))),
             ('Cache-Control', 'private, no-store'), ('X-Content-Type-Options', 'nosniff')])

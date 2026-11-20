@@ -23,3 +23,41 @@ export async function loadSnapshot(): Promise<Snapshot> {
   if (!Number.isFinite(Date.parse(value.observed_at)) || !value.transcription || !value.pdf || !value.video || !value.storage || !value.services || !value.onedrive || !value.transfer) throw new Error('Observação inválida');
   return value;
 }
+
+export type LessonStatus = 'validated' | 'queued' | 'processing' | 'review' | 'unavailable' | 'not_released';
+
+export interface LessonMetadata {
+  id: string;
+  course: string;
+  subject: string;
+  module: string;
+  title: string;
+  status: LessonStatus;
+  duration_s: number | null;
+}
+
+export interface LessonDetail {
+  lesson: LessonMetadata;
+  segments: { start_s: number; end_s: number; text: string }[];
+}
+
+const libraryRequest = (path: string, signal: AbortSignal) => fetch(path, {
+  cache: 'no-store', signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
+});
+
+export async function loadLibrary(signal: AbortSignal): Promise<LessonMetadata[]> {
+  const response = await libraryRequest('/api/library', signal);
+  if (!response.ok) throw new Error('Biblioteca indisponível');
+  const { lessons } = await response.json();
+  if (!Array.isArray(lessons)) throw new Error('Catálogo inválido');
+  return lessons;
+}
+
+export async function loadLesson(id: string, signal: AbortSignal): Promise<LessonDetail | null> {
+  const response = await libraryRequest(`/api/lessons/${id}`, signal);
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error('Aula indisponível');
+  const detail: LessonDetail = await response.json();
+  if (detail.lesson?.id !== id || !Array.isArray(detail.segments)) throw new Error('Aula inválida');
+  return detail;
+}

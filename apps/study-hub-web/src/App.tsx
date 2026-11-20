@@ -3,6 +3,7 @@ import { BookOpen, Calendar, Cloud, GraduationCap, HardDrive, TrendingUp } from 
 import { loadSnapshot } from './api';
 import type { Count, Snapshot } from './api';
 import { MetricCard, Progress, Summary } from './components';
+import { Library } from './Library';
 
 const format = (n: Count | undefined) => typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n.toLocaleString('pt-BR') : 'Indisponível';
 const ratio = (n: Count | undefined, d: Count | undefined) => typeof n === 'number' && typeof d === 'number' && d > 0 ? n / d : null;
@@ -36,7 +37,18 @@ const since = (s: Count | undefined, nowMs: number) => {
   return `há ${Math.floor(diff / 86400)} d`;
 };
 
-export function App({ load = loadSnapshot, now = Date.now }: { load?: () => Promise<Snapshot>; now?: () => number }) {
+export function App(props: { load?: () => Promise<Snapshot>; now?: () => number }) {
+  const [route, setRoute] = useState(() => window.location.hash);
+  useEffect(() => {
+    const navigate = () => setRoute(window.location.hash);
+    window.addEventListener('hashchange', navigate);
+    return () => window.removeEventListener('hashchange', navigate);
+  }, []);
+  const lessonId = /^#\/aulas\/(fo_[0-9a-f]{16})$/.exec(route)?.[1];
+  return route === '#/biblioteca' || lessonId ? <Library lessonId={lessonId} /> : <Dashboard {...props} />;
+}
+
+function Dashboard({ load = loadSnapshot, now = Date.now }: { load?: () => Promise<Snapshot>; now?: () => number }) {
   const [data, setData] = useState<Snapshot | null>(null);
   const [error, setError] = useState(false);
   const [clock, setClock] = useState(now);
@@ -66,6 +78,8 @@ export function App({ load = loadSnapshot, now = Date.now }: { load?: () => Prom
   const stamp = data ? new Date(data.observed_at).toLocaleString('pt-BR') : null;
   return <main className="page"><div className="container">
     <header className="app-header"><div><h1>Seu Study Hub 👋</h1><p className="secondary subtitle">Federal Online • Visão geral • {stamp ? `Observado em ${stamp}` : 'Seu acervo de estudos'}</p></div><span className="badge"><GraduationCap size={14} /> Federal Online</span></header>
+    <nav className="study-nav" aria-label="Study Hub"><a className="study-link" href="#/biblioteca"><BookOpen size={14} /> Biblioteca</a>
+      <a className="study-link" href="#/painel" aria-current="page">Painel</a></nav>
     <p role="status" className="observation small secondary">{!data ? (error ? 'Sem conexão com o observador.' : 'Carregando observação…') : error ? 'Falha ao atualizar — exibindo a última observação.' : stale ? 'Observação desatualizada — confira o horário antes de usar os dados.' : 'Observação disponível • atualização a cada 20 segundos'}</p>
     {data?.storage.warning ? <p role="alert" className="observation small">{data.storage.warning === 'low_reserve' ? 'Espaço livre abaixo da reserva do Whisper.' : 'Crescimento recente esgota a reserva em até 7 dias.'}</p> : null}
     {data?.health?.alerts?.length ? <p role="alert" className="observation small">{data.health.alerts.map(code => healthLabels[code] ?? code).join(' · ')}</p> : null}
