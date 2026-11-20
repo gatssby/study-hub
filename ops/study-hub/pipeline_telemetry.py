@@ -9,11 +9,13 @@ from __future__ import annotations
 import gzip
 import json
 import math
+import os
 from pathlib import Path
 import sqlite3
 import statistics
 import sys
 import time
+import zlib
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'federal-online'))
 from fo_hub.disciplines import discipline_for  # noqa: E402
@@ -23,24 +25,27 @@ MIN_DURATION_S = 300
 MAX_ARTIFACT_BYTES = 8 * 1024 * 1024
 MAX_ARTIFACTS = 4000
 SYNC_STATES = ('verified', 'failed', 'absent', 'not_generated')
+CACHE_PATH = 'telemetry/pipeline-artifacts.json'
+CACHE_MAX_AGE_S = 4500  # hourly producer plus margin, like storage/health receipts
 
 
 def _number(value):
     return value if type(value) in (int, float) and math.isfinite(value) and value >= 0 else None
 
 
-def _artifacts(folder: Path):
-    if not folder.is_dir():
-        return
-    for path in sorted(folder.glob('*/v*.json.gz'))[:MAX_ARTIFACTS]:
-        if '.qa-v' in path.name or path.is_symlink() or path.stat().st_size > MAX_ARTIFACT_BYTES:
+def _artifact_paths(state):
+    for folder in ('private', 'review'):
+        root = state / 'transcripts' / folder
+        if not root.is_dir():
             continue
-        try:
-            body = json.loads(gzip.decompress(path.read_bytes()))
-        except (OSError, EOFError, ValueError):
-            continue
-        if isinstance(body, dict):
-            yield body
+        for path in sorted(root.glob('*/v*.json.gz'))[:MAX_ARTIFACTS]:
+            if '.qa-v' in path.name or path.is_symlink():
+                continue
+            yield folder, path
+
+
+def _cache_key(folder, path):
+    return f'{folder}/{path.parent.name}/{path.name}'
 
 
 def _summary(body):
@@ -49,6 +54,73 @@ def _summary(body):
             'elapsed': _number(body.get('elapsed_s')), 'created': _number(body.get('created_at')),
             'chunks': len(chunks), 'reused': sum(1 for c in chunks if isinstance(c, dict) and c.get('reused') is True),
             'blockers': (body.get('qa') or {}).get('blockers') if isinstance(body.get('qa'), dict) else None}
+
+
+def refresh_artifact_cache(state, *, now=None):
+    """Producer-side summary cache (hourly unit). Artifacts are immutable once
+    published; size+mtime identity lets readers skip gunzip of unchanged bytes.
+    The cache is private state; only aggregate projections are ever published.
+    """
+    now = time.time() if now is None else now
+    entries = {}
+    for folder, path in _artifact_paths(state):
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        if stat.st_size > MAX_ARTIFACT_BYTES:
+            continue
+        try:
+            body = json.loads(gzip.decompress(path.read_bytes()))
+        except (OSError, EOFError, ValueError, zlib.error):
+            continue
+        if isinstance(body, dict):
+            entries[_cache_key(folder, path)] = {'size': stat.st_size, 'mtime_ns': stat.st_mtime_ns,
+                                                 'summary': _summary(body)}
+    destination = state / 'telemetry'
+    destination.mkdir(mode=0o700, exist_ok=True)
+    payload = json.dumps({'observed_at': now, 'entries': entries}, allow_nan=False).encode()
+    temporary = destination / 'pipeline-artifacts.json.tmp'
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'wb') as stream:
+        stream.write(payload)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary, destination / 'pipeline-artifacts.json')
+    return len(entries)
+
+
+def _load_cache(state, now):
+    try:
+        data = json.loads((state / CACHE_PATH).read_bytes()[:16 * 1024 * 1024])
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict) or _number(data.get('observed_at')) is None or now - data['observed_at'] > CACHE_MAX_AGE_S:
+        return {}
+    entries = data.get('entries')
+    return entries if isinstance(entries, dict) else {}
+
+
+def _artifacts(state, now):
+    cache = _load_cache(state, now)
+    for folder, path in _artifact_paths(state):
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        if stat.st_size > MAX_ARTIFACT_BYTES:
+            continue
+        entry = cache.get(_cache_key(folder, path))
+        if (isinstance(entry, dict) and entry.get('size') == stat.st_size
+                and entry.get('mtime_ns') == stat.st_mtime_ns and isinstance(entry.get('summary'), dict)):
+            yield folder, entry['summary']
+            continue
+        try:
+            body = json.loads(gzip.decompress(path.read_bytes()))
+        except (OSError, EOFError, ValueError, zlib.error):
+            continue
+        if isinstance(body, dict):
+            yield folder, _summary(body)
 
 
 def _comparable(item):
@@ -99,8 +171,9 @@ def build(state: Path, *, now: float | None = None, excluded=None) -> dict:
     now = time.time() if now is None else now
     excluded = None if excluded is None else frozenset(excluded)
     remaining, ignored, unknown_duration, disciplines, states, excluded = _queue(state / 'hub.sqlite3', excluded)
-    approved = [_summary(b) for b in _artifacts(state / 'transcripts/private')]
-    reviewed = [_summary(b) for b in _artifacts(state / 'transcripts/review')]
+    approved, reviewed = [], []
+    for folder, summary in _artifacts(state, now):
+        (approved if folder == 'private' else reviewed).append(summary)
     ratios = [i['elapsed'] / i['duration'] for i in approved + reviewed if _comparable(i)]
     recent = [i for i in approved if i['created'] and now - 86400 <= i['created'] <= now]
     median = eta = low = high = None
@@ -173,4 +246,7 @@ def build(state: Path, *, now: float | None = None, excluded=None) -> dict:
 
 
 if __name__ == '__main__':
-    print(json.dumps(build(Path(sys.argv[1])), allow_nan=False))
+    if sys.argv[1:2] == ['--refresh-cache']:
+        print(json.dumps({'cached_artifacts': refresh_artifact_cache(Path(sys.argv[2]))}, allow_nan=False))
+    else:
+        print(json.dumps(build(Path(sys.argv[1])), allow_nan=False))

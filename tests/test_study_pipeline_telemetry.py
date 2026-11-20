@@ -121,3 +121,43 @@ def test_missing_reassessment_log_is_unknown_not_zero(tmp_path):
     result = module.build(make_state(tmp_path), now=100100, excluded=())
     assert result['reassessment'] is None
     assert result['review_counts']['total'] == 1
+
+
+def test_warm_artifact_cache_avoids_redecoding_unchanged_artifacts(tmp_path):
+    import os
+    state = make_state(tmp_path)
+    assert module.refresh_artifact_cache(state, now=100000) == 10
+    assert (state / 'telemetry/pipeline-artifacts.json').is_file()
+    for path in (state / 'transcripts').rglob('v*.json.gz'):
+        stat = path.stat()
+        # Same size and mtime, different bytes: only a cache hit can explain
+        # surviving summaries, because re-reading these bytes would fail.
+        path.write_bytes(b'x' * stat.st_size)
+        os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    result = module.build(state, now=100100, excluded=())
+    assert result['transcription']['comparable_samples'] == 8
+    assert result['review_counts'] == {'total': 1, 'grave': 1, 'leve': 0, 'desconhecida': 0}
+    assert 'corrupted' not in json.dumps(result)
+
+
+def test_changed_artifact_identity_is_reparsed_despite_warm_cache(tmp_path):
+    state = make_state(tmp_path)
+    module.refresh_artifact_cache(state, now=100000)
+    path = state / 'transcripts/review/r1/v1.json.gz'
+    body = {'lesson_id': 'r1', 'version': 1, 'duration_s': 1000, 'elapsed_s': 2600, 'created_at': 99000,
+            'chunks': [{'reused': False}, {'reused': False}, {'reused': False}],
+            'qa': {'blockers': []}}
+    path.write_bytes(gzip.compress(json.dumps(body).encode()))
+    result = module.build(state, now=100100, excluded=())
+    assert result['reviews'][0]['severity'] == 'leve'  # new content, not the cached grave summary
+    assert result['review_counts']['grave'] == 0 and result['review_counts']['leve'] == 1
+
+
+def test_stale_or_mismatched_cache_falls_back_to_full_parse(tmp_path):
+    state = make_state(tmp_path)
+    module.refresh_artifact_cache(state, now=100000)
+    for path in (state / 'transcripts').rglob('v*.json.gz'):
+        path.write_bytes(b'corrupted')
+    stale = module.build(state, now=100000 + module.CACHE_MAX_AGE_S + 1, excluded=())
+    assert stale['transcription']['comparable_samples'] == 0
+    assert stale['review_counts']['total'] == 0

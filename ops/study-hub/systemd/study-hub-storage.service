@@ -9,6 +9,7 @@ Group=ubuntu
 WorkingDirectory=/home/ubuntu/study-hub
 ExecStart=/usr/bin/python3 /home/ubuntu/study-hub/ops/study-hub/storage_telemetry.py --state-root /home/ubuntu/study-hub-state/federal-online
 ExecStart=/usr/bin/python3 /home/ubuntu/study-hub/ops/study-hub/health_telemetry.py --state-root /home/ubuntu/study-hub-state/federal-online
+ExecStart=/usr/bin/python3 /home/ubuntu/study-hub/ops/study-hub/pipeline_telemetry.py --refresh-cache /home/ubuntu/study-hub-state/federal-online
 Nice=19
 IOSchedulingClass=idle
 CPUQuota=10%
