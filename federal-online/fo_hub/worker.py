@@ -1002,6 +1002,13 @@ def main(argv=None):
         try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:print('transcription worker already owns lock',file=sys.stderr);return 4
         worker=Worker(cfg);worker.recover()
+        # One bounded evidence-only pass at startup too, so recovered reviews
+        # are reassessed without waiting for the next completed job.
+        try:
+            passed=worker.review_pass()
+            if passed['processed']:print(json.dumps({'state':'review_pass','startup':True,**passed}),flush=True)
+        except Exception as exc:
+            print(json.dumps({'state':'review_pass_error','error_type':type(exc).__name__}),flush=True)
         while True:
             result=worker.run_once(a.lesson_id);print(json.dumps(result),flush=True)
             if result['state']=='breaker_open':return 5
