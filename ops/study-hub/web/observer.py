@@ -183,6 +183,29 @@ def review_projection(item):
             'severity': item.get('severity') if item.get('severity') in ('grave', 'leve', 'desconhecida') else 'desconhecida',
             'reasons': reasons, 'intervals': intervals[:8], 'state': 'review'}
 
+HEALTH_ALERTS = frozenset(('transcription_failed', 'transcription_stopped', 'breaker_open',
+                           'transcription_stalled', 'transcription_not_progressing', 'materials_failed',
+                           'onedrive_stale', 'onedrive_sync_failed', 'low_reserve', 'growth_risk',
+                           'source_deferrals_persistent'))
+HEALTH_NUMBER_KEYS = ('phase_age_s', 'last_finished_age_s', 'onedrive_age_s')
+HEALTH_COUNT_KEYS = ('leased', 'eligible_queued', 'materials_fail_streak', 'active_deferrals', 'persistent_deferrals')
+
+def health_projection(raw):
+    receipt = mapping(raw.get('health_receipt'))
+    stamp = finite(receipt.get('observed_at'))
+    # Hourly producer; allow one interval plus 15 minutes, like storage telemetry.
+    fresh = stamp is not None and 0 <= time.time() - stamp <= 4500
+    if not fresh:
+        return {'observed_at': None, 'alerts': None, 'breaker_open': None,
+                **{key: None for key in HEALTH_NUMBER_KEYS + HEALTH_COUNT_KEYS}}
+    alerts = receipt.get('alerts')
+    alerts = [a for a in alerts if isinstance(a, str) and a in HEALTH_ALERTS][:12] if isinstance(alerts, list) else None
+    breaker = receipt.get('breaker_open')
+    return {'observed_at': stamp, 'alerts': alerts,
+            'breaker_open': breaker if type(breaker) is bool else None,
+            **{key: finite(receipt.get(key)) for key in HEALTH_NUMBER_KEYS},
+            **{key: count(receipt.get(key)) for key in HEALTH_COUNT_KEYS}}
+
 
 def project(raw):
     raw = mapping(raw)
@@ -226,6 +249,12 @@ def project(raw):
         'downloads': {key: count(mapping(pipeline.get('videos')).get(key)) for key in DOWNLOAD_KEYS},
         'reviews': [review_projection(item) for item in
                     (pipeline.get('reviews') if isinstance(pipeline.get('reviews'), list) else [])[:20]],
+        'review_counts': {key: count(mapping(pipeline.get('review_counts')).get(key))
+                          for key in ('total', 'grave', 'leve', 'desconhecida')},
+        'reassessment': ({key: count(mapping(pipeline.get('reassessment')).get(key))
+                          for key in ('validated', 'review', 'error')}
+                         if isinstance(pipeline.get('reassessment'), dict) else None),
+        'health': health_projection(raw),
         'transfer': {'state': 'not_instrumented'},
     }
 

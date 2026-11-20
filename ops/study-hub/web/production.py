@@ -104,7 +104,8 @@ def collect_local(state=STATE):
     raw['units']['materials'] = materials_state(by_id.get(materials_unit, {}),
                                                by_id.get('study-hub-fo-materials.timer', {}))
     for key, receipt in (('onedrive_receipt', state / 'onedrive-status.json'),
-                         ('storage_receipt', state / 'telemetry/storage.json')):
+                         ('storage_receipt', state / 'telemetry/storage.json'),
+                         ('health_receipt', state / 'telemetry/health.json')):
         try:
             with receipt.open('rb') as handle:
                 body = handle.read(65537)
@@ -182,8 +183,10 @@ class ProjectedCache(observer.SnapshotCache):
                 'last_validated_at': p['transcription'].get('last_validated_at'),
                 'queue_scope': p['queue_scope'], 'units': p['services'],
                 'storage_receipt': {**p['storage'], 'observed_at': p['storage']['sample_observed_at']},
+                'health_receipt': p['health'],
                 'onedrive_receipt': p['onedrive'],
                 'pipeline': {'transcription': p['pace'], 'videos': p['downloads'], 'reviews': p['reviews'],
+                             'review_counts': p['review_counts'], 'reassessment': p['reassessment'],
                              'onedrive': {**p['onedrive'], 'updated_at': p['onedrive']['last_observed_at']}},
                 'available_sources': p['video']['available_sources'],
                 'disk_free': p['storage']['free_bytes'], 'disk_total': p['storage']['total_bytes']}

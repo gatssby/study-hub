@@ -98,3 +98,26 @@ def test_downloads_and_reviews_are_scalar_and_never_leak_text_or_ids(tmp_path):
     assert result['onedrive']['transcript_sync'] == 'failed'
     assert result['reviews'] == [{'discipline': 'Química', 'severity': 'grave', 'reasons': {'ngram_repetition': 1},
                                   'intervals': [[5.0, 9.0]], 'state': 'review'}]
+
+
+def test_review_severity_totals_and_reassessment_outcomes_are_aggregate(tmp_path):
+    state = make_state(tmp_path)
+    db = sqlite3.connect(state / 'hub.sqlite3')
+    db.execute('CREATE TABLE transcription_review_log(lesson_id TEXT, version INTEGER, input_sha256 TEXT,'
+               ' policy_version INTEGER, outcome TEXT, detail TEXT, attempts INTEGER, at REAL,'
+               ' PRIMARY KEY(lesson_id, version))')
+    db.executemany('INSERT INTO transcription_review_log VALUES(?,?,?,?,?,?,?,?)', [
+        ('r1', 1, 'a', 4, 'review', None, 1, 1), ('x1', 1, 'b', 4, 'validated', None, 1, 1),
+        ('x2', 1, 'c', 4, 'error', 'ValueError', 3, 1), ('x3', 1, 'd', 4, 'already_validated', None, 1, 1)])
+    db.commit(); db.close()
+    result = module.build(state, now=100100, excluded=())
+    assert result['review_counts'] == {'total': 1, 'grave': 1, 'leve': 0, 'desconhecida': 0}
+    assert result['reassessment'] == {'validated': 1, 'review': 1, 'error': 1}
+    text = json.dumps(result)
+    assert 'x1' not in text and 'x2' not in text and 'already_validated' not in text
+
+
+def test_missing_reassessment_log_is_unknown_not_zero(tmp_path):
+    result = module.build(make_state(tmp_path), now=100100, excluded=())
+    assert result['reassessment'] is None
+    assert result['review_counts']['total'] == 1

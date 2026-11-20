@@ -12,6 +12,9 @@ export interface Snapshot {
   pace?: Partial<Record<'comparable_samples' | 'median_processing_per_audio' | 'remaining_active_audio_s' | 'unknown_duration_jobs' | 'ignored_jobs' | 'eta_seconds' | 'eta_low_seconds' | 'eta_high_seconds' | 'completed_24h' | 'audio_24h_s', Count>>;
   downloads?: { verified: Count; error: Count; unavailable: Count; other: Count; verified_bytes: Count };
   reviews?: { discipline: string; severity: string; reasons: Record<string, number>; intervals: number[][]; state: string }[];
+  review_counts?: { total: Count; grave: Count; leve: Count; desconhecida: Count };
+  reassessment?: { validated: Count; review: Count; error: Count } | null;
+  health?: { observed_at: number | null; alerts: string[] | null; breaker_open?: boolean | null; leased?: Count; phase_age_s?: Count; last_finished_age_s?: Count; eligible_queued?: Count; materials_fail_streak?: Count; onedrive_age_s?: Count; active_deferrals?: Count; persistent_deferrals?: Count };
 }
 export async function loadSnapshot(): Promise<Snapshot> {
   const response = await fetch('/api/dashboard', { cache: 'no-store', signal: AbortSignal.timeout(30000) });

@@ -124,6 +124,24 @@ def build(state: Path, *, now: float | None = None, excluded=None) -> dict:
         reviews.append({'discipline': disciplines.get(item['lesson_id'], 'Outros'),
                         'severity': 'grave' if kinds else ('desconhecida' if blockers is None else 'leve'),
                         'reasons': kinds, 'intervals': intervals, 'state': 'review'})
+    # Aggregate over ALL current reviews, not the truncated display list.
+    review_counts = {'total': len(reviews),
+                     **{level: sum(1 for r in reviews if r['severity'] == level)
+                        for level in ('grave', 'leve', 'desconhecida')}}
+    reassessment = None
+    try:
+        connection = sqlite3.connect(f'file:{state / "hub.sqlite3"}?mode=ro', uri=True, timeout=.5)
+        try:
+            connection.execute('PRAGMA query_only=ON')
+            if connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='transcription_review_log'").fetchone():
+                reassessment = {k: 0 for k in ('validated', 'review', 'error')}
+                for outcome, n in connection.execute('SELECT outcome, COUNT(*) FROM transcription_review_log GROUP BY outcome'):
+                    if outcome in reassessment:
+                        reassessment[outcome] += n
+        finally:
+            connection.close()
+    except sqlite3.Error:
+        pass
     videos = {'verified': 0, 'error': 0, 'unavailable': 0, 'other': 0, 'verified_bytes': 0}
     try:
         items = json.loads((state / 'videos.json').read_bytes()[:16 * 1024 * 1024]).get('items', {})
@@ -150,7 +168,8 @@ def build(state: Path, *, now: float | None = None, excluded=None) -> dict:
                               'remaining_active_audio_s': round(remaining), 'unknown_duration_jobs': unknown_duration,
                               'ignored_jobs': ignored, 'excluded_disciplines': excluded, 'eta_seconds': eta, 'eta_low_seconds': low, 'eta_high_seconds': high,
                               'completed_24h': len(recent), 'audio_24h_s': round(sum(i['duration'] or 0 for i in recent))},
-            'videos': videos, 'onedrive': onedrive, 'reviews': reviews[:20]}
+            'videos': videos, 'onedrive': onedrive, 'reviews': reviews[:20],
+            'review_counts': review_counts, 'reassessment': reassessment}
 
 
 if __name__ == '__main__':

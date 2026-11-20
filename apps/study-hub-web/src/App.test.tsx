@@ -101,9 +101,27 @@ describe('Dashboard read-only', () => {
   });
   it('shows the last approval and distinguishes a scheduled collector from a running one', async () => {
     const last = 1794074400;
-    render(<App load={async () => ({ ...snapshot, transcription: { ...snapshot.transcription, last_validated_at: last }, services: { ...snapshot.services, materials: 'scheduled' } })} />);
-    await screen.findByText(`Última transcrição aprovada: ${new Date(last * 1000).toLocaleString('pt-BR')}`);
+    render(<App load={async () => ({ ...snapshot, transcription: { ...snapshot.transcription, last_validated_at: last }, services: { ...snapshot.services, materials: 'scheduled' } })} now={() => Date.parse('2026-11-07T18:30:00Z')} />);
+    await screen.findByText((content) => content.startsWith(`Última transcrição aprovada: ${new Date(last * 1000).toLocaleString('pt-BR')}`));
+    expect(screen.getByText(/há \d+ (min|h|d)/)).toBeTruthy();
     expect(screen.getByText('Materiais: agendado')).toBeTruthy();
+  });
+  it('surfaces operational health alerts prominently and review severity totals', async () => {
+    render(<App load={async () => ({ ...snapshot,
+      health: { observed_at: 1794074400, alerts: ['breaker_open', 'onedrive_stale'], breaker_open: true, leased: 0, phase_age_s: null, last_finished_age_s: 90000, eligible_queued: 2700, materials_fail_streak: 0, onedrive_age_s: 12000, active_deferrals: 13, persistent_deferrals: 0 },
+      review_counts: { total: 46, grave: 45, leve: 0, desconhecida: 1 },
+      reassessment: { validated: 2, review: 40, error: 1 } })} />);
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/Disjuntor da transcrição aberto/);
+    expect(alert.textContent).toMatch(/OneDrive desatualizada/);
+    await userEvent.click(screen.getByRole('button', { name: 'Detalhes de Transcrições' }));
+    expect(screen.getByText(/45 graves/)).toBeTruthy();
+    expect(screen.getByText(/Reavaliação automática: 2 publicadas · 40 mantidas · 1 erro/)).toBeTruthy();
+  });
+  it('does not invent health alerts when the health snapshot is unknown', async () => {
+    render(<App load={async () => ({ ...snapshot, health: { observed_at: null, alerts: null } })} />);
+    await screen.findByText('Transcrevendo');
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });
 it('does not render non-finite or out-of-range progress as a real percentage', () => {

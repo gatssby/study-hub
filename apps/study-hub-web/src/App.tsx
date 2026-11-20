@@ -14,6 +14,27 @@ const serviceStates: Record<string, string> = { active: 'ativo', inactive: 'inat
 const syncStates: Record<string, string> = { verified: 'verificado', failed: 'falhou', absent: 'ausente', not_generated: 'não gerado' };
 const syncState = (value: string | undefined) => syncStates[value ?? ''] ?? 'Indisponível';
 const serviceState = (value: string | undefined) => value ? serviceStates[value] ?? 'Indisponível' : 'Indisponível';
+const healthLabels: Record<string, string> = {
+  transcription_failed: 'Serviço de transcrição falhou.',
+  transcription_stopped: 'Transcrição parada (gate ou preflight).',
+  breaker_open: 'Disjuntor da transcrição aberto.',
+  transcription_stalled: 'Aula em processamento sem progresso há mais de 2 h.',
+  transcription_not_progressing: 'Fila elegível sem processamento há mais de 6 h.',
+  materials_failed: 'Coletor de materiais falhou repetidamente.',
+  onedrive_stale: 'Sincronização OneDrive desatualizada.',
+  onedrive_sync_failed: 'Verificação OneDrive falhou.',
+  low_reserve: 'Espaço livre abaixo da reserva do Whisper.',
+  growth_risk: 'Crescimento recente esgota a reserva em até 7 dias.',
+  source_deferrals_persistent: 'Fontes de vídeo adiadas há mais de 7 dias.',
+};
+const since = (s: Count | undefined, nowMs: number) => {
+  if (typeof s !== 'number' || !Number.isFinite(s) || s < 0) return null;
+  const diff = Math.max(0, nowMs / 1000 - s);
+  if (diff < 60) return 'agora';
+  if (diff < 3600) return `há ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `há ${Math.floor(diff / 3600)} h`;
+  return `há ${Math.floor(diff / 86400)} d`;
+};
 
 export function App({ load = loadSnapshot, now = Date.now }: { load?: () => Promise<Snapshot>; now?: () => number }) {
   const [data, setData] = useState<Snapshot | null>(null);
@@ -47,6 +68,7 @@ export function App({ load = loadSnapshot, now = Date.now }: { load?: () => Prom
     <header className="app-header"><div><h1>Seu Study Hub 👋</h1><p className="secondary subtitle">Federal Online • Visão geral • {stamp ? `Observado em ${stamp}` : 'Seu acervo de estudos'}</p></div><span className="badge"><GraduationCap size={14} /> Federal Online</span></header>
     <p role="status" className="observation small secondary">{!data ? (error ? 'Sem conexão com o observador.' : 'Carregando observação…') : error ? 'Falha ao atualizar — exibindo a última observação.' : stale ? 'Observação desatualizada — confira o horário antes de usar os dados.' : 'Observação disponível • atualização a cada 20 segundos'}</p>
     {data?.storage.warning ? <p role="alert" className="observation small">{data.storage.warning === 'low_reserve' ? 'Espaço livre abaixo da reserva do Whisper.' : 'Crescimento recente esgota a reserva em até 7 dias.'}</p> : null}
+    {data?.health?.alerts?.length ? <p role="alert" className="observation small">{data.health.alerts.map(code => healthLabels[code] ?? code).join(' · ')}</p> : null}
     <section className="summaries" aria-label="Resumo da transcrição">
       <Summary label="Transcrevendo" value={validProgress ? `${format(Math.round(current * 1000) / 10)}%` : 'Indisponível'} note={<Progress label="Aula em transcrição" value={current ?? null} small />} icon={<Calendar className="blue" />} />
       <Summary label="Concluídas" value={format(t?.done)} note="Transcrições aprovadas" icon={<TrendingUp className="green" />} />
@@ -57,7 +79,9 @@ export function App({ load = loadSnapshot, now = Date.now }: { load?: () => Prom
       <div className="metrics">
         <MetricCard title="Transcrições" badge="QA ativa" tone="tile-blue" icon={<BookOpen />} detail={<><p>{format(t?.processing)} aula(s) em processamento</p><p>{format(t?.review)} revisão(ões) privada(s). Nenhum texto em revisão é exposto.</p><p>O progresso da aula é o último checkpoint durável, não tempo estimado.</p><p>Ativos: {format(data?.queue_scope?.active)} · Arquivados: {format(data?.queue_scope?.archived)} · Ignorados: {format(data?.queue_scope?.ignored)}</p><p>Ritmo: mediana do tempo total por minuto de áudio em {format(p?.comparable_samples)} aulas comparáveis (exclui pilotos &lt;5 min e reuso de cache). Faixa = quartis 25–75%. Inglês/Espanhol fora da previsão ({format(p?.ignored_jobs)} jobs).</p>{p?.unknown_duration_jobs ? <p>{format(p.unknown_duration_jobs)} job(s) sem duração no catálogo fora da estimativa.</p> : null}{reviews.length ? <ul className="micro">{reviews.map((r, i) => <li key={i}>{r.discipline} · {r.severity} · {Object.entries(r.reasons).map(([k, v]) => `${k} ×${v}`).join(', ') || 'sem motivo classificado'}{r.intervals.length ? ` · ${r.intervals.map(([a, b]) => `${clockTime(a)}–${clockTime(b)}`).join(', ')}` : ''}</li>)}</ul> : null}</>}>
           <div className="facts"><p>{typeof p?.median_processing_per_audio === 'number' ? `${p.median_processing_per_audio.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} min/min` : 'Ritmo indisponível'}</p><p>{eta === null ? 'Sem amostra suficiente' : `~${eta} dias`}</p><p>{days(p?.eta_low_seconds) !== null && days(p?.eta_high_seconds) !== null && eta !== null ? `${days(p?.eta_low_seconds)}–${days(p?.eta_high_seconds)} dias` : '—'}</p><p>{format(p?.completed_24h)} aulas em 24 h</p></div>
-          <p className="micro muted">Última transcrição aprovada: {typeof t?.last_validated_at === 'number' ? new Date(t.last_validated_at * 1000).toLocaleString('pt-BR') : 'Indisponível'}</p>
+          <p className="micro muted">Última transcrição aprovada: {typeof t?.last_validated_at === 'number' ? `${new Date(t.last_validated_at * 1000).toLocaleString('pt-BR')}${since(t.last_validated_at, clock) ? ` (${since(t.last_validated_at, clock)})` : ''}` : 'Indisponível'}</p>
+          {data?.review_counts ? <p className="micro muted">Revisões por gravidade: {format(data.review_counts.grave)} graves · {format(data.review_counts.leve)} leves · {format(data.review_counts.desconhecida)} indefinidas · total {format(data.review_counts.total)}.</p> : null}
+          {data?.reassessment ? <p className="micro muted">Reavaliação automática: {format(data.reassessment.validated)} publicadas · {format(data.reassessment.review)} mantidas · {format(data.reassessment.error)} erro(s).</p> : null}
           <div className="facts"><p>{format(t?.done)} aprovadas</p><p>{format(total)} no acervo ativo</p><p>{format(t?.queued)} na fila</p><p>{format(t?.review)} em revisão</p></div><div className="progress-caption small"><span>Transcrições aprovadas</span><span>{total ? `${format(Math.round((t!.done! / total) * 1000) / 10)}%` : 'Indisponível'}</span></div><Progress label="Transcrições aprovadas" value={ratio(t?.done, total)} /><div className="micro muted split"><span>Acervo ativo</span><span>Versões atuais</span></div>
         </MetricCard>
         <MetricCard title="PDFs" badge="Privacidade" tone="tile-green" icon={<BookOpen />} detail={<><p>{format(data?.pdf.blocked)} páginas bloqueadas</p><p>OCR em revisão e originais privados não são disponibilizados. Liberação não certifica a integridade acadêmica de fórmulas e figuras.</p></>}>
@@ -74,7 +98,7 @@ export function App({ load = loadSnapshot, now = Date.now }: { load?: () => Prom
         </MetricCard>
       </div>
     </section>
-    <details className="card services"><summary>Detalhes avançados</summary><h2 id="services-title">Serviços observados</h2><div className="service-list">{Object.entries(labels).map(([key, label]) => <span className="badge" key={key}>{label}: {serviceState(data?.services[key])}</span>)}</div><p className="micro muted">Saúde observacional dos serviços FO; timer ativo não é prova de última execução bem-sucedida.</p></details>
+    <details className="card services"><summary>Detalhes avançados</summary><h2 id="services-title">Serviços observados</h2><div className="service-list">{Object.entries(labels).map(([key, label]) => <span className="badge" key={key}>{label}: {serviceState(data?.services[key])}</span>)}</div><p className="micro muted">Saúde operacional: {typeof data?.health?.observed_at === 'number' ? new Date(data.health.observed_at * 1000).toLocaleString('pt-BR') : 'indisponível'}</p><p className="micro muted">Saúde observacional dos serviços FO; timer ativo não é prova de última execução bem-sucedida.</p></details>
     <footer className="micro muted">Adaptado de <a href="https://www.figma.com/community/file/1531598093643920564/student-dashboard-lms-application" target="_blank" rel="noreferrer">Student Dashboard LMS Application — Sakshi Parashar</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>. Conteúdo e integração modificados para Study Hub.</footer>
   </div></main>;
 }

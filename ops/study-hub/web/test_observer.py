@@ -9,6 +9,30 @@ import observer
 
 
 class ProjectionTests(unittest.TestCase):
+    def test_health_projection_is_allowlisted_fresh_and_null_when_unknown(self):
+        from unittest.mock import patch
+        receipt = {'observed_at': 10000, 'alerts': ['breaker_open', 'evil_code', 3],
+                   'breaker_open': True, 'leased': 1, 'phase_age_s': 7300.5, 'last_finished_age_s': 60,
+                   'eligible_queued': 2700, 'materials_fail_streak': 0, 'onedrive_age_s': 600,
+                   'active_deferrals': 13, 'persistent_deferrals': 0,
+                   'transcription_service': 'active', 'private': 'token'}
+        with patch('observer.time.time', return_value=10000):
+            health = observer.project({'health_receipt': receipt})['health']
+        self.assertEqual(health['alerts'], ['breaker_open'])
+        self.assertIs(health['breaker_open'], True)
+        self.assertEqual(health['phase_age_s'], 7300.5)
+        self.assertEqual(health['eligible_queued'], 2700)
+        self.assertNotIn('token', json.dumps(health))
+        self.assertNotIn('transcription_service', health)
+        with patch('observer.time.time', return_value=20000):
+            stale = observer.project({'health_receipt': receipt})['health']
+        self.assertIsNone(stale['alerts'])
+        self.assertIsNone(stale['observed_at'])
+        self.assertIsNone(stale['breaker_open'])
+        missing = observer.project({})['health']
+        self.assertIsNone(missing['alerts'])
+        self.assertIsNone(missing['observed_at'])
+
     def test_missing_is_null_and_private_nested_data_cannot_escape(self):
         secret = 'https://private.invalid/token?secret=abc'
         raw = {'status': {'materials_total': {'url': secret}}, 'active': [{'title': secret}],

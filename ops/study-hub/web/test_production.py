@@ -5,7 +5,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import observer
 import production
@@ -119,6 +119,50 @@ class ProductionTests(unittest.TestCase):
         self.assertNotIn('private-token', json.dumps(projected))
         self.assertIsNone(projected['transcription']['eta_seconds'])
 
+
+    def test_health_receipt_is_collected_and_survives_the_cache_envelope(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as d:
+            state = Path(d)
+            (state / 'telemetry').mkdir()
+            receipt = {'observed_at': time.time(), 'alerts': ['onedrive_stale'], 'breaker_open': False,
+                       'leased': 1, 'phase_age_s': 60.0, 'last_finished_age_s': 3600.0, 'eligible_queued': 2700,
+                       'materials_fail_streak': 0, 'onedrive_age_s': 12000.0, 'active_deferrals': 13,
+                       'persistent_deferrals': 0}
+            (state / 'telemetry/health.json').write_text(json.dumps(receipt))
+            response = Mock()
+            response.read.return_value = b'{}'
+            response.__enter__ = Mock(return_value=response)
+            response.__exit__ = Mock(return_value=False)
+            with patch('production.urlopen', return_value=response), \
+                 patch('production.read_database', return_value={'queue_scope': {'active': 0, 'archived': 0, 'ignored': 0},
+                        'active': [], 'available_sources': 0, 'current_jobs': {}, 'last_validated_at': None}), \
+                 patch('production.subprocess.run', return_value=SimpleNamespace(stdout='')), \
+                 patch('production.collect_pipeline'), \
+                 patch('production.shutil.disk_usage', return_value=SimpleNamespace(free=10, total=20)):
+                raw = production.collect_local(state)
+            self.assertEqual(raw['health_receipt']['alerts'], ['onedrive_stale'])
+            projected = observer.project(raw)
+            self.assertEqual(projected['health']['alerts'], ['onedrive_stale'])
+            cache = production.ProjectedCache()
+            with patch('production.fetch_local', return_value=projected):
+                again = cache.get()
+            self.assertEqual(again['health'], projected['health'])
+            self.assertLess(len(json.dumps(again)), 16384)
+
+    def test_review_aggregates_survive_the_cache_envelope(self):
+        pipeline = {'transcription': {}, 'review_counts': {'total': 46, 'grave': 45, 'leve': 0, 'desconhecida': 1},
+                    'reassessment': {'validated': 2, 'review': 40, 'error': 1}}
+        projected = observer.project({'pipeline': pipeline})
+        self.assertEqual(projected['review_counts'], pipeline['review_counts'])
+        self.assertEqual(projected['reassessment'], pipeline['reassessment'])
+        cache = production.ProjectedCache()
+        with patch('production.fetch_local', return_value=projected):
+            again = cache.get()
+        self.assertEqual(again['review_counts'], pipeline['review_counts'])
+        self.assertEqual(again['reassessment'], pipeline['reassessment'])
+        self.assertIsNone(observer.project({})['reassessment'])
+        self.assertIsNone(observer.project({})['review_counts']['total'])
 
     def test_pipeline_projection_is_allowlisted_and_survives_cache_envelope(self):
         pipeline = {'observed_at': 1, 'transcription': {'comparable_samples': 15, 'median_processing_per_audio': 2.6,
