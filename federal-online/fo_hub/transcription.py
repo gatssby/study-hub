@@ -174,7 +174,7 @@ def qa_segments(segments: Sequence[Mapping[str, Any]], duration_s: float | None 
             "segments": [dict(s) for s in segments]}
 
 
-QA_POLICY_VERSION = 4
+QA_POLICY_VERSION = 5
 
 
 def classify_qa(qa: dict, segments: Sequence[Mapping[str, Any]], duration_s: float) -> dict:

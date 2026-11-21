@@ -263,6 +263,56 @@ def reconcile_silent_gaps(qa,segments,chunks,duration):
     qa['flags']=retained
 
 
+def normalize_final_padding(chunks,segments,duration):
+    """Correct only the synthetic final-segment timestamp overrun, bound to evidence.
+
+    whisper.cpp pads the last decoder row of the final chunk to ~start+30s, so its
+    end exceeds the measured audio duration (ffprobe ``duration_s``) even though the
+    speech starts within the audio. This is a deterministic formatting defect, not
+    spoken content: the text is untouched and the end is clamped to the proven audio
+    bound. Returns corrected copies plus a correction record, or the originals and
+    None when no such defect exists or the correction cannot be verified. Original
+    evidence is never mutated; callers verify identity on the originals first.
+    """
+    from copy import deepcopy
+    from .stitching import stitch_chunks
+    if not chunks or not segments:return chunks,segments,None
+    ci=len(chunks)-1;chunk=chunks[ci]
+    offset,length=float(chunk['offset_s']),float(chunk['duration_s'])
+    bound=offset+length;local=chunk['segments']
+    if not local:return chunks,segments,None
+    li=len(local)-1;raw_end=float(local[li]['end']);final_end=float(segments[-1]['end'])
+    if not (raw_end>bound+1 and final_end>duration+1 and float(segments[-1]['start'])<=duration
+            and abs(bound-duration)<=0.01 and raw_end>=final_end-0.01):
+        return chunks,segments,None
+    new_chunks=deepcopy(chunks);new_segments=deepcopy(segments)
+    new_chunks[ci]['segments'][li]['end']=bound
+    new_segments[-1]['end']=duration
+    if stitch_chunks(new_chunks)['segments']!=new_segments:
+        return chunks,segments,None  # fail closed: correction not independently consistent
+    correction={'kind':'timestamp_correction','idx':len(segments)-1,'chunk_idx':ci,'local_idx':li,
+                'raw_end':raw_end,'corrected_end':duration,'bound':bound,'source':'final_decoder_padding'}
+    return new_chunks,new_segments,correction
+
+
+def resolved_timestamp_flags(qa,correction):
+    """Split off the bad_timestamp flags the final-padding correction resolves.
+
+    Only the final segment's flags (stitched global idx and decoder local idx) are
+    resolved; every other flag — including earlier timestamp defects and all
+    repetition/duplicate flags — is retained untouched.
+    """
+    resolved,kept=[],[]
+    for flag in qa['flags']:
+        if flag['kind']=='bad_timestamp' and (
+            (flag.get('origin')=='decoder' and flag.get('chunk_idx')==correction['chunk_idx']
+             and flag.get('idx')==correction['local_idx'])
+            or (flag.get('origin')!='decoder' and flag.get('idx')==correction['idx'])):
+            resolved.append(flag)
+        else:kept.append(flag)
+    return kept,resolved
+
+
 def preflight(config,runner=subprocess.run):
     """Inspect files, SQLite, versions and CLI capabilities, never open media.
 
@@ -668,7 +718,15 @@ class Worker:
             covered=max(covered,offset+length)
         if abs(covered-duration)>0.01:raise ValueError('incomplete saved chunk tail')
         if stitch_chunks(chunks)['segments']!=segments:raise ValueError('saved stitching mismatch')
+        # Identity verified on the intact originals above. Apply only the
+        # evidence-bound final-timestamp correction (policy v5); text is unchanged.
+        chunks,segments,correction=normalize_final_padding(chunks,segments,duration)
         qa=deepcopy(artifact['qa'])
+        if correction:
+            qa['flags'],resolved=resolved_timestamp_flags(qa,correction)
+            qa.setdefault('observations',[]).append({**correction,'resolved_flags':resolved,
+                                                     'policy_version':QA_POLICY_VERSION})
+            artifact['chunks']=chunks;artifact['segments']=segments
         # Recompute structural checks while retaining all original detector
         # evidence and confirmed acoustic observations (including measured silence).
         fresh=qa_segments(segments,duration)

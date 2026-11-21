@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from fo_hub.transcription import qa_segments
+from fo_hub.transcription import qa_segments, QA_POLICY_VERSION
 
 
 def assess(segments, duration=600, extra=()):
@@ -125,5 +125,5 @@ def test_pipeline_publishes_small_overlap_with_persisted_warnings(tmp_path, subj
     public = json.loads((tmp_path/'transcripts/generated_v2'/lesson['lesson_id']/'v1.json').read_text())
     assert set(public) == {'lesson_id', 'version', 'corpus', 'qa', 'segments'}
     private = json.loads(gzip.decompress((tmp_path/'transcripts/private'/lesson['lesson_id']/'v1.json.gz').read_bytes()))
-    assert private['qa_policy_version'] == 4
+    assert private['qa_policy_version'] == QA_POLICY_VERSION
     assert private['segments'] == public['segments']
