@@ -128,6 +128,16 @@ class FOStore:
                          r.get("video_url"), dur, ver, at, at))
                 else:
                     ver = old["version"]
+                    # Non-authoritative syncs (catalog observations, remote fallback)
+                    # must not erase verified academic metadata with an empty field.
+                    # A legitimately absent value keeps the last known non-empty one.
+                    if not authoritative:
+                        for key in ("subject", "front", "module", "title"):
+                            new, prior = f[key], old[key]
+                            new_ok = isinstance(new, str) and new.strip()
+                            prior_ok = isinstance(prior, str) and prior.strip()
+                            if not new_ok and prior_ok:
+                                f[key] = prior
                     def media_url(value):
                         return canonical_media_url(value)
                     if media_url(old["video_url"]) != media_url(r.get("video_url")) or old["duration_s"] != dur:

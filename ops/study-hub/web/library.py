@@ -38,17 +38,39 @@ _CATALOG = '''SELECT l.lesson_id, l.course_id, substr(l.subject,1,1025) AS subje
     WHERE l.present=1'''
 
 
-def _label(value, fallback, *, module=False):
-    if (not isinstance(value, str) or len(value) > 1024
-            or any(part in value.casefold() for part in ('/', '\\', ':\\', 'onedrive:'))):
+# Privacy guard. Source paths carry backslashes, a scheme/drive, a leading slash,
+# a media/file extension, or repeated '/' separators; those stay masked. Subject,
+# front and module never legitimately contain '/' (verified against the live
+# catalog: zero single-slash values), so any slash there is masked. A lesson TITLE
+# may carry one academic slash — year ranges "2023/2024" and terms such as
+# "oxidação/redução" / "Realismo/Naturalismo" — but an all-caps/underscore path
+# fragment ("INTERNAL/PRIVATE_FOLDER") is still masked.
+_PATH_EXTENSION = re.compile(
+    r'\.(mp4|m4v|mkv|avi|mov|webm|mp3|wav|pdf|docx?|xlsx?|pptx?|txt|json|gz|zip)\b', re.I)
+
+
+def _label(value, fallback, *, module=False, allow_slash=False):
+    if not isinstance(value, str) or len(value) > 1024:
         return fallback
+    folded = value.casefold()
+    if ('\\' in value or 'onedrive:' in folded or '://' in folded or ':\\' in folded
+            or value.startswith('/') or _PATH_EXTENSION.search(value) or re.match(r'^[a-z]:', folded)):
+        return fallback
+    if '/' in value:
+        if not allow_slash or value.count('/') >= 2 or '_' in value:
+            return fallback
+        left, right = value.split('/', 1)
+        lt = left.split()[-1] if left.split() else ''
+        rt = right.split()[0] if right.split() else ''
+        if (lt.isascii() and lt.isupper() and len(lt) >= 2) or (rt.isascii() and rt.isupper() and len(rt) >= 2):
+            return fallback
     # The collector joins portal headings with " > "; expose only the module name.
     if module:
         value = value.rsplit(' > ', 1)[-1]
     return ' '.join(value.split())[:240] or fallback
 
 
-def _courses(state, course_ids):
+def _courses(state, course_ids, remote_to_portal):
     labels = {}
     try:
         with (state / 'catalog/courses.json').open('rb') as handle:
@@ -71,9 +93,17 @@ def _courses(state, course_ids):
         pass  # No title registry: browse using neutral course labels.
     # Never fall back to raw course keys (which may themselves be source paths).
     counts = Counter(labels.values())
-    return {key: labels[key] if key in labels and counts[labels[key]] == 1
-            else f'{labels.get(key, "Curso sem título")} ({i})'
-            for i, key in enumerate(sorted(course_ids), 1)}
+    final = {key: labels[key] if key in labels and counts[labels[key]] == 1
+             else f'{labels.get(key, "Curso sem título")} ({i})'
+             for i, key in enumerate(sorted(course_ids), 1)}
+    # A recovered remote course is an alias of its canonical portal course: inherit
+    # that course's final label so the frontend groups them together, not apart.
+    for key in course_ids:
+        if key.casefold().startswith('remote:') and key in remote_to_portal:
+            portal = remote_to_portal[key]
+            if portal in final:
+                final[key] = final[portal]
+    return final
 
 
 def _status(row, excluded, now):
@@ -100,14 +130,17 @@ def _number(value):
     return isinstance(value, (int, float)) and math.isfinite(value) and value >= 0
 
 
-def _project(row, courses, excluded, now):
+def _project(row, courses, excluded, now, recovered):
     lid = row['lesson_id']
     remote = row['course_id'].casefold().startswith('remote:')
     # Remote-only ingest derives its subject, module and title from private folders/files.
+    # A verified recovery record means canonical portal metadata was backfilled into the
+    # row; only still-unrecovered remote lessons keep neutral labels.
+    masked = remote and lid not in recovered
     return {'id': lid, 'course': courses[row['course_id']],
-            'subject': 'Sem disciplina' if remote else _label(row['subject'], 'Sem disciplina'),
-            'module': 'Sem módulo' if remote else _label(row['module'], 'Sem módulo', module=True),
-            'title': f'Aula {lid[-8:]}' if remote else _label(row['title'], 'Aula sem título'),
+            'subject': 'Sem disciplina' if masked else _label(row['subject'], 'Sem disciplina'),
+            'module': 'Sem módulo' if masked else _label(row['module'], 'Sem módulo', module=True),
+            'title': f'Aula {lid[-8:]}' if masked else _label(row['title'], 'Aula sem título', allow_slash=True),
             'status': _status(row, excluded, now),
             'duration_s': row['duration_s'] if _number(row['duration_s']) else None}
 
@@ -136,19 +169,26 @@ def read(state, lesson_id=None):
         db.execute('BEGIN')
         excluded = {r[0] for r in db.execute('SELECT discipline FROM transcription_discipline_exclusions')} if db.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='transcription_discipline_exclusions'").fetchone() else set()
+        recovered, remote_to_portal = set(), {}
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='lesson_metadata_recovery'").fetchone():
+            for r in db.execute('SELECT lesson_id, remote_course_id, canonical_course_id, action FROM lesson_metadata_recovery'):
+                if r['action'] == 'backfill_protected':
+                    recovered.add(r['lesson_id'])
+                if r['remote_course_id'] and r['canonical_course_id']:
+                    remote_to_portal[r['remote_course_id']] = r['canonical_course_id']
         course_ids = {r[0] for r in db.execute('SELECT DISTINCT course_id FROM lessons WHERE present=1 LIMIT ?',
                                               (MAX_LESSONS + 1,))}
         if len(course_ids) > MAX_LESSONS:
             raise ValueError('course limit exceeded')
-        courses = _courses(state, course_ids)
+        courses = _courses(state, course_ids, remote_to_portal)
         now = time.time()
         if lesson_id is not None:
             row = db.execute(_CATALOG + ' AND l.lesson_id=?', (lesson_id,)).fetchone()
             if row is None:
                 return None
-            lesson = _project(row, courses, excluded, now)
+            lesson = _project(row, courses, excluded, now, recovered)
             return {'lesson': lesson, 'segments': _segments(db, row) if lesson['status'] == 'validated' else []}
         rows = db.execute(_CATALOG + ' ORDER BY l.lesson_id LIMIT ?', (MAX_LESSONS + 1,)).fetchall()
         if len(rows) > MAX_LESSONS:
             raise ValueError('lesson limit exceeded')
-        return {'lessons': [_project(row, courses, excluded, now) for row in rows if LESSON_ID.fullmatch(row['lesson_id'])]}
+        return {'lessons': [_project(row, courses, excluded, now, recovered) for row in rows if LESSON_ID.fullmatch(row['lesson_id'])]}

@@ -152,3 +152,45 @@ def test_oversized_or_corrupt_approved_segments_are_not_partially_returned(tmp_p
         db.execute('UPDATE transcript_segments SET start=-1, text=? WHERE lesson_id=? AND version=2',
                    ('bad', IDS['approved']))
     assert request(app, detail) == (503, {'error': 'observation_unavailable'})
+
+
+def test_academic_slash_titles_visible_but_paths_still_masked(tmp_path):
+    seed(tmp_path)
+    with closing(sqlite3.connect(tmp_path / 'hub.sqlite3')) as db, db:
+        db.execute("UPDATE lessons SET title='Prova de 2023/2024' WHERE lesson_id=?", (IDS['approved'],))
+        db.execute("UPDATE lessons SET title='Reação de oxidação/redução' WHERE lesson_id=?", (IDS['review'],))
+        db.execute("UPDATE lessons SET title='curso/pasta/aula.mp4' WHERE lesson_id=?", (IDS['queued'],))
+        db.execute("UPDATE lessons SET title='C:\\privado\\aula.mp4' WHERE lesson_id=?", (IDS['unavailable'],))
+    app = DashboardApplication(state=tmp_path)
+    rows = {r['id']: r for r in request(app, '/api/library')[1]['lessons']}
+    assert rows[IDS['approved']]['title'] == 'Prova de 2023/2024'
+    assert rows[IDS['review']]['title'] == 'Reação de oxidação/redução'
+    assert rows[IDS['queued']]['title'] == 'Aula sem título'
+    assert rows[IDS['unavailable']]['title'] == 'Aula sem título'
+
+
+def test_recovered_remote_lessons_show_canonical_metadata_and_merge_course(tmp_path):
+    seed(tmp_path)
+    # A protected remote alias backfilled with canonical portal metadata + a recovery
+    # record must project like a portal lesson and inherit the portal course label.
+    with closing(sqlite3.connect(tmp_path / 'hub.sqlite3')) as db, db:
+        db.execute("UPDATE lessons SET subject='Física', front='Física', module='Física > Vetores', "
+                   "title='Vetores IV' WHERE lesson_id=?", (IDS['remote'],))
+        db.execute("""CREATE TABLE lesson_metadata_recovery(
+            lesson_id TEXT PRIMARY KEY, remote_course_id TEXT, canonical_lesson_id TEXT,
+            canonical_course_id TEXT, course_title TEXT, subject TEXT, front TEXT, module TEXT,
+            title TEXT, media_id TEXT, action TEXT NOT NULL, evidence_json TEXT NOT NULL,
+            preimage_json TEXT NOT NULL, plan_sha256 TEXT NOT NULL,
+            policy_version INTEGER NOT NULL DEFAULT 1, recovered_at TEXT NOT NULL)""")
+        db.execute("INSERT INTO lesson_metadata_recovery VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                   (IDS['remote'], 'remote:INTERNAL', IDS['approved'], 'portal-private-id', 'Curso 2027',
+                    'Física', 'Física', 'Física > Vetores', 'Vetores IV', '200', 'backfill_protected',
+                    '{}', '{}', 'sha', 1, 'now'))
+    app = DashboardApplication(state=tmp_path)
+    rows = {r['id']: r for r in request(app, '/api/library')[1]['lessons']}
+    recovered = rows[IDS['remote']]
+    assert recovered['title'] == 'Vetores IV'
+    assert recovered['subject'] == 'Física' and recovered['module'] == 'Vetores'
+    # inherits the canonical portal course label (groups with it, not a neutral duplicate)
+    assert recovered['course'] == rows[IDS['approved']]['course'] == 'Curso 2027'
+    assert 'INTERNAL' not in json.dumps(recovered)

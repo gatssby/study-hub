@@ -247,6 +247,13 @@ def ingest(state,db_path,index_pdfs=True):
         queued+=queue.enqueue(existing['lesson_id'],lesson['version'])
     # Every verified remote original belongs in the queue, even if an old partial
     # portal traversal omitted it. Remote object identity is explicit, not guessed title identity.
+    # Verified metadata recovery: protected fallback aliases keep canonical portal
+    # metadata across syncs instead of reverting to private path-derived values.
+    # Retired aliases (present=0) are already skipped by the existing guard below.
+    backfill_recovery={}
+    if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='lesson_metadata_recovery'").fetchone():
+        for r in c.execute("SELECT lesson_id,subject,front,module,title FROM lesson_metadata_recovery WHERE action='backfill_protected'"):
+            backfill_recovery[r['lesson_id']]={'subject':r['subject'],'front':r['front'],'module':r['module'],'title':r['title']}
     for relative,source in inventory.items():
         if relative in used:continue
         parts=relative.split('/')
@@ -259,8 +266,11 @@ def ingest(state,db_path,index_pdfs=True):
             # Keep the lesson identity when the object at its known path is
             # replaced; record the new remote ID in observations, not lesson ID.
             row['media_id']=existing['media_id']
-        store.sync_lessons([row],authoritative=False)
         lid=lesson_id_for(row['course_id'],row['media_id'],None)
+        recovered=backfill_recovery.get(lid)
+        if recovered:
+            row.update(recovered)
+        store.sync_lessons([row],authoritative=False)
         lesson=observe_video_source(store,lid,'onedrive:Federal Online/'+relative,
                                     inventory_source('onedrive:Federal Online/'+relative,source))
         queued+=queue.enqueue(lid,lesson['version'])
