@@ -131,3 +131,45 @@ Cinco melhorias incrementais entregues, testadas e implantadas na VPS sem novos 
 - Reconciliação por ID entre fontes pending e deferrals históricos (14 vs 13) ainda aberta; snapshots SQLite históricos e janelas ASR de validação aguardam classificação/arquivamento.
 - Margem de disco estreita (~6,2 GiB livres vs reserva ~4,75 GiB); crescimento atual negativo, mas a retenção de temporários precisa de monitoramento contínuo.
 - O MVP da Biblioteca/Aula (M2) foi publicado no mesmo host; M3 (PDFs/Busca) e M4 (Anki) seguem pendentes.
+
+## Fechamento — recuperação de metadados e reviews + inventário completo (21/11)
+
+Missão autônoma de correção de metadados e recuperação conservadora de reviews, seguida de inventário estruturado completo. Escopo restrito a qualidade de dados; nenhuma feature nova de UI.
+
+### Metadados (Priority A) — commit `e65926f`
+
+- **Causas-raiz:** (1) a Biblioteca mascarava todo título contendo `/` — 381 títulos acadêmicos legítimos (intervalos de ano `2023/2024` e termos `oxidação/redução`, `Realismo/Naturalismo`); (2) objetos OneDrive em caminhos legacy criavam identidades fallback `remote:` duplicadas de aulas portal já presentes, com subject/module/title derivados de pastas privadas.
+- **Correção:** `library.py` permite uma barra acadêmica em títulos (mantém máscara estrita para subject/front/module e fragmentos path-like); `metadata_recovery.py` reconcilia deterministicamente cada fallback remoto a um canonical portal único (source_ref + título, tiers exact/year/separator), retirando duplicatas desprotegidas e backfilling das protegidas; `ingest.py` reaplica metadados canônicos a cada sync; `store.py` preserva metadados verificados não-vazios em syncs não-autoritativos.
+- **Aplicação production (sob index.lock, transacional, preimage+ledger):** 46 fallbacks resolvidos, 0 ambíguos → **38 retirados, 8 backfilled** (7 com transcrição validada + 1 em review). Presentes: 3065 → **3027** (3019 portal + 8 aliases protegidos).
+- **Verificação:** projeção da Biblioteca com **0** subject/module/title mascarados; 381 títulos com barra visíveis; aliases protegidos com nomes/hierarquia canônicos e agrupados no curso canonical; nenhum vazamento (onedrive:/https:///.mp4/produto-pacote). **Sobrevive à sincronização:** ciclo de ingest com `renamed=0, created=0, missing=0`; retirados permanecem present=0.
+
+### Reviews de transcrição (Priority B) — commit `61572cd`
+
+- **Auditoria:** 58 jobs review (53 aulas) no início; bloqueios `ngram_repetition`, `token_repetition`, `duplicate_segment`, `bad_timestamp`, `acoustic_repetition_unconfirmed`, `text_during_measured_silence`.
+- **Recuperação evidence-bound:** o whisper.cpp preenche a última linha do chunk final até ~start+30s, ultrapassando a duração ffprobe → `bad_timestamp` sintético. `normalize_final_padding` clamp apenas o end do segmento final ao bound de áudio provado (cópias, identidade verificada nos originais, texto intacto, fail-closed se re-stitch inconsistente); flags `bad_timestamp` resolvidas viram observação `timestamp_correction` documentada. **5 aulas bloqueadas só por isso foram validadas** (done 117→122): `fo_a32f71f7cfab8eb4`, `fo_40f898e1a4ad480e`, `fo_349df4e4f5027e2f`, `fo_197613d80e6e04fd`, `fo_f731f5eeb1d14ea8`. Originais imutáveis; recibos qa-v5 com SHA do input.
+- **QA preservada:** `QA_POLICY_VERSION` 4→5 sinaliza mudança de lógica de processamento (thresholds de `classify_qa` inalterados); review_log SHA+política evita reavaliação indefinida de evidência idêntica.
+- **Retidos com razão precisa (50):** 11 repetições isoladas já com `acoustic_repetition_unconfirmed` (checagem acústica anterior não confirmou fala genuína — reexecutar janelas idênticas daria resultado idêntico); 39 loops sistemáticos de decoder / alucinações em silêncio medida (exigem re-decode completo, fora de escopo). Nenhuma aprovação forçada; nenhuma repetição genuína removida.
+
+### Plugin (Priority B5)
+
+- `GET /fo/transcripts/{id}` das aulas recuperadas: 200, segmentos com end clampado, `qa.passed=true`, sem vazamento. `GET /fo/lessons/{id}` dos aliases backfilled: metadados canônicos. Busca `q=cinemática` retorna aula recuperada. **115 transcrições validadas atuais disponíveis**; browse exclui retirados; gate `TRANSCRIPTION_ENABLED=true` verificado via API.
+
+### Inventário completo (tarefa queued) — `docs/research/exports/federal-online/`
+
+- `lessons-current.csv` + `lessons-current.jsonl`: **3027 aulas canônicas atuais** (IDs únicos, == SQLite present=1, sem amostragem). `lessons-historical-and-aliases.csv`: **371** (38 retire_alias com mapeamento canonical, 277 fallback remoto histórico, 56 ausentes do catálogo). `catalog-summary.md`: índice hierárquico Curso→Disciplina→Frente→Módulo→Aula + métricas + validação.
+- **9 cursos canônicos, 102 disciplinas, 140 módulos**; 115 validadas; 0 metadados incompletos; 2881 com ordem verificável (`ordem` do catálogo); 22 sem fonte de vídeo verificada; 159 aulas em Inglês/Espanhol (excluídas). Materiais PDF (172) são de nível disciplina, sem vínculo por aula → `pdf_count=null`. Nenhum caminho privado/URL assinada/credencial exportado; course_ids baseados em URL neutralizados para slug.
+
+### Estado de produção verificado — 21/11
+
+- **Worker:** ativo (PID 2011009 após restart controlado), 1 lease novo, job interrompido re-enfileirado com chunks duráveis preservados. Jobs: 122 done, 2852 queued, 50 review, 1 processing, 808 superseded.
+- **Saúde:** `study-hub-fo-api`, `study-hub-observer` ativos; Anki vNext (api/mcp/mcp-tunnel/sync) ativos; n8n (docker) Up 6 days.
+- **Disco:** ~6,20 GiB livres > reserva de 4 GiB.
+- **Testes:** 679 aprovados na passada de integração focada (FO + observer); 3 falhas apenas ambientais (disco local da Mac < reserva; módulos não tocados pela missão). SHA-256 dos arquivos implantados idênticos ao HEAD.
+- **Commits pushed:** `e65926f` (metadados), `61572cd` (timestamps) em `origin/feat/study-hub-migration`.
+
+### Limitações remanescentes
+
+- 50 reviews exigem nova evidência acústica (parâmetros de decode distintos ou re-transcrição focal autorizada); não recuperáveis com evidência inalterada.
+- 22 aulas atuais sem fonte de vídeo verificada; 146 sem ordem de catálogo verificável.
+- PDFs de nível disciplina não vinculados por aula; revisão visual de páginas OCR segue pendente (baseline 07/11).
+- `get_lesson` por ID direto ainda retorna registros present=0 (comportamento pré-existente da API; excluídos de browse/busca); nenhum vazamento nas aulas recuperadas.
