@@ -24,6 +24,7 @@ from difflib import SequenceMatcher
 from io import BytesIO
 from pathlib import Path
 
+from .acoustic_candidate import overlap_candidate
 from .scheduler import EXCLUDABLE_DISCIPLINES, discipline
 from .store import ACCEPTED_CORPUS, FOStore
 from .transcription import QA_POLICY_VERSION, classify_qa
@@ -550,7 +551,8 @@ def review(cfg, runtime, lesson_id, version, *, wait=0, ready=None, reserve=None
                                                             video.stat().st_size + audio.stat().st_size)
                         audio.unlink()
                         require_current()
-                        findings[bounds] = analyze_pcm(pcm, window.start, asr, vad)
+                        findings[bounds] = {**analyze_pcm(pcm, window.start, asr, vad),
+                                            'pcm_sha256': hashlib.sha256(pcm).hexdigest()}
                     finding = findings[bounds]
                     whisper = [row for row in art['segments']
                                if row['start'] <= window.end and row['end'] >= window.start]
@@ -568,6 +570,9 @@ def review(cfg, runtime, lesson_id, version, *, wait=0, ready=None, reserve=None
         qa = recheck_unchanged(art['qa'], art['segments'], duration)
         result['qa'] = {'policy': QA_POLICY_VERSION, 'passed': qa['passed'],
                         'blocker_kinds': [flag['kind'] for flag in qa['blockers']]}
+        candidate = overlap_candidate(art, result['windows'])
+        if candidate is not None:
+            result['candidate'] = candidate
         require_current(check_artifact=True)
         usage = resource.getrusage(resource.RUSAGE_SELF)
         children = resource.getrusage(resource.RUSAGE_CHILDREN)
