@@ -248,6 +248,13 @@ and run `systemd-analyze verify` on the exact unit files. Enable only the timer.
   turn cleans only verified disposable scratch while holding the decoder
   fence, even when no case is eligible. The service is capped at 0.5 OCPU and
   3 GiB with no swap.
+- The rclone HARD transfer limit allows 1 MiB above the recorded source
+  size, budgeted in the storage check. The downloaded file must still match
+  the exact source size and the original transcript's SHA-256 before audio
+  extraction. A media subprocess failure defers only that job; the journal
+  records the lesson/version, stage, reason and exit code when available,
+  never command arguments or subprocess output. The existing retry budget
+  and cooldown still apply.
 - Optional `FO_ACOUSTIC_PRIORITY` accepts up to five exact `fo_<id>:<version>`
   pairs in a service drop-in. This changes rank only: current source, QA,
   receipt and retry checks still apply. Do not run a parallel cohort controller.

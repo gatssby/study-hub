@@ -328,3 +328,26 @@ automação contínua após esse aceite. Runbook:
   reiniciou com um único decoder; o timer seguiu habilitado. A proteção do
   líder cobre subprocessos de scratch e solta o decoder antes de aguardar
   um lock externo de publicação. Sem mudanças em serviços não relacionados.
+
+**22/11/2026 — Transferência do revisor e publicação verificadas no VPS.**
+- Três falhas antigas foram reproduzidas: o rclone encerrou com código 8
+  usando o tamanho exato da fonte como limite HARD. Com 1 MiB de margem,
+  as três fontes passaram na conferência de tamanho e SHA-256 e nos recortes
+  FFmpeg. O revisor recebeu a correção `6bf717f` sem reiniciar o Whisper.
+  Falhas de mídia agora indicam etapa e motivo sem expor argumentos ou stderr;
+  o orçamento de tentativas foi mantido. `c248555` desliga o access log HTTP
+  da API para não registrar texto de buscas no journal.
+- Na auditoria: 139 transcrições atuais validadas, 2.824 jobs na fila
+  (13 sem fonte elegível), 57 aulas atuais em revisão e 3 jobs históricos em
+  revisão. O journal confirmou cinco revisões automáticas com recibo e
+  retomada do Whisper após a entrega do decoder. A cadência e os limites
+  do timer foram mantidos.
+- API FO e MCP reais entregaram 990 segmentos de três aprovações, com
+  metadados, revisão atual, busca e citações conferidos com os artefatos.
+  Uma aprovação nova apareceu sem deploy; três aulas rejeitadas não foram
+  expostas. A nova política de log foi conferida com uma busca de teste.
+- Seis aulas analisadas acusticamente permaneciam inconclusivas; nenhuma
+  recuperação publicada. O candidato de sobreposição com QA favorável
+  ainda exige escuta independente. A normalização de fim da QA v5 corrigiu
+  o timestamp em cinco amostras reais sem mudar texto, mas outros motivos
+  de rejeição persistiram. Sem mudança no Whisper ou na política de QA.
