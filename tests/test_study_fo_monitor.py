@@ -26,3 +26,25 @@ def test_render_distinguishes_current_and_historical_reviews_and_turn_states():
     assert 'aguardando turno' in report
     assert '600.0 s' in report
     assert '2.0 GiB acima da reserva' in report
+
+
+def test_health_check_does_not_alert_on_an_ordinary_long_decoder_turn():
+    assert monitor.health_issues({
+        'status': {'TRANSCRIPTION_ENABLED': True}, 'queue': {'queued': 2800, 'leased': 1},
+        'active': [{}], 'stale_leases': 0, 'decoder_budget_margin': 10 * 2**30,
+        'units': {'transcription': 'active', 'acoustic-review': 'active'},
+        'resources': {'parakeet': {'ActiveState': 'activating', 'Result': 'success'}},
+        'acoustic': {'unreadable': 0},
+    }) == []
+
+
+def test_health_check_reports_actionable_failures_without_lecture_details():
+    assert set(monitor.health_issues({
+        'status': {'TRANSCRIPTION_ENABLED': True}, 'queue': {'queued': 2800},
+        'active': [{'title': 'Private A'}, {'title': 'Private B'}],
+        'stale_leases': 1, 'decoder_budget_margin': -1,
+        'units': {'transcription': 'failed', 'acoustic-review': 'active'},
+        'resources': {'parakeet': {'ActiveState': 'failed', 'Result': 'timeout'}},
+        'acoustic': {'unreadable': 1},
+    })) == {'stale_transcription_lease', 'multiple_transcription_leases', 'decoder_storage_reserve',
+            'whisper_service_failed', 'acoustic_service_failed', 'invalid_acoustic_receipt'}

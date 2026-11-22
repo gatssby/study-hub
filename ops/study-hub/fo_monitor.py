@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read-only live Study Hub monitor over an existing SSH alias.
 
-Run: python3 ops/study-hub/fo_monitor.py [--once] [--interval 20] [--host oracle-vps]
+Run: python3 ops/study-hub/fo_monitor.py [--once | --check] [--interval 20] [--host oracle-vps]
 
 No local or VPS service changes. Reads FO API, SQLite (mode=ro) and systemd.
 """
@@ -179,6 +179,22 @@ def fetch(host: str, timeout: float) -> dict[str, Any]:
     return json.loads(result.stdout)
 
 
+def health_issues(data: dict[str, Any]) -> list[str]:
+    units = data['units']
+    acoustic = data.get('acoustic', {})
+    parakeet = data.get('resources', {}).get('parakeet', {})
+    checks = (
+        ('stale_transcription_lease', data.get('stale_leases', 0) > 0),
+        ('multiple_transcription_leases', len(data.get('active', [])) > 1),
+        ('decoder_storage_reserve', data.get('decoder_budget_margin', 0) < 0),
+        ('whisper_service_failed', units.get('transcription') == 'failed'),
+        ('acoustic_timer_failed', units.get('acoustic-review') == 'failed'),
+        ('acoustic_service_failed', parakeet.get('ActiveState') == 'failed'),
+        ('invalid_acoustic_receipt', acoustic.get('unreadable', 0) > 0),
+    )
+    return [issue for issue, failed in checks if failed]
+
+
 def render(data: dict[str, Any]) -> str:
     status = data["status"]
     jobs = data.get("queue", status.get("transcription_jobs", {}))
@@ -260,12 +276,16 @@ def render(data: dict[str, Any]) -> str:
     ])
     if 'decoder_budget_margin' in data:
         lines.insert(-1, f"Disco: {data['decoder_budget_margin'] / 2**30:.1f} GiB acima da reserva Whisper")
+    if issues := health_issues(data):
+        lines.insert(-1, 'ATENÇÃO: ' + ', '.join(issues))
     return "\n".join(lines)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--once", action="store_true", help="Show one snapshot and exit.")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--once", action="store_true", help="Show one snapshot and exit.")
+    mode.add_argument("--check", action="store_true", help="Emit only health codes: 0 healthy, 1 unavailable, 2 known issues.")
     parser.add_argument("--interval", type=int, default=20, help="Polling interval in seconds.")
     parser.add_argument("--host", default="oracle-vps", help="Existing SSH alias to the VPS.")
     args = parser.parse_args()
@@ -275,11 +295,18 @@ def main() -> int:
         while True:
             try:
                 snapshot = fetch(args.host, timeout=25)
+                if args.check:
+                    issues = health_issues(snapshot)
+                    print('\n'.join(issues) if issues else 'healthy')
+                    return 2 if issues else 0
                 output = render(snapshot)
                 if sys.stdout.isatty() and not args.once:
                     print("\033[2J\033[H", end="")
                 print(output, flush=True)
             except (OSError, ValueError, json.JSONDecodeError, RuntimeError, subprocess.TimeoutExpired) as exc:
+                if args.check:
+                    print('monitor_unavailable', file=sys.stderr)
+                    return 1
                 print(f"Não foi possível consultar a VPS: {exc}", file=sys.stderr, flush=True)
                 if args.once:
                     return 1
