@@ -157,126 +157,74 @@ The verified runtime is already installed at
 Models allocated 675,213,312 B and the venv 222,330,880 B. Model execution
 is not evidence of lecture accuracy.
 
-**Activation gate:** the legacy Whisper loop holds `transcription.lock`
-through every job and its idle sleep. The tested successor holds a separate
-leader lock for the worker lifetime and takes `transcription.lock` only for
-recovery, each complete job, and its existing QA pass. A reviewer can request
-the next boundary through `acoustic-review.turn`; it still cannot enter until
-the same decoder lock is free. A waiting request owns no lease and expires.
+### Decoder handoff and safe deployment
 
-Do not replace running code, restart or signal Whisper, edit the authorization
-gate, or remove any lock file to make the pilot run. Roll out the successor at
-an approved lifecycle boundary, with the legacy process already quiesced, no
-active decoder/lease, and original checkpoints preserved. Verify the loaded
-code revision and new lock behavior before the first production review. If
-rollback is needed, let the reviewer finish or stop only its transient unit,
-then restore the prior Whisper code at a similarly safe boundary. Keep all
-existing receipts, original artifacts and lock files.
+The primary worker keeps its leader lock and live job lease across a review
+turn. After a chunk is fsynced and progress committed, it acknowledges a pending
+request (`review_turn_yielded`), releases the decoder flock, and waits for the
+reviewer to finish before taking the flock and logging `review_turn_resumed`.
+Child ASR processes inherit the decoder FD so killing the parent cannot grant a
+second decoder access while the first survives. Download and ordinary media
+conversion do not require the inference lock. Never unlink lock files.
 
-If the operator session ends during a cutover, first inspect the original
-observer's remote PID, command, parent and deadline. Compare the live worker
-hash and PID with the staged and legacy hashes, and cross-check the current
-lease, decoder child, leader lock and durable checkpoints. A live observer
-must not be duplicated; a disconnected operator or empty client log does not
-prove that it stopped. At expiry, confirm the process exited and whether it
-left a legacy, cooperative, or partial deployment before taking any action.
-Retain the hash-verified legacy worker backup. To roll back, first stop only
-review admissions, then restore the verified legacy file while the primary
-service is stopped at a proven no-decoder, no-lease boundary. Start the
-primary unit and verify a single worker, new lease progress and intact
-checkpoints. Do not roll back by changing queue rows or lock files.
+Deploy from a known committed revision, not the working tree. On the VPS export,
+verify both staged and live SHA-256 values. Include the transitive runtime
+closure: `worker.py`, `acoustic_service.py`, `acoustic_review.py`,
+`acoustic_candidate.py` and `window_benchmark.py` as applicable. In the production
+venv smoke `run_process_group(['/bin/true'], timeout=2, pass_fds=())` as well as
+imports. The first real cutover attempt reached the safe boundary but an old
+deployed `window_benchmark.py` lacked the `pass_fds` interface; unit tests on the
+Mac did not catch drift in the VPS export.
 
-For a single explicitly authorized cutover and fixed cohort that must survive
-SSH disconnection, prefer VPS-owned transient services with `Restart=no` and
-hard deadlines. The November 22 recovery uses
-`study-hub-fo-parakeet-cutover.service` and
-`study-hub-fo-parakeet-cohort.service`; neither is an installed or recurring
-service. Inspect `systemctl show` for both PIDs and states, then read their
-`journalctl -u` logs. Do not start a manual review while the cohort controller
-is active. The controller tied to that observer's invocation requires a
-logged zero-lease/no-decoder cutover, the verified new worker holding the
-leader lock and a new Whisper lease. It admits only the five authorized
-versions in order, once each, and stops on failure, lack of a private audio
-receipt, or failure to observe Whisper resuming. To prevent further admissions,
-stop only the cohort controller and, if necessary, separately stop its named
-transient acoustic pilot unit; do not terminate a cutover in progress or stop
-Whisper. After expiry or disconnect, re-read exact process state and receipts
-before scheduling any follow-up. A waiting controller is not a completed review.
+For an authorized interruption, stop the primary systemd cgroup and prove all
+children and relevant flock owners are gone. Save a private, hash-checked
+before-image and checkpoint inventory. Reconcile only the exact lesson/version/
+owner lease in one `BEGIN IMMEDIATE` transaction, with no attempt charge. Verify
+the job was requeued and unchanged checkpoints verify before restarting. Check
+the actual loaded generation, singleton leader, live lease and decoder, not just
+the new files. On November 22, 2026 the cutover from `06981f9` to `49e6303`
+requeued `fo_9c48da1a924603a1` v1 and resumed `fo_ab7589742bc156fd` v3 from a
+durable checkpoint. Preserve the cutover and lease receipts; never replay one
+against a new lease. If interrupted mid-deployment, inspect the existing VPS
+controller, cgroup, file hashes and lease before acting; never duplicate it.
 
-Once the cooperative Whisper process is verified, run **one** review per unit
-as `ubuntu`, from the deployed `federal-online` tree. Reuse the existing
-service's environment file without reading it into output. Do not run this
-against a legacy worker:
-
-```sh
-runtime=/home/ubuntu/study-hub-models/fo-parakeet-int8
-sudo systemd-run --unit=study-hub-fo-acoustic-pilot --wait --collect \
-  -p User=ubuntu -p Group=ubuntu -p WorkingDirectory=/home/ubuntu/study-hub/federal-online \
-  -p EnvironmentFile=/home/ubuntu/.config/study-hub/transcription.env \
-  -p CPUQuota=50% -p MemoryMax=3G -p MemorySwapMax=0 \
-  -p Nice=15 -p IOSchedulingClass=idle -p UMask=0077 \
-  -p RuntimeMaxSec=300 -p TimeoutStopSec=15 -p KillMode=control-group -p Restart=no \
-  --setenv=OPENBLAS_NUM_THREADS=1 --setenv=OMP_NUM_THREADS=1 \
-  "$runtime/venv/bin/python" -m fo_hub.acoustic_review --runtime "$runtime" \
-  --lesson-id "$lesson_id" --version "$version" --wait-for-whisper 120
-```
-
-`systemctl status study-hub-fo-acoustic-pilot` shows an active run;
-`sudo systemctl stop study-hub-fo-acoustic-pilot` stops only that run. Review
-logs contain status codes, not lecture text. On exit 4, defer to another
-controlled window; do not loop or increase the cap automatically. Check the
-primary worker resumed normally before requesting the next lesson. The runner
-rechecks disk, source SHA/revision and QA, and writes an atomic private receipt
-under `$FO_STATE_ROOT/transcripts/acoustic-review` (or the default FO state
-root). No receipt changes QA or exposes any transcript to the FO Plugin.
-Ordinary completion and cooperative cancellation clean scratch; after a hard
-kill, inspect any orphaned private `work-*` directories and remove only those
-verified to be owned by a finished reviewer with no open descriptors.
-
-An unchanged receipt skips inference. Lexical agreement is not an acoustic
-verdict; adjudicate with the original audio, VAD and existing evidence, and
-keep uncertain academic content unchanged.
-
-### Explicitly authorized immediate cutover — November 22, 2026
-
-The production migration retired both earlier transient controllers before
-touching Whisper. The operator explicitly authorized interruption on this
-occasion. The old worker was stopped through systemd and the complete cgroup
-was checked before reconciling the lease. `fo_ab7589742bc156fd` v3 was requeued
-without charging a failed attempt, using an exact owner/version fence in a
-single transaction. The interrupted source identity and checkpoint hashes
-are in the private `immediate-recovery.json` alongside the legacy backup in
-`$FO_STATE_ROOT/tmp/parakeet-cutover.l7BQU2Uu`. Do not replay the recovery
-or reuse that receipt to change a newer lease. The deployed cooperative
-worker came from `06981f9`; verify the running singleton and real decoder,
-not just the deployed file. Normal maintenance still uses a quiescent boundary.
-
-The finite continuation is `study-hub-fo-parakeet-fixed-pilot.service`.
-Check its journal and the `study-hub-fo-acoustic-pilot.service` cgroup before
-starting another review. The controller waits at the current Whisper job,
-requests one bounded turn, then verifies a new Whisper lease before admitting
-the next case. It exits on a failed guard and does not publish.
+For primary rollback, stop acoustic admissions first and let the reviewer finish
+or stop only its unit. Restore a verified worker generation after quiescence or
+the same authorized stop-and-reconcile sequence. Verify a single active worker,
+resumed progress and readable checkpoints. Do not restore a stale database or
+change the authorization gate to make deployment pass.
 
 ### Scheduled evidence-only reviewer
 
 The versioned `study-hub-fo-acoustic-review.service` and `.timer` in
-`ops/study-hub/systemd/` are not enabled by the cutover. Enable only after a
-real-audio pilot demonstrates useful evidence, no overlap and resumed Whisper
-decoding, and the FO Plugin still enforces existing QA. Confirm the fixed
-controller and its child are inactive. Deploy the matching `fo_hub` changes
-from one tested revision, create the private `transcripts/acoustic-review`
-directory (`ubuntu:ubuntu`, `0700`) if absent, and validate the unit files with
-`systemd-analyze verify` before installing them. The timer is the only unit
-that should be enabled for boot; its service is intentionally short-lived.
+`ops/study-hub/systemd/` are installed; the timer was enabled on November 22,
+2026, after real lecture audio proved exclusive handoff and resume and the FO
+API/Plugin QA gate was verified. In proof invocation `e834ace2061a4720a4b0f264e5d26d16`,
+the reviewer requested at 18:10:42 UTC, acquired at 18:12:00 UTC after 78.016 s
+with the same primary lease at progress 1.0 and the old decoder gone, and
+released at 18:12:38 UTC. Whisper then started another decoder. Biology v2
+produced a private receipt for 8.16 s of audio; speech was present, comparison
+was inconclusive, and the transcript stayed in review.
+
+For a new host or reactivation after rollback, require the same evidence before
+enabling. Check that earlier transient controllers and their children are
+inactive, precreate `transcripts/acoustic-review` (`ubuntu:ubuntu`, `0700`),
+and run `systemd-analyze verify` on the exact unit files. Enable only the timer.
 
 - `sudo systemctl enable --now study-hub-fo-acoustic-review.timer` schedules
   the first check in five minutes. `systemctl list-timers --all` and
   `systemctl status study-hub-fo-acoustic-review.timer` show its schedule.
 - `journalctl -u study-hub-fo-acoustic-review.service` shows state and IDs,
   not transcript text. A service in `activating` can be waiting for a turn.
-  The wait is bounded to two hours; once the decoder fence is acquired,
+  The request expires after 48 minutes (systemd startup cap: 52 minutes);
+  the expensive Whisper chunk is capped at 45 minutes, not interrupted for
+  ordinary handoff. Once the decoder fence is acquired,
   systemd caps active work at five minutes. Clean skips are also acknowledged
   but exit immediately without inference.
+- `python3 ops/study-hub/fo_monitor.py --check` is a read-only health probe
+  using the existing SSH alias. It prints only health codes, not lesson details:
+  exit `0` healthy, `1` monitor unavailable, `2` actionable failure. Normal
+  chunk waits do not alert. `--once` displays the aggregate operating metrics.
 - Each activation checks eligibility read-only and admits at most one job.
   Focal cases get a 24-hour priority boost, not absolute priority. Oversized
   or corrupt inputs cannot block other lessons. The timer waits 15 minutes
@@ -287,13 +235,18 @@ that should be enabled for boot; its service is intentionally short-lived.
   turn cleans only verified disposable scratch while holding the decoder
   fence, even when no case is eligible. The service is capped at 0.5 OCPU and
   3 GiB with no swap.
+- Optional `FO_ACOUSTIC_PRIORITY` accepts up to five exact `fo_<id>:<version>`
+  pairs in a service drop-in. This changes rank only: current source, QA,
+  receipt and retry checks still apply. Do not run a parallel cohort controller.
 - To stop or roll back only the reviewer, disable and stop the timer first,
   then stop its service: `sudo systemctl disable --now study-hub-fo-acoustic-review.timer`
   and `sudo systemctl stop study-hub-fo-acoustic-review.service`. Verify that
   both are inactive and Whisper acquires its next turn. Keep private receipts
   and attempt history. No Whisper restart is required to disable reviews.
 
-The service records evidence, not approval. A correction must independently
-corroborate the timing and actual speech, preserve the immutable original, and
-pass the existing versioned QA publication path. A favorable VAD or Parakeet
-result alone is not permission to clear a blocker.
+Receipts are private, immutable and keyed by current source and QA evidence.
+An exact one-row overlap candidate may record raw-row provenance, a window PCM
+hash, and a projected QA result. It remains non-publishable until independent
+listening confirms it represents one utterance, not a legitimate repetition.
+A favorable VAD or Parakeet result alone cannot clear a blocker. Keep uncertain
+content and all original artifacts; retain the existing publication QA gate.

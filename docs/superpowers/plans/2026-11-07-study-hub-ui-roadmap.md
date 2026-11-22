@@ -254,3 +254,68 @@ automação contínua após esse aceite. Runbook:
   O serviço só pode ser habilitado após evidência útil em áudio real, prova
   de alternância com retomada do Whisper e verificação de QA e Plugin. Ele
   não aprova transcrições; os limites e o rollback estão no runbook.
+
+### Sprint de transcrição e revisão acústica — 22/11/2026 UTC
+
+- **0 — Auditoria verificada.** Às 17:46 UTC: 3.030 aulas atuais, 135
+  transcrições atuais validadas, 2.829 jobs atuais em fila (2.639 elegíveis),
+  um lease e 56 reviews atuais. Três outros reviews eram de revisões
+  históricas. Nenhum elegível sem job, nenhum lease vencido, 22 aulas sem
+  fonte atual disponível (nove sem registro e 13 marcadas indisponíveis,
+  nenhuma em disciplina excluída) e aproximadamente 153 GiB livres. O runtime ARM64
+  passou na verificação dos seis arquivos e dos pins, sem reinstalação.
+- **1 — Alternância verificada em produção.** Cutover do worker `49e6303`
+  refileirou somente o lease interrompido e retomou checkpoints verificados.
+  Às 18:10:42, o revisor 3427886 pediu o decoder enquanto o Whisper 3402978
+  decodificava com o filho 3426725. Às 18:12:00 (78,016 s), adquiriu o lock
+  com o filho anterior encerrado e o mesmo lease no checkpoint 1,0. Às
+  18:12:38, liberou o lock; o mesmo Whisper retomou com o filho 3429295.
+  Em outra fronteira longa, o pedido esperou 1.465 s; o teste detectou e
+  corrigiu uma dependência antiga no VPS antes de repetir a prova com sucesso.
+- **2 — Piloto parcial.** Biologia v2 (`fo_86307c2dd5ba3e22`) gerou recibo
+  privado, imutável e vinculado ao SHA da fonte, com 8,16 s de áudio. Houve
+  fala detectada, mas a comparação foi inconclusiva e manteve o bloqueio.
+  ASR: 2,90 s; VAD: 0,12 s; CPU total: 9,17 s; tempo ativo: 37,20 s;
+  RSS de pico do processo: 1.139.900 KiB; scratch: 186.635.635 B. As revisões
+  atuais de História, Português, Filosofia e Redação passaram na verificação
+  de entrada e estão priorizadas pelo timer, sem controlador paralelo.
+- **3 — Candidato de correção implementado, publicação bloqueada.** Para
+  duplicação exata na sobreposição de blocos, o revisor pode registrar a
+  proveniência, o hash do PCM e o resultado projetado de QA após remover
+  exatamente uma linha. O candidato não publica: requer escuta independente
+  que descarte repetição legítima. Silêncio medido ou acordo entre modelos,
+  isoladamente, não liberam conteúdo. Nenhuma aprovação acústica nova.
+- **4 — Coleta contínua ativada, sem publicação.** Serviço e timer versionados
+  foram instalados após a prova real e o teste de QA do Plugin. Timer ativo e
+  habilitado no boot; um job por turno, 15 min após a saída, espera de até 48
+  min, execução de até cinco min, 0,5 OCPU, 3 GiB e sem swap. A primeira
+  execução autônoma foi admitida às 18:20:52; recuperação por reboot não
+  foi testada com reboot real. Rollback apenas do revisor no runbook.
+- **5 — Triagem de estado concluída, adjudicação parcial.** Às 18:22 UTC:
+  60 jobs em review para 57 aulas (57 atuais, três históricos); 52 aguardavam
+  áudio, dois excediam o orçamento de janelas, dois excluídos por disciplina,
+  um inconclusivo com evidência. Motivos QA podem coexistir e não são prova
+  de alucinação. Não houve transcrição acústica aprovada nem review removido
+  somente para baixar a contagem.
+- **6 — Verificação da fila, API e Plugin.** O worker avançou para 136
+  transcrições atuais validadas e 2.637 jobs elegíveis em fila (2.827 no
+  total). Inglês/Espanhol preservados. Na auditoria inicial, API retornou
+  200 em 135/135 aprovadas e 404 em 56/56 reviews; 46.184 segmentos iguais
+  aos artefatos e oito pares aprovados/review verificados no MCP real.
+  Buscas dirigidas preservaram citações; buscas amplas têm limite de 200.
+  Três finais dentro da tolerância de QA (+1 s) e sobreposições já permitidas
+  não justificam mudar a política nem retranscrever o acervo.
+- **7 — Observabilidade parcial.** Monitor CLI existente mostra fila,
+  revisões, recibos, espera média, CPU/RAM, reserva e últimos sucessos.
+  `fo_monitor.py --check` sinaliza falhas objetivas sem texto de aulas nem
+  alertas por espera normal de um turno; não foi adicionado um novo stack.
+  Telemetria no VPS agora exclui reviews de revisões históricas do total atual;
+  a amostra de 184 jobs comparáveis mediu 2,6507 s de processamento por
+  segundo de áudio; 13 artefatos aprovados somaram 19.740 s de áudio nas
+  últimas 24 h. Séries sustentadas do revisor e alertas ainda pendentes.
+- **8 — Release.** Runbook atualizado com prova, limites, instalação,
+  reconciliação transacional e rollback. A proteção adicional do líder em
+  subprocessos de scratch e a liberação do decoder durante espera de
+  publicação (`c1272a3`) foram testadas, mas não carregadas no processo
+  Whisper ativo. Não interromper progresso saudável apenas para instalar
+  esse endurecimento; aplicar no próximo ciclo controlado.
