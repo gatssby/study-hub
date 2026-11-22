@@ -142,6 +142,18 @@ def test_discovery_is_read_only_and_skips_reviewed_or_stale_evidence(tmp_path, m
     assert store.conn.execute('SELECT state, attempts FROM transcription_jobs').fetchone()[:] == ('review', 1)
 
 
+def test_priority_cohort_is_bounded_and_exact():
+    from fo_hub.acoustic_service import priority_cohort
+
+    assert priority_cohort('fo_0000000000000000:2 fo_0000000000000001:1') == [
+        ('fo_0000000000000000', 2), ('fo_0000000000000001', 1)]
+    for invalid in ('fo_0000000000000000', 'fo_0000000000000000:01',
+                    'fo_0000000000000000:1 fo_0000000000000000:1',
+                    ' '.join(f'fo_{i:016x}:1' for i in range(6))):
+        with pytest.raises(ValueError, match='invalid acoustic priority cohort'):
+            priority_cohort(invalid)
+
+
 @pytest.mark.parametrize('case', ['corrupt_gzip', 'malformed_blockers', 'missing_chunks', 'invalid_silence',
                                  'does_not_fit', 'older_fallback'])
 def test_discovery_cannot_be_starved_by_a_higher_priority_lesson(tmp_path, monkeypatch, case):
@@ -182,6 +194,17 @@ def test_discovery_cannot_be_starved_by_a_higher_priority_lesson(tmp_path, monke
     selected = select(worker.cfg, tmp_path, AttemptBudget(tmp_path), now=400_000)
     assert selected is not None and selected[0] == good
 
+    # A scoped priority cannot skip validation, exceed the budget, or
+    # authorize a different lesson revision.
+    assert select(worker.cfg, tmp_path, AttemptBudget(tmp_path), now=400_000,
+                  preferred=((bad, 2),)) == selected
+    priority = select(worker.cfg, tmp_path, AttemptBudget(tmp_path), now=400_000,
+                      preferred=((bad, 1),))
+    if case == 'older_fallback':
+        assert priority is not None and priority[:2] == (bad, 1)
+    else:
+        assert priority == selected
+
 
 def test_scheduled_cleanup_runs_even_without_an_eligible_job(tmp_path, monkeypatch):
     from fo_hub import acoustic_service as service
@@ -194,7 +217,7 @@ def test_scheduled_cleanup_runs_even_without_an_eligible_job(tmp_path, monkeypat
     monkeypatch.setattr(ar, 'require_limits', lambda: None)
     monkeypatch.setattr(service, 'gate', lambda _: {'allowed': True})
     monkeypatch.setattr(service, 'has_primary_leader', lambda _: True)
-    monkeypatch.setattr(service, 'select', lambda *_: None)
+    monkeypatch.setattr(service, 'select', lambda *_, **__: None)
     events = []
     monkeypatch.setattr(ar, 'whisper_lock', lambda *_args, **_kwargs: nullcontext(1))
     cfg = SimpleNamespace(state=tmp_path)

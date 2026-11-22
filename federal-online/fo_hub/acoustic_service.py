@@ -108,7 +108,20 @@ def clean_work(root):
         shutil.rmtree(folder)
 
 
-def select(cfg, root, budget, now):
+def priority_cohort(value):
+    entries = value.split()
+    if len(entries) > 5 or len(set(entries)) != len(entries):
+        raise ValueError('invalid acoustic priority cohort')
+    pairs = []
+    for entry in entries:
+        match = re.fullmatch(r'(fo_[a-f0-9]{16}):([1-9][0-9]{0,8})', entry)
+        if match is None:
+            raise ValueError('invalid acoustic priority cohort')
+        pairs.append((match[1], int(match[2])))
+    return pairs
+
+
+def select(cfg, root, budget, now, *, preferred=()):
     with closing(FOStore(cfg.db, readonly=True).conn) as db:
         db.execute('BEGIN')
         excluded = EXCLUDABLE_DISCIPLINES | {r[0] for r in db.execute(
@@ -123,6 +136,7 @@ def select(cfg, root, budget, now):
                           'AND s.revision=CAST(l.version AS TEXT) ORDER BY queued_at,l.lesson_id').fetchall()
     model_hash = file_sha256(ar.MODEL_MANIFEST)
     free = shutil.disk_usage(cfg.state).free
+    priorities = {pair: index for index, pair in enumerate(preferred)}
     best = None
     for row in rows:
         source = dict(row)
@@ -142,10 +156,10 @@ def select(cfg, root, budget, now):
         if windows:
             focal = all(w.kind in FOCAL_FLAGS for w in windows)
             score = (row['queued_at'] or 0) - (FOCAL_HEAD_START_S if focal else 0)
-            contender = score, lesson, version, key
+            contender = priorities.get((lesson, version), len(priorities)), score, lesson, version, key
             if best is None or contender < best:
                 best = contender
-    return best[1:] if best is not None else None
+    return best[2:] if best is not None else None
 
 
 class Readiness:
@@ -166,14 +180,14 @@ class Readiness:
             self.sent = True
 
 
-def scheduled_turn(cfg, runtime, ready):
+def scheduled_turn(cfg, runtime, ready, *, preferred=()):
     ar.require_limits()
     if not has_primary_leader(cfg):
         return {'state': 'not_admitted'}
     root = private_dir(cfg.state / 'transcripts/acoustic-review')
     budget = AttemptBudget(private_dir(root / 'scheduled-attempts'))
     admitted = gate(cfg)['allowed']
-    candidate = select(cfg, root, budget, time.time()) if admitted else None
+    candidate = select(cfg, root, budget, time.time(), preferred=preferred) if admitted else None
 
     def on_acquired():
         ready()
@@ -211,7 +225,8 @@ def main(argv=None):
     try:
         ready = Readiness()
         try:
-            result = scheduled_turn(Config.from_env(), args.runtime, ready)
+            preferred = priority_cohort(os.environ.get('FO_ACOUSTIC_PRIORITY', ''))
+            result = scheduled_turn(Config.from_env(), args.runtime, ready, preferred=preferred)
         except ar.Blocked as exc:
             result = {'state': 'deferred', 'reason': str(exc)}
         ready()  # A clean skip is a successful service invocation, not a failed start.
