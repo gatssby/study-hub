@@ -22,10 +22,10 @@ def test_review_wait_is_bounded_but_can_reserve_a_long_whisper_turn(tmp_path):
     locks.mkdir()
     for name in ('acoustic-review.turn', 'transcription.lock'):
         (locks / name).touch()
-    with ar.whisper_lock(cfg, wait=7200) as lock_fd:
+    with ar.whisper_lock(cfg, wait=48*60) as lock_fd:
         assert os.fstat(lock_fd).st_ino == (locks / 'transcription.lock').stat().st_ino
     with pytest.raises(ValueError):
-        with ar.whisper_lock(cfg, wait=7201):
+        with ar.whisper_lock(cfg, wait=48*60+1):
             pass
 
 

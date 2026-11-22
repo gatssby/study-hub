@@ -13,7 +13,7 @@ WorkingDirectory=/home/ubuntu/study-hub/federal-online
 EnvironmentFile=/home/ubuntu/.config/study-hub/transcription.env
 Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
 ExecStart=/home/ubuntu/study-hub-models/fo-parakeet-int8/venv/bin/python -m fo_hub.acoustic_service --runtime /home/ubuntu/study-hub-models/fo-parakeet-int8
-TimeoutStartSec=2h 5min
+TimeoutStartSec=52min
 RuntimeMaxSec=300s
 TimeoutStopSec=15s
 KillMode=control-group

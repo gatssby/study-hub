@@ -1,7 +1,11 @@
 """Preparation regressions: synthetic data, injected commands, no real ASR."""
 import hashlib
+import fcntl
 import gzip
 import json
+import threading
+import time
+from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -148,6 +152,71 @@ def test_chunk_checkpoint_survives_failed_later_chunk(tmp_path):
     worker.run_once()
     assert sum(c[0] == str(cfg.binary) for c in calls2) == 1
     assert list((tmp_path/'transcripts/evidence').rglob('*.json.gz'))
+
+
+def test_pending_review_enters_after_committed_chunk_before_next_decode(tmp_path):
+    from fo_hub import acoustic_review, worker as runtime
+
+    store, lesson, cfg = ready(tmp_path)
+    cfg.chunk_s = 16
+    cfg.overlap_s = 2
+    locks = tmp_path / 'locks'
+    locks.mkdir()
+    calls = []
+    base = fake_runner(cfg, calls)
+    reviewed = []
+
+    def review():
+        with acoustic_review.whisper_lock(cfg, wait=3):
+            from fo_hub.store import FOStore
+            with closing(FOStore(cfg.db, readonly=True).conn) as db:
+                row = db.execute('SELECT state,lease_owner,progress FROM transcription_jobs').fetchone()
+                checkpoint, = (tmp_path/'transcripts/evidence').rglob('0.000-16.000.json.gz')
+                record = json.loads(gzip.decompress(checkpoint.read_bytes()))
+                runtime.validate_checkpoint(record, record['source_sha256'], record['fingerprint'], 0, 16)
+                reviewed.append((tuple(row), sum(c[0] == str(cfg.binary) for c in calls)))
+
+    errors = []
+
+    def review_checked():
+        try:
+            review()
+        except Exception as exc:
+            errors.append(str(exc))
+
+    reviewer = threading.Thread(target=review_checked)
+
+    def run(cmd, **kwargs):
+        if cmd[0] == str(cfg.binary):
+            assert len(kwargs['pass_fds']) == 1
+            if not reviewer.ident:
+                reviewer.start()
+                with (locks / 'acoustic-review.turn').open('rb+') as request:
+                    deadline = time.monotonic() + 2
+                    while True:
+                        try:
+                            fcntl.flock(request, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        except BlockingIOError:
+                            break
+                        fcntl.flock(request, fcntl.LOCK_UN)
+                        assert time.monotonic() < deadline
+                        time.sleep(.01)
+            result = base(cmd, **kwargs)
+            Path(cmd[cmd.index('-of') + 1] + '.json').write_text(json.dumps({
+                'transcription': [{'offsets': {'from': 0, 'to': 16000}, 'text': 'fala técnica'}]}))
+            return result
+        return base(cmd, **kwargs)
+
+    primary = Worker(cfg, store, runner=run, gate_fn=lambda: {'allowed': True}, free_bytes=lambda: 20*1024**3)
+    with runtime.transcription_turn(locks) as turn:
+        assert turn
+        primary.decoder_turn = turn
+        primary.run_once(lesson['lesson_id'])
+    reviewer.join(4)
+    assert not reviewer.is_alive()
+    assert not errors
+    assert reviewed == [(('leased', primary.owner, 16/30), 1)]
+    assert sum(c[0] == str(cfg.binary) for c in calls) == 2
 
 
 def test_identical_video_bytes_reuse_asr_but_retain_lesson_identity(tmp_path):

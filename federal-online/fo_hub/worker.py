@@ -19,7 +19,7 @@ import re
 import shutil
 import socket
 import sqlite3
-from contextlib import closing, contextmanager
+from contextlib import closing, contextmanager, nullcontext
 import subprocess
 import sys
 import tempfile
@@ -37,6 +37,9 @@ REVIEW_ERROR_COOLDOWN_S=86400
 REVIEW_ERROR_MAX_ATTEMPTS=3
 PHASES=('downloading','hashing','probing','decoding','stitching','repetition_check','qa','publishing','finished')
 HEARTBEAT_INTERVAL_S=60
+# Production 600 s chunks have taken up to ~34 minutes on the 3-OCPU VPS.
+CHUNK_TIMEOUT_S=45*60
+REPETITION_TIMEOUT_S=5*60
 MODEL_SHA256='64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2'
 
 
@@ -143,6 +146,9 @@ def atomic_json(path,data):
         handle.write(gzip.compress(payload,mtime=0) if path.suffix=='.gz' else payload)
         handle.flush();os.fsync(handle.fileno())
     os.replace(tmp,path)
+    directory=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY)
+    try:os.fsync(directory)
+    finally:os.close(directory)
 
 
 def evidence_checksum(data):
@@ -375,6 +381,7 @@ def preflight(config,runner=subprocess.run):
 
 class Worker:
     def __init__(self,config,store=None,runner=subprocess.run,gate_fn=None,free_bytes=None):
+        self.decoder_turn: DecoderTurn | None = None
         self.cfg=config;self.store=store or FOStore(config.db);self.c=self.store.conn
         self.runner=runner;self.gate_fn=gate_fn or (lambda:gate(config))
         self.free_bytes=free_bytes or (lambda:shutil.disk_usage(config.state).free)
@@ -460,9 +467,14 @@ class Worker:
             self.c.commit();return dict(row)
         except BaseException:self.c.rollback();raise
 
-    def command(self,cmd,timeout=7200):
+    def command(self,cmd,timeout=7200,**options):
         # Raw stderr/command arguments stay private; no signed URLs in logs.
-        return self.runner([str(x) for x in cmd],check=True,capture_output=True,text=True,timeout=timeout)
+        return self.runner([str(x) for x in cmd],check=True,capture_output=True,text=True,timeout=timeout,**options)
+
+    def decode(self,cmd,timeout):
+        # The child retains the same open description if the worker dies first.
+        options={'pass_fds': (self.decoder_turn.lock.fileno(),)} if self.decoder_turn else {}
+        return self.command(cmd,timeout=timeout,**options)
 
     @contextmanager
     def heartbeat(self,job):
@@ -518,8 +530,9 @@ class Worker:
         try:
             # A rejected copy is not resumable. Let known source failures use the
             # revision-scoped backoff rather than re-copying in this lease.
-            self.command(['rclone','copyto',source['remote_path'],video,'--retries','1','--transfers','1',
-                          '--max-transfer',f'{size+1024**2}B','--cutoff-mode','HARD'])
+            with self.decoder_turn.pause() if self.decoder_turn else nullcontext():
+                self.command(['rclone','copyto',source['remote_path'],video,'--retries','1','--transfers','1',
+                              '--max-transfer',f'{size+1024**2}B','--cutoff-mode','HARD'])
         except subprocess.CalledProcessError as exc:
             detail=str(exc.stderr or '').casefold()
             missing=any(x in detail for x in ('object not found','directory not found','file not found','404 not found'))
@@ -572,13 +585,15 @@ class Worker:
                 decoding=cached.get('decoding') if cached['schema_version']==2 else None
             else:
                 if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
-                self.command(['ffmpeg','-nostdin','-y','-threads','1','-ss',str(offset),'-i',video,'-t',str(length),'-ar','16000','-ac','1','-c:a','pcm_s16le','-threads','1',audio])
-                silence=self.command(['ffmpeg','-nostdin','-threads','1','-i',audio,'-af','silencedetect=noise=-40dB:d=1','-f','null','-'])
+                with self.decoder_turn.pause() if self.decoder_turn else nullcontext():
+                    self.command(['ffmpeg','-nostdin','-y','-threads','1','-ss',str(offset),'-i',video,'-t',str(length),'-ar','16000','-ac','1','-c:a','pcm_s16le','-threads','1',audio])
+                    silence=self.command(['ffmpeg','-nostdin','-threads','1','-i',audio,'-af','silencedetect=noise=-40dB:d=1','-f','null','-'])
+                if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
                 command=decoder_command(cfg,audio,prefix)
                 decode_started=time.monotonic()
                 decoded=None;failure=None;raw_text=None
                 try:
-                    decoded=self.command(command,timeout=172800)
+                    decoded=self.decode(command,timeout=CHUNK_TIMEOUT_S)
                     raw_text=prefix.with_suffix('.json').read_text()
                 except Exception as exc:
                     failure=exc
@@ -628,6 +643,9 @@ class Worker:
             queue.progress(job['lesson_id'],job['version'],self.owner,min(1,(offset+length)/duration))
             with self.c:self.c.execute('UPDATE transcription_jobs SET lease_until=?,updated_at=? WHERE lesson_id=? AND version=? AND lease_owner=?',(time.time()+7*86400,str(time.time()),job['lesson_id'],job['version'],self.owner))
             audio.unlink(missing_ok=True);prefix.with_suffix('.json').unlink(missing_ok=True)
+            if self.decoder_turn:
+                self.decoder_turn.checkpoint(lesson_id=job['lesson_id'],version=job['version'],
+                                             offset_s=offset,duration_s=length,reused=cached is not None)
             if offset+length>=duration:break
             offset+=cfg.chunk_s-cfg.overlap_s
         from .stitching import stitch_chunks
@@ -826,8 +844,10 @@ class Worker:
                 if end-start<0.3:heard.append(None);continue
                 if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
                 audio=work/'verify.wav';prefix=work/'verify'
-                self.command(['ffmpeg','-nostdin','-y','-threads','1','-ss',f'{start:.3f}','-i',video,'-t',f'{end-start:.3f}','-ar','16000','-ac','1','-c:a','pcm_s16le','-threads','1',audio])
-                self.command(decoder_command(cfg,audio,prefix),timeout=3600)
+                with self.decoder_turn.pause() if self.decoder_turn else nullcontext():
+                    self.command(['ffmpeg','-nostdin','-y','-threads','1','-ss',f'{start:.3f}','-i',video,'-t',f'{end-start:.3f}','-ar','16000','-ac','1','-c:a','pcm_s16le','-threads','1',audio])
+                if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
+                self.decode(decoder_command(cfg,audio,prefix),timeout=REPETITION_TIMEOUT_S)
                 rows=parse_whisper(json.loads(prefix.with_suffix('.json').read_text()),offset=start)
                 audio.unlink(missing_ok=True);prefix.with_suffix('.json').unlink(missing_ok=True)
                 heard.append({'start':start,'end':end,'rows':rows,
@@ -1010,6 +1030,38 @@ def review_audit(cfg):
     return {'reviews':reviews,'excluded_disciplines':sorted(excluded),'inference_executed':False,'mutations':0}
 
 
+class DecoderTurn:
+    def __init__(self, request, lock):
+        self.request, self.lock = request, lock
+
+    @contextmanager
+    def pause(self):
+        """No heavy child is running; preserve the leader and live job lease."""
+        fcntl.flock(self.lock,fcntl.LOCK_UN)
+        try:
+            yield
+        finally:
+            # Request-before-decoder order lets an admitted reviewer run first.
+            fcntl.flock(self.request,fcntl.LOCK_EX)
+            try:
+                fcntl.flock(self.lock,fcntl.LOCK_EX)
+            finally:
+                fcntl.flock(self.request,fcntl.LOCK_UN)
+
+    def checkpoint(self, **boundary):
+        try:
+            fcntl.flock(self.request,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:
+            started=time.monotonic()
+            print(json.dumps({'state':'review_turn_yielded','worker_pid':os.getpid(),**boundary}),flush=True)
+            with self.pause():
+                pass
+            print(json.dumps({'state':'review_turn_resumed','worker_pid':os.getpid(),
+                              'paused_s':round(time.monotonic()-started,3),**boundary}),flush=True)
+        else:
+            fcntl.flock(self.request,fcntl.LOCK_UN)
+
+
 @contextmanager
 def transcription_turn(locks):
     """Reserve the next decoder turn without holding the request lock during a job."""
@@ -1024,7 +1076,7 @@ def transcription_turn(locks):
         try:
             try:
                 fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-                acquired=True
+                acquired=DecoderTurn(turn,lock)
             except BlockingIOError:
                 acquired=False
         finally:
@@ -1089,6 +1141,7 @@ def main(argv=None):
                     if worker is None:
                         worker=Worker(cfg);worker.recover()
                         evidence_pass(worker,startup=True)
+                    worker.decoder_turn=acquired
                     result=worker.run_once(a.lesson_id);print(json.dumps(result),flush=True)
                     state=result['state']
                     if state=='breaker_open':return 5

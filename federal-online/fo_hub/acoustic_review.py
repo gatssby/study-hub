@@ -34,8 +34,8 @@ RATE = 16000
 HEADROOM = 2**30
 WORK_BYTES = 8 * 2**20
 MAX_WINDOWS = 12
-MAX_WAIT_SECONDS = 120
-MAX_SCHEDULED_WAIT_SECONDS = 7200
+MAX_WAIT_SECONDS = 48 * 60
+MAX_SCHEDULED_WAIT_SECONDS = MAX_WAIT_SECONDS
 MIN_AVAILABLE_RAM = 8 * 2**30
 MODEL_MEMORY_MAX = 3 * 2**30
 SCHEMA = 1
@@ -229,7 +229,9 @@ def whisper_lock(cfg, *, wait=0):
                 fcntl.flock(turn, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 raise Blocked('another_acoustic_review_requested') from None
-        deadline = time.monotonic() + wait
+            print(json.dumps({'state': 'review_turn_requested', 'reviewer_pid': os.getpid()}), flush=True)
+        started = time.monotonic()
+        deadline = started + wait
         while True:
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -239,8 +241,16 @@ def whisper_lock(cfg, *, wait=0):
                 if remaining <= 0:
                     raise Blocked('whisper_owns_transcription_lock') from None
                 time.sleep(min(1, remaining))
-        # Preserve the fence when systemd kills Python before its command.
-        yield lock.fileno()
+        if turn is not None:
+            print(json.dumps({'state': 'review_turn_acquired', 'reviewer_pid': os.getpid(),
+                              'wait_s': round(time.monotonic() - started, 3)}), flush=True)
+        try:
+            # Preserve the fence when systemd kills Python before its command.
+            yield lock.fileno()
+        finally:
+            if turn is not None:
+                stack.close()
+                print(json.dumps({'state': 'review_turn_closed', 'reviewer_pid': os.getpid()}), flush=True)
 
 
 def write_receipt(path, result):
