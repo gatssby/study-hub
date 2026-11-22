@@ -25,6 +25,7 @@ import sys
 import tempfile
 import threading
 import time
+from typing import BinaryIO
 import uuid
 import zlib
 
@@ -382,6 +383,7 @@ def preflight(config,runner=subprocess.run):
 class Worker:
     def __init__(self,config,store=None,runner=subprocess.run,gate_fn=None,free_bytes=None):
         self.decoder_turn: DecoderTurn | None = None
+        self.leader: BinaryIO | None = None
         self.cfg=config;self.store=store or FOStore(config.db);self.c=self.store.conn
         self.runner=runner;self.gate_fn=gate_fn or (lambda:gate(config))
         self.free_bytes=free_bytes or (lambda:shutil.disk_usage(config.state).free)
@@ -469,12 +471,27 @@ class Worker:
 
     def command(self,cmd,timeout=7200,**options):
         # Raw stderr/command arguments stay private; no signed URLs in logs.
+        if self.leader is not None:
+            # Scratch may outlive the parent until systemd reaps its children.
+            options['pass_fds']=(self.leader.fileno(), *options.get('pass_fds', ()))
         return self.runner([str(x) for x in cmd],check=True,capture_output=True,text=True,timeout=timeout,**options)
 
     def decode(self,cmd,timeout):
         # The child retains the same open description if the worker dies first.
         options={'pass_fds': (self.decoder_turn.lock.fileno(),)} if self.decoder_turn else {}
         return self.command(cmd,timeout=timeout,**options)
+
+    @contextmanager
+    def publication_lock(self):
+        path=self.cfg.state/'locks/transcript-publication.lock';path.parent.mkdir(parents=True,exist_ok=True)
+        with path.open('a+') as handle:
+            try:
+                fcntl.flock(handle,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            except BlockingIOError:
+                # External publication can run for minutes without using ASR.
+                with self.decoder_turn.pause() if self.decoder_turn else nullcontext():
+                    fcntl.flock(handle,fcntl.LOCK_EX)
+            yield
 
     @contextmanager
     def heartbeat(self,job):
@@ -678,10 +695,9 @@ class Worker:
         self.record_phase(job,'publishing')
         atomic_json(path,artifact)
         if qa['passed']:
-            lock=cfg.state/'locks/transcript-publication.lock';lock.parent.mkdir(parents=True,exist_ok=True)
-            with lock.open('a+') as handle:
-                fcntl.flock(handle,fcntl.LOCK_EX)
-                self.current_source(job)
+            with self.publication_lock():
+                _,latest=self.current_source(job)
+                if any(latest[k]!=source[k] for k in ('remote_path','revision','size','available')):raise SourceChanged('source changed before publication')
                 public={k:artifact[k] for k in ('lesson_id','version','corpus','segments')}
                 public['qa']={'passed':True}
                 atomic_json(cfg.state/'transcripts/generated_v2'/job['lesson_id']/f"v{job['version']}.json",public)
@@ -765,9 +781,7 @@ class Worker:
         path=self.cfg.state/'transcripts'/('private' if qa['passed'] else 'review')/lesson_id/f"v{job['version']}.qa-v{QA_POLICY_VERSION}.json.gz"
         atomic_json(path,artifact)
         if qa['passed']:
-            lock=self.cfg.state/'locks/transcript-publication.lock';lock.parent.mkdir(parents=True,exist_ok=True)
-            with lock.open('a+') as handle:
-                fcntl.flock(handle,fcntl.LOCK_EX)
+            with self.publication_lock():
                 _,latest=self.current_source(job)
                 if any(latest[k]!=source[k] for k in ('remote_path','revision','size','available')):raise SourceChanged('source changed during reassessment')
                 public={k:artifact[k] for k in ('lesson_id','version','corpus','segments')}
@@ -1139,7 +1153,8 @@ def main(argv=None):
             with transcription_turn(locks) as acquired:
                 if acquired:
                     if worker is None:
-                        worker=Worker(cfg);worker.recover()
+                        worker=Worker(cfg);worker.leader=leader;worker.decoder_turn=acquired
+                        worker.recover()
                         evidence_pass(worker,startup=True)
                     worker.decoder_turn=acquired
                     result=worker.run_once(a.lesson_id);print(json.dumps(result),flush=True)

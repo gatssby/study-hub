@@ -219,6 +219,24 @@ def test_pending_review_enters_after_committed_chunk_before_next_decode(tmp_path
     assert sum(c[0] == str(cfg.binary) for c in calls) == 2
 
 
+def test_child_protects_scratch_with_leader_and_keeps_decoder_only_for_asr(tmp_path):
+    from fo_hub import worker as runtime
+
+    store, _, cfg = ready(tmp_path)
+    locks = tmp_path / 'locks'
+    locks.mkdir()
+    seen = []
+    primary = Worker(cfg, store, runner=lambda cmd, **kw: seen.append(kw.get('pass_fds', ())))
+    with (locks / 'transcription-worker.lock').open('a+') as leader, runtime.transcription_turn(locks) as turn:
+        assert turn
+        primary.leader = leader
+        primary.decoder_turn = turn
+        with turn.pause():
+            primary.command(['ffmpeg'])
+        primary.decode(['whisper-cli'], timeout=1)
+        assert seen == [(leader.fileno(),), (leader.fileno(), turn.lock.fileno())]
+
+
 def test_identical_video_bytes_reuse_asr_but_retain_lesson_identity(tmp_path):
     from fo_hub.transcription import TranscriptionQueue
     store, lesson, cfg = ready(tmp_path)
