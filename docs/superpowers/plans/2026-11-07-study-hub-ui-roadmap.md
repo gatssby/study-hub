@@ -276,9 +276,11 @@ automação contínua após esse aceite. Runbook:
   privado, imutável e vinculado ao SHA da fonte, com 8,16 s de áudio. Houve
   fala detectada, mas a comparação foi inconclusiva e manteve o bloqueio.
   ASR: 2,90 s; VAD: 0,12 s; CPU total: 9,17 s; tempo ativo: 37,20 s;
-  RSS de pico do processo: 1.139.900 KiB; scratch: 186.635.635 B. As revisões
-  atuais de História, Português, Filosofia e Redação passaram na verificação
-  de entrada e estão priorizadas pelo timer, sem controlador paralelo.
+  RSS de pico do processo: 1.139.900 KiB; scratch: 186.635.635 B. História v1
+  (`fo_2f7972942ef5c195`) foi processada pelo timer: 8,50 s de áudio,
+  3,07 s ASR, 0,10 s VAD, 12,83 s CPU, 28,60 s ativos e RSS de pico de
+  1.205.244 KiB. Comparação inconclusiva; bloqueio mantido. As revisões
+  de Português, Filosofia e Redação estão elegíveis e priorizadas pelo timer.
 - **3 — Candidato de correção implementado, publicação bloqueada.** Para
   duplicação exata na sobreposição de blocos, o revisor pode registrar a
   proveniência, o hash do PCM e o resultado projetado de QA após remover
@@ -289,19 +291,23 @@ automação contínua após esse aceite. Runbook:
   foram instalados após a prova real e o teste de QA do Plugin. Timer ativo e
   habilitado no boot; um job por turno, 15 min após a saída, espera de até 48
   min, execução de até cinco min, 0,5 OCPU, 3 GiB e sem swap. A primeira
-  execução autônoma foi admitida às 18:20:52; recuperação por reboot não
-  foi testada com reboot real. Rollback apenas do revisor no runbook.
-- **5 — Triagem de estado concluída, adjudicação parcial.** Às 18:22 UTC:
-  60 jobs em review para 57 aulas (57 atuais, três históricos); 52 aguardavam
+  execução autônoma (PID 3436304) iniciou às 18:20:52, adquiriu o decoder
+  às 18:37:25 (980,189 s desde o pedido), registrou recibo e terminou às
+  18:37:54 com status 0; o Whisper retomou com o filho 3448892. A próxima
+  ativação foi agendada pelo systemd. Recuperação por reboot configurada,
+  sem teste com reboot real. Rollback apenas do revisor no runbook.
+- **5 — Triagem de estado concluída, adjudicação parcial.** Às 18:41 UTC:
+  60 jobs em review para 57 aulas (57 atuais, três históricos); 51 aguardavam
   áudio, dois excediam o orçamento de janelas, dois excluídos por disciplina,
-  um inconclusivo com evidência. Motivos QA podem coexistir e não são prova
+  dois inconclusivos com evidência. Motivos QA podem coexistir e não são prova
   de alucinação. Não houve transcrição acústica aprovada nem review removido
   somente para baixar a contagem.
 - **6 — Verificação da fila, API e Plugin.** O worker avançou para 136
   transcrições atuais validadas e 2.637 jobs elegíveis em fila (2.827 no
-  total). Inglês/Espanhol preservados. Na auditoria inicial, API retornou
-  200 em 135/135 aprovadas e 404 em 56/56 reviews; 46.184 segmentos iguais
-  aos artefatos e oito pares aprovados/review verificados no MCP real.
+  total). Inglês/Espanhol preservados. Após o cutover, a API retornou
+  200 em 136/136 aprovadas e 404 em 57/57 reviews; a auditoria inicial
+  confirmou 46.184 segmentos iguais aos artefatos. Oito aprovadas, oito
+  reviews e oito buscas focadas foram verificados no MCP real.
   Buscas dirigidas preservaram citações; buscas amplas têm limite de 200.
   Três finais dentro da tolerância de QA (+1 s) e sobreposições já permitidas
   não justificam mudar a política nem retranscrever o acervo.
@@ -312,10 +318,13 @@ automação contínua após esse aceite. Runbook:
   Telemetria no VPS agora exclui reviews de revisões históricas do total atual;
   a amostra de 184 jobs comparáveis mediu 2,6507 s de processamento por
   segundo de áudio; 13 artefatos aprovados somaram 19.740 s de áudio nas
-  últimas 24 h. Séries sustentadas do revisor e alertas ainda pendentes.
-- **8 — Release.** Runbook atualizado com prova, limites, instalação,
-  reconciliação transacional e rollback. A proteção adicional do líder em
-  subprocessos de scratch e a liberação do decoder durante espera de
-  publicação (`c1272a3`) foram testadas, mas não carregadas no processo
-  Whisper ativo. Não interromper progresso saudável apenas para instalar
-  esse endurecimento; aplicar no próximo ciclo controlado.
+  últimas 24 h. Séries sustentadas do revisor e encaminhamento externo dos
+  alertas ainda pendentes.
+- **8 — Release.** Runbook e Notion atualizados; branch publicada. Após a
+  primeira execução do timer, o worker `c1272a3` foi carregado (PID 3451204).
+  O primeiro stop encontrou o flock ainda em liberação e reiniciou a versão
+  anterior com checkpoint preservado. Uma única nova tentativa aguardou a
+  liberação, verificou a reentrada do lease interrompido sem nova cobrança e
+  reiniciou com um único decoder; o timer seguiu habilitado. A proteção do
+  líder cobre subprocessos de scratch e solta o decoder antes de aguardar
+  um lock externo de publicação. Sem mudanças em serviços não relacionados.

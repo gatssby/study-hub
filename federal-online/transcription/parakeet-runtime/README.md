@@ -165,7 +165,10 @@ request (`review_turn_yielded`), releases the decoder flock, and waits for the
 reviewer to finish before taking the flock and logging `review_turn_resumed`.
 Child ASR processes inherit the decoder FD so killing the parent cannot grant a
 second decoder access while the first survives. Download and ordinary media
-conversion do not require the inference lock. Never unlink lock files.
+conversion do not require the inference lock but inherit the worker leader FD
+so scratch recovery cannot race a surviving child. When external publication
+holds the publication lock, the worker releases the decoder while waiting.
+Never unlink lock files.
 
 Deploy from a known committed revision, not the working tree. On the VPS export,
 verify both staged and live SHA-256 values. Include the transitive runtime
@@ -177,15 +180,19 @@ deployed `window_benchmark.py` lacked the `pass_fds` interface; unit tests on th
 Mac did not catch drift in the VPS export.
 
 For an authorized interruption, stop the primary systemd cgroup and prove all
-children and relevant flock owners are gone. Save a private, hash-checked
+children and relevant flock owners are gone. A decoder FD may still be closing
+when the cgroup appears empty; allow a short, bounded drain (up to 15 seconds)
+and abort rather than bypass a held flock. Save a private, hash-checked
 before-image and checkpoint inventory. Reconcile only the exact lesson/version/
 owner lease in one `BEGIN IMMEDIATE` transaction, with no attempt charge. Verify
 the job was requeued and unchanged checkpoints verify before restarting. Check
 the actual loaded generation, singleton leader, live lease and decoder, not just
 the new files. On November 22, 2026 the cutover from `06981f9` to `49e6303`
 requeued `fo_9c48da1a924603a1` v1 and resumed `fo_ab7589742bc156fd` v3 from a
-durable checkpoint. Preserve the cutover and lease receipts; never replay one
-against a new lease. If interrupted mid-deployment, inspect the existing VPS
+durable checkpoint. A follow-up cutover loaded `c1272a3` after the first timer
+run and verified renewed real decoding and timer rearm. Preserve the cutover
+and lease receipts; never replay one against a new lease. If interrupted
+mid-deployment, inspect the existing VPS
 controller, cgroup, file hashes and lease before acting; never duplicate it.
 
 For primary rollback, stop acoustic admissions first and let the reviewer finish
@@ -205,6 +212,12 @@ with the same primary lease at progress 1.0 and the old decoder gone, and
 released at 18:12:38 UTC. Whisper then started another decoder. Biology v2
 produced a private receipt for 8.16 s of audio; speech was present, comparison
 was inconclusive, and the transcript stayed in review.
+
+The first timer invocation `76c0fadddfeb4603a4b8aa15f0e09c78` completed
+successfully at 18:37:54 UTC. It waited 980.189 s for a 600 s Whisper audio
+chunk to commit and processed 8.50 s of History v1 in 28.60 s active wall
+time. The original primary resumed with another decoder; the private receipt
+is inconclusive and no transcript changed. The timer scheduled the next turn.
 
 For a new host or reactivation after rollback, require the same evidence before
 enabling. Check that earlier transient controllers and their children are
