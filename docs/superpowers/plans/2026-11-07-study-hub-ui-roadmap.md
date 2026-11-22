@@ -351,3 +351,42 @@ automação contínua após esse aceite. Runbook:
   ainda exige escuta independente. A normalização de fim da QA v5 corrigiu
   o timestamp em cinco amostras reais sem mudar texto, mas outros motivos
   de rejeição persistiram. Sem mudança no Whisper ou na política de QA.
+
+
+---
+
+## Reavaliação técnica de estratégia — MVP de transcrições FO (22/11/2026)
+
+**Status: proposta de priorização para discussão, não autorização de execução.** Este adendo complementa o histórico acima. Nenhuma alteração de serviços, modelos ou política de QA decorre automaticamente deste documento.
+
+### Diagnóstico observado (VPS 22/11, ~22h51 UTC)
+
+- 3.030 aulas atuais; **139 transcrições atuais validadas** (4,6%); 2.824 jobs na fila, dos quais 2.811 têm fonte elegível e 13 não; um lease e 60 jobs em review (57 aulas atuais + três registros históricos).
+- Últimas 24h no journal Whisper: **13 eventos validated e sete review**, 20 aulas processadas nessa janela. O ritmo de um único dia sugere ordem de grandeza de **~141 dias para primeira passagem nos 2.824 jobs**, **não** ETA confiável, porque duração das aulas, fila e carga variam.
+- Journal acústico: dez pedidos de turno, nove aquisições, cinco eventos review_retained e quatro falhas; esperas entre ~376 e ~1.394 s por turno adquirido. Seis aulas distintas possuem evidência, **zero correções acústicas publicadas**. Código remoto contém o patch 6bf717f, mas o primeiro ciclo inteiramente pós-patch ainda não fora confirmado: uma falha em invocação iniciada antes do patch não comprova regressão do código novo.
+- Whisper, API FO, Anki vNext e timer de revisão ativos na inspeção; serviço de revisão pode aparecer activating enquanto espera checkpoint. Plugin já entregou 990 segmentos de três aulas validadas e isolou três rejeições. **QA automatizado não mede WER nem fidelidade lexical real.**
+
+### Avaliação das alternativas
+
+| Opção | Decisão proposta | Justificativa |
+| --- | --- | --- |
+| Whisper large-v3 + QA + API/Plugin | **Manter como núcleo** | Publicação e isolamento comprovados |
+| Silero VAD | **Aplicação focal** | Identifica silêncio suspeito; não prova o conteúdo falado |
+| Parakeet INT8 | **Auxiliar de evidência, não requisito para publicação** | Nenhuma recuperação em seis casos; alto custo de turno |
+| Correção determinística de estrutura/timestamps | **Priorizar se verificada sem mudar fala** | Menor risco; padding final já possui normalização comprovada |
+| Retranscrição focal Whisper com parâmetros alternativos | **Experimento pequeno** | Potencial de recuperar trechos sem outro modelo, mas não fornece ground truth |
+| Modelo Whisper mais rápido (ex.: large-v3-turbo) | **Benchmark A/B condicionado a qualidade** | Pode acelerar a fila; não presumir equivalência acadêmica |
+| Segundo ASR integral em todas as aulas, nova fila ou dashboard | **Não implementar no MVP** | Custo/complexidade sem retorno demonstrado |
+| Referência humana em amostras pequenas | **Prioridade alta** | Necessária para medir WER/CER, omissões e terminologia científica |
+
+### Prioridades propostas para o próximo ciclo (planejamento, sem execução)
+
+- [ ] **P0 — Qualidade de referência.** Amostrar pequenos trechos reais estratificados de aulas validadas e rejeitadas, com disciplinas, termos científicos, números, silêncio e repetições. Estabelecer transcrição humana correta para a amostra e protocolo de normalização; medir WER/CER, inserções, omissões, nomes e alinhamento temporal. QA-pass sozinho não comprova fidelidade.
+- [ ] **P0 — Taxa sustentável.** Medir throughput por sete dias ou amostra equivalente, com áudio-hora/dia, aulas aprovadas/rejeitadas, CPU-hora/áudio-hora, tempo de espera Parakeet e falhas. Não produzir ETA definitiva com 24h de dados.
+- [ ] **P1 — Benchmark A/B na VPS ARM64.** Comparar Whisper large-v3 atual com large-v3-turbo e/ou ajustes pequenos de VAD/decoding nos mesmos trechos referenciados; medir WER/CER, velocidade, alucinações e retenção de linguagem acadêmica. Migrar somente se houver ganho real sem degradação relevante.
+- [ ] **P1 — Revisão proporcional ao benefício.** Separar QA falso positivo, timestamp mecânico, erro de stitching, loop e alucinação; tratar erros determinísticos primeiro, revisão acústica focal depois. Preservar repetições didáticas. Verificar um ciclo inteiramente pós-patch 6bf717f antes de declarar a falha corrigida. Se a revisão Parakeet continuar sem recuperações mensuráveis, considerar seu uso sob demanda.
+- [ ] **P2 — Cobertura e publicação.** Recuperar as 13 fontes pendentes e outras lacunas reais; manter Whisper e publicação automática ao Plugin; bloquear apenas versões efetivamente não aprovadas e registrar motivo claro.
+
+**Gates para decisão:** referência humana válida, benchmarks comparáveis no mesmo hardware, throughput melhor sem piora relevante de conteúdo acadêmico, QA inalterado e Plugin isolando rejeições. Se não houver ganho, preservar o pipeline atual.
+
+**Fora de escopo:** novo dashboard, UI, banco/fila adicional, APIs pagas, ASR integral duplo, reprocessamento massivo de aulas validadas e novos modelos não justificados. Esta revisão não muda produção.
