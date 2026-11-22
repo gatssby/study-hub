@@ -173,3 +173,24 @@ Missão autônoma de correção de metadados e recuperação conservadora de rev
 - 22 aulas atuais sem fonte de vídeo verificada; 146 sem ordem de catálogo verificável.
 - PDFs de nível disciplina não vinculados por aula; revisão visual de páginas OCR segue pendente (baseline 07/11).
 - `get_lesson` por ID direto ainda retorna registros present=0 (comportamento pré-existente da API; excluídos de browse/busca); nenhum vazamento nas aulas recuperadas.
+
+## Piloto de revisão acústica Parakeet — 22/11/2026 UTC
+
+- **Validado:** Parakeet TDT v3 pt-BR INT8 + Silero no Oracle ARM64, CPU-only (`onnx-asr` 0.11.0, ORT 1.24.4), runtime isolado e ~856 MiB instalados. Smoke de fala sintética PT-BR: 4,069 s de áudio, 3,011 s de VAD + ASR, 1,055 GiB de RSS de pico. Não mede precisão ou custo em aulas reais.
+- **Bloqueado em produção:** o Whisper legado detém `transcription.lock` durante todo o loop, inclusive enquanto dorme. O handoff cooperativo foi testado no Oracle com locks descartáveis, sem intervenção no Whisper em execução. O código não foi carregado pelo processo vivo. A troca deve ocorrer somente em uma janela autorizada com o processo anterior já quiescido, sem decoder/lease ativo e preservando checkpoints. Nenhum serviço/timer contínuo foi ativado.
+- **Coorte:** os cinco artefatos atuais e suas fontes foram conferidos; nenhuma janela real foi decodificada. 0 recuperadas, 5 mantidas em revisão, sem correção/publicação e sem mudança de QA. Nenhum caso de timestamp já recuperado foi reaberto. Inglês/Espanhol excluídos. Fila: 55 registros em review, 50 atuais e elegíveis após excluir os dois idiomas.
+- **Capacidade:** 164.374.413.312 B livres no smoke, contra reserva operacional de 5.097.523.696 B (4 GiB + maior fonte + 100 MiB), além de 1 GiB extra e orçamento temporário exigidos pelo reviewer.
+
+| Aula/revisão | Bloqueio atual | Janelas planejadas (s, não executadas) |
+|---|---|---|
+| `fo_86307c2dd5ba3e22` v2 — Biologia | Repetição sem confirmação acústica, potencialmente legítima | 661,84–670,00 |
+| `fo_2f7972942ef5c195` v1 — História | Repetição isolada sem confirmação acústica | 1488,26–1496,76 |
+| `fo_409adc43759b2c92` v1 — Português | Loop de n-gramas/tokens | 1332,10–1340,22; 2056,80–2062,80; 2056,80–2082,80; 2076,80–2092,80 |
+| `fo_1d3cbdf905d6c3f9` v1 — Filosofia | Texto durante silêncio medido | 1612,70–1617,55 |
+| `fo_d6edf80d9016f394` v1 — Redação | Repetição de tokens e texto durante silêncio medido | 1741,64–1753,72; 2015,40–2021,40; 2178,20–2184,68 |
+
+Próximo aceite: executar as cinco revisões manuais, uma de cada vez no handoff
+validado; medir recursos por aula, adjudicar a evidência acústica e preservar as
+transcrições originais. Só considerar correção versionada pelo QA existente ou
+automação contínua após esse aceite. Runbook:
+`federal-online/transcription/parakeet-runtime/README.md`.

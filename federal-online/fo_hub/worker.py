@@ -1010,6 +1010,28 @@ def review_audit(cfg):
     return {'reviews':reviews,'excluded_disciplines':sorted(excluded),'inference_executed':False,'mutations':0}
 
 
+@contextmanager
+def transcription_turn(locks):
+    """Reserve the next decoder turn without holding the request lock during a job."""
+    flags=os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW
+    with os.fdopen(os.open(locks/'acoustic-review.turn',flags,0o600),'rb+') as turn, \
+            os.fdopen(os.open(locks/'transcription.lock',flags,0o600),'rb+') as lock:
+        try:
+            fcntl.flock(turn,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:
+            yield False
+            return
+        try:
+            try:
+                fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                acquired=True
+            except BlockingIOError:
+                acquired=False
+        finally:
+            fcntl.flock(turn,fcntl.LOCK_UN)
+        yield acquired
+
+
 def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__);mode=p.add_mutually_exclusive_group(required=True)
     mode.add_argument('--check-only',action='store_true');mode.add_argument('--run',action='store_true')
@@ -1056,31 +1078,39 @@ def main(argv=None):
     if not preparation['ready']:
         print(json.dumps({'state':'blocked','preflight':preparation}));return 3
     locks=cfg.state/'locks';locks.mkdir(parents=True,exist_ok=True)
-    with (locks/'transcription.lock').open('a+') as lock:
-        try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    with os.fdopen(os.open(locks/'transcription-worker.lock',os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600),'rb+') as leader:
+        try:fcntl.flock(leader,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:print('transcription worker already owns lock',file=sys.stderr);return 4
-        worker=Worker(cfg);worker.recover()
-        # One bounded evidence-only pass at startup too, so recovered reviews
-        # are reassessed without waiting for the next completed job.
-        try:
-            passed=worker.review_pass()
-            if passed['processed']:print(json.dumps({'state':'review_pass','startup':True,**passed}),flush=True)
-        except Exception as exc:
-            print(json.dumps({'state':'review_pass_error','error_type':type(exc).__name__}),flush=True)
+        worker=None
         while True:
-            result=worker.run_once(a.lesson_id);print(json.dumps(result),flush=True)
-            if result['state']=='breaker_open':return 5
-            if result['state']=='blocked':return 3
-            # Bounded evidence-only review automation between jobs; it must
-            # never destabilize the ASR loop, so systemic errors are contained.
-            if result['state'] in ('done','review','idle') and a.lesson_id is None:
-                try:
-                    passed=worker.review_pass()
-                    if passed['processed']:print(json.dumps({'state':'review_pass',**passed}),flush=True)
-                except Exception as exc:
-                    print(json.dumps({'state':'review_pass_error','error_type':type(exc).__name__}),flush=True)
-            if not a.loop:return 0
-            if result['state'] in ('idle','retry','failed','paused_storage'):time.sleep(60)
+            state=None
+            with transcription_turn(locks) as acquired:
+                if acquired:
+                    if worker is None:
+                        worker=Worker(cfg);worker.recover()
+                        evidence_pass(worker,startup=True)
+                    result=worker.run_once(a.lesson_id);print(json.dumps(result),flush=True)
+                    state=result['state']
+                    if state=='breaker_open':return 5
+                    if state=='blocked':return 3
+                    if state in ('done','review','idle') and a.lesson_id is None:
+                        evidence_pass(worker)
+                    if not a.loop:return 0
+            if not acquired:
+                if not a.loop:print('transcription lock busy',file=sys.stderr);return 4
+                time.sleep(2)
+                continue
+            if state in ('idle','retry','failed','paused_storage'):time.sleep(60)
+
+
+def evidence_pass(worker, *, startup=False):
+    # Evidence-only reassessment must not destabilize the primary loop.
+    try:
+        passed=worker.review_pass()
+        if passed['processed']:
+            print(json.dumps({'state':'review_pass',**({'startup':True} if startup else {}),**passed}),flush=True)
+    except Exception as exc:
+        print(json.dumps({'state':'review_pass_error','error_type':type(exc).__name__}),flush=True)
 
 
 if __name__=='__main__':raise SystemExit(main())
