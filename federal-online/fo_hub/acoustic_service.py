@@ -144,7 +144,7 @@ def select(cfg, root, budget, now, *, preferred=()):
         if not re.fullmatch(r'fo_[a-f0-9]{16}', lesson) or discipline(source) in excluded:
             continue
         try:
-            ar.require_storage(free, largest, source['size'] + ar.WORK_BYTES)
+            ar.require_storage(free, largest, source['size'] + ar.TRANSFER_HEADROOM + ar.WORK_BYTES)
             review, digest, duration, original_hash, qa_hash = ar.verified_input(cfg, lesson, version, source, excluded)
             key = ar.evidence_key(lesson, version, digest, original_hash, qa_hash, model_hash)
             receipt = root / f'{lesson}-v{version}-{key}.json.gz'
@@ -205,6 +205,8 @@ def scheduled_turn(cfg, runtime, ready, *, preferred=()):
         result = ar.review(cfg, runtime, lesson, version, wait=ar.MAX_SCHEDULED_WAIT_SECONDS,
                            ready=on_acquired, reserve=lambda k: budget.reserve(k, now=time.time()),
                            expected_key=key, work_prefix=WORK_PREFIX)
+    except ar.CommandFailed as exc:
+        return {'state': 'deferred', 'lesson_id': lesson, 'version': version, **exc.diagnostic}
     except ar.Blocked as exc:
         if str(exc) in FINAL_REASONS:
             budget.retire(key)

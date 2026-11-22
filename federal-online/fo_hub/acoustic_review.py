@@ -34,6 +34,7 @@ from .worker import RESERVE, Config, file_sha256, gate
 RATE = 16000
 HEADROOM = 2**30
 WORK_BYTES = 8 * 2**20
+TRANSFER_HEADROOM = 2**20
 MAX_WINDOWS = 12
 MAX_WAIT_SECONDS = 48 * 60
 MAX_SCHEDULED_WAIT_SECONDS = MAX_WAIT_SECONDS
@@ -49,6 +50,14 @@ MODEL_MANIFEST = (Path(__file__).resolve().parents[1] / 'transcription' /
 
 class Blocked(RuntimeError):
     """A stable public reason code, never a path, transcript or stderr."""
+
+
+class CommandFailed(Blocked):
+    def __init__(self, stage, reason, exit_code=None):
+        super().__init__(reason)
+        self.diagnostic = {'stage': stage, 'reason': reason}
+        if exit_code is not None:
+            self.diagnostic['exit_code'] = exit_code
 
 
 @dataclass(frozen=True)
@@ -419,10 +428,43 @@ def verify_runtime(runtime):
             raise Blocked('runtime_model_integrity_failure')
 
 
+def _media_command(args, *, timeout, pass_fds):
+    stage = args[0]
+    try:
+        return run_process_group(args, timeout=timeout, pass_fds=pass_fds)
+    except subprocess.CalledProcessError as exc:
+        reason = 'nonzero_exit'
+        if stage == 'rclone':
+            detail = (exc.stderr or '').casefold()
+            if any(s in detail for s in ('unauthorized', 'forbidden', 'invalid token', 'token expired')):
+                reason = 'remote_access_denied'
+            else:
+                reason = {3: 'remote_not_found', 4: 'remote_not_found', 5: 'temporary_remote_error',
+                          8: 'transfer_cap'}.get(exc.returncode, reason)
+        raise CommandFailed(stage, reason, exc.returncode) from None
+    except subprocess.TimeoutExpired:
+        raise CommandFailed(stage, 'timeout') from None
+    except OSError as exc:
+        reason = ('executable_not_found' if isinstance(exc, FileNotFoundError) else
+                  'permission_denied' if isinstance(exc, PermissionError) else 'spawn_failed')
+        raise CommandFailed(stage, reason) from None
+
+
+def copy_source(source, video, digest, *, pass_fds=()):
+    # An exact-size HARD cap can abort before rclone observes EOF. The small
+    # allowance is part of the disk budget, never part of the identity check.
+    _media_command(['rclone', 'copyto', source['remote_path'], video, '--retries', '1',
+                    '--low-level-retries', '1', '--transfers', '1', '--checkers', '1', '--inplace',
+                    '--max-transfer', f"{source['size'] + TRANSFER_HEADROOM}B", '--cutoff-mode', 'HARD'],
+                   timeout=130, pass_fds=pass_fds)
+    if video.stat().st_size != source['size'] or file_sha256(video) != digest:
+        raise Blocked('remote_source_bytes_changed')
+
+
 def probe_video(video, duration, *, pass_fds=()):
-    probe = run_process_group(['ffprobe', '-v', 'error', '-select_streams', 'a:0', '-show_entries',
-                               'format=start_time,duration:stream=start_time', '-of', 'json', video],
-                              timeout=20, pass_fds=pass_fds)
+    probe = _media_command(['ffprobe', '-v', 'error', '-select_streams', 'a:0', '-show_entries',
+                            'format=start_time,duration:stream=start_time', '-of', 'json', video],
+                           timeout=20, pass_fds=pass_fds)
     meta = json.loads(probe.stdout)
     if (not abs(float(meta['format']['duration']) - duration) <= .05
             or not abs(float(meta['format']['start_time'])) <= .03
@@ -431,10 +473,10 @@ def probe_video(video, duration, *, pass_fds=()):
 
 
 def extract(video, audio, window, *, pass_fds=()):
-    run_process_group(['ffmpeg', '-v', 'error', '-nostdin', '-threads', '1', '-ss', f'{window.start:.6f}',
-                       '-i', video, '-map', '0:a:0', '-t', f'{window.end - window.start:.6f}',
-                       '-ar', str(RATE), '-ac', '1', '-c:a', 'pcm_s16le', '-threads', '1', '-y', audio],
-                      timeout=25, pass_fds=pass_fds)
+    _media_command(['ffmpeg', '-v', 'error', '-nostdin', '-threads', '1', '-ss', f'{window.start:.6f}',
+                    '-i', video, '-map', '0:a:0', '-t', f'{window.end - window.start:.6f}',
+                    '-ar', str(RATE), '-ac', '1', '-c:a', 'pcm_s16le', '-threads', '1', '-y', audio],
+                   timeout=25, pass_fds=pass_fds)
     with wave.open(str(audio), 'rb') as stream:
         frames = stream.getnframes()
         if ((stream.getframerate(), stream.getnchannels(), stream.getsampwidth()) != (RATE, 1, 2)
@@ -495,7 +537,7 @@ def review(cfg, runtime, lesson_id, version, *, wait=0, ready=None, reserve=None
         fingerprint = evidence_key(lesson_id, version, digest, original_hash, receipt_hash, model_hash)
         if expected_key is not None and fingerprint != expected_key:
             raise Blocked('evidence_changed_before_review')
-        require_storage(shutil.disk_usage(cfg.state).free, largest, source['size'] + WORK_BYTES)
+        require_storage(shutil.disk_usage(cfg.state).free, largest, source['size'] + TRANSFER_HEADROOM + WORK_BYTES)
         root = cfg.state / 'transcripts/acoustic-review'
         root.mkdir(mode=0o700, exist_ok=True)
         if root.is_symlink() or root.stat().st_mode & 0o077:
@@ -528,15 +570,11 @@ def review(cfg, runtime, lesson_id, version, *, wait=0, ready=None, reserve=None
             with tempfile.TemporaryDirectory(prefix=work_prefix, dir=root) as folder:
                 video, audio = Path(folder) / 'source.mp4', Path(folder) / 'window.wav'
                 largest = require_current(check_artifact=True)
-                require_storage(shutil.disk_usage(cfg.state).free, largest, source['size'] + WORK_BYTES)
+                require_storage(shutil.disk_usage(cfg.state).free, largest,
+                                source['size'] + TRANSFER_HEADROOM + WORK_BYTES)
                 if reserve is not None:
                     reserve(fingerprint)
-                run_process_group(['rclone', 'copyto', source['remote_path'], video, '--retries', '1',
-                                   '--low-level-retries', '1', '--transfers', '1', '--checkers', '1', '--inplace',
-                                   '--max-transfer', f"{source['size']}B", '--cutoff-mode', 'HARD'],
-                                  timeout=130, pass_fds=command_fds)
-                if video.stat().st_size != source['size'] or file_sha256(video) != digest:
-                    raise Blocked('remote_source_bytes_changed')
+                copy_source(source, video, digest, pass_fds=command_fds)
                 result['peak_temporary_bytes'] = video.stat().st_size
                 require_current()
                 probe_video(video, duration, pass_fds=command_fds)
@@ -603,6 +641,10 @@ def main(argv=None):
     signal.signal(signal.SIGTERM, interrupted)
     try:
         result = review(Config.from_env(), args.runtime, args.lesson_id, args.version, wait=args.wait_for_whisper)
+    except CommandFailed as exc:
+        print(json.dumps({'state': 'deferred', 'lesson_id': args.lesson_id, 'version': args.version,
+                          **exc.diagnostic}))
+        return 4
     except Blocked as exc:
         print(json.dumps({'state': 'deferred', 'reason': str(exc)}))
         return 4

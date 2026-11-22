@@ -175,7 +175,7 @@ def test_discovery_cannot_be_starved_by_a_higher_priority_lesson(tmp_path, monke
         if case == 'does_not_fit':
             db.execute('UPDATE lesson_video_sources SET size=900 WHERE lesson_id=?', (bad,))
     monkeypatch.setattr(ar.shutil, 'disk_usage', lambda _: SimpleNamespace(
-        free=ar.storage_required(900, 9 + ar.WORK_BYTES)))
+        free=ar.storage_required(900, 9 + ar.TRANSFER_HEADROOM + ar.WORK_BYTES)))
 
     def input_for(_cfg, lesson_id, *_):
         if lesson_id == bad and case == 'corrupt_gzip':
@@ -224,6 +224,39 @@ def test_scheduled_cleanup_runs_even_without_an_eligible_job(tmp_path, monkeypat
     assert service.scheduled_turn(cfg, None, lambda: events.append('ready')) == {'state': 'no_eligible_evidence'}
     assert events == ['ready']
     assert not orphan.exists()
+
+
+def test_media_failure_defers_one_job_and_leaves_the_next_turn_available(tmp_path, monkeypatch):
+    from fo_hub import acoustic_service as service
+
+    cfg = SimpleNamespace(state=tmp_path)
+    (tmp_path / 'transcripts').mkdir()
+    jobs = [('fo_' + '1' * 16, 1, 'a' * 64), ('fo_' + '2' * 16, 1, 'b' * 64)]
+    monkeypatch.setattr(ar, 'require_limits', lambda: None)
+    monkeypatch.setattr(service, 'gate', lambda _: {'allowed': True})
+    monkeypatch.setattr(service, 'has_primary_leader', lambda _: True)
+    monkeypatch.setattr(service.time, 'time', lambda: 100)
+
+    def select(_cfg, _root, budget, now, **_):
+        return next(job for job in jobs if budget.allows(job[2], now=now))
+
+    def review(_cfg, _runtime, lesson, _version, *, ready, reserve, expected_key, **_):
+        ready()
+        reserve(expected_key)
+        if lesson == jobs[0][0]:
+            raise ar.CommandFailed('rclone', 'temporary_remote_error', 5)
+        return {'state': 'review_retained', 'published': False}
+
+    monkeypatch.setattr(service, 'select', select)
+    monkeypatch.setattr(ar, 'review', review)
+    assert service.scheduled_turn(cfg, None, lambda: None) == {
+        'state': 'deferred', 'lesson_id': jobs[0][0], 'version': 1,
+        'stage': 'rclone', 'reason': 'temporary_remote_error', 'exit_code': 5}
+    assert service.scheduled_turn(cfg, None, lambda: None) == {
+        'state': 'review_retained', 'published': False, 'lesson_id': jobs[1][0], 'version': 1}
+    budget = service.AttemptBudget(tmp_path / 'transcripts/acoustic-review/scheduled-attempts')
+    assert not budget.allows(jobs[0][2], now=86499)
+    assert budget.allows(jobs[0][2], now=86500)
 
 
 @pytest.mark.parametrize(('case', 'reason', 'expected'), [

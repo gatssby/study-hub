@@ -2,6 +2,7 @@ import fcntl
 import gzip
 import json
 import os
+import subprocess
 from copy import deepcopy
 from types import SimpleNamespace
 
@@ -115,6 +116,58 @@ def test_storage_and_cgroup_limits():
     for bad in [('max 100000', str(2**30), '0'), ('50100 100000', str(2**30), '0'),
                 ('50000 100000', 'max', '0'), ('50000 100000', str(2**30), 'max')]:
         assert not ar.limits_ok(*bad)
+
+
+def test_copy_allows_transfer_headroom_but_still_requires_exact_source(tmp_path, monkeypatch):
+    video = tmp_path / 'source.mp4'
+    source = {'remote_path': 'onedrive:Federal Online/private.mp4', 'size': 3}
+    digest = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+    output = b'abc'
+
+    def rclone(args, *, timeout, pass_fds):
+        assert args[:4] == ['rclone', 'copyto', source['remote_path'], video]
+        assert args[args.index('--max-transfer') + 1] == '1048579B'
+        assert args[args.index('--cutoff-mode') + 1] == 'HARD'
+        assert args[args.index('--retries') + 1] == args[args.index('--low-level-retries') + 1] == '1'
+        assert timeout == 130 and pass_fds == (8,)
+        video.write_bytes(output)
+
+    monkeypatch.setattr(ar, 'run_process_group', rclone)
+    ar.copy_source(source, video, digest, pass_fds=(8,))
+    for output in (b'ab', b'abcd', b'aBc'):
+        with pytest.raises(ar.Blocked, match='^remote_source_bytes_changed$'):
+            ar.copy_source(source, video, digest, pass_fds=(8,))
+
+
+@pytest.mark.parametrize(('command', 'failure', 'diagnostic'), [
+    ('rclone', 'cap', {'stage': 'rclone', 'reason': 'transfer_cap', 'exit_code': 8}),
+    ('rclone', 'missing', {'stage': 'rclone', 'reason': 'remote_not_found', 'exit_code': 4}),
+    ('ffprobe', 'nonzero', {'stage': 'ffprobe', 'reason': 'nonzero_exit', 'exit_code': 1}),
+    ('ffmpeg', 'timeout', {'stage': 'ffmpeg', 'reason': 'timeout'}),
+    ('ffmpeg', 'permission', {'stage': 'ffmpeg', 'reason': 'permission_denied'}),
+])
+def test_external_stage_reports_only_safe_failure_fields(tmp_path, monkeypatch, command, failure, diagnostic):
+    private = 'https://private.example/token lecture text'
+
+    def run(args, **_):
+        assert args[0] == command
+        if failure == 'timeout':
+            raise subprocess.TimeoutExpired(args, 1, stderr=private)
+        if failure == 'permission':
+            raise PermissionError(13, private)
+        raise subprocess.CalledProcessError({'cap': 8, 'missing': 4}.get(failure, 1), args, stderr=private)
+
+    monkeypatch.setattr(ar, 'run_process_group', run)
+    video = tmp_path / 'source.mp4'
+    with pytest.raises(ar.CommandFailed) as exc:
+        if command == 'rclone':
+            ar.copy_source({'remote_path': private, 'size': 3}, video, 'a' * 64)
+        elif command == 'ffprobe':
+            ar.probe_video(video, 5)
+        else:
+            ar.extract(video, tmp_path / 'window.wav', ar.Window(0, 5, 1, 2, 'token_repetition'))
+    assert exc.value.diagnostic == diagnostic
+    assert private not in str(exc.value)
 
 
 def test_atomic_private_receipt_is_idempotent_and_not_a_publication(tmp_path):
