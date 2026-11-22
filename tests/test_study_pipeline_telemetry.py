@@ -161,3 +161,11 @@ def test_stale_or_mismatched_cache_falls_back_to_full_parse(tmp_path):
     stale = module.build(state, now=100000 + module.CACHE_MAX_AGE_S + 1, excluded=())
     assert stale['transcription']['comparable_samples'] == 0
     assert stale['review_counts']['total'] == 0
+
+
+def test_an_older_review_artifact_cannot_describe_current_review(tmp_path):
+    state = make_state(tmp_path)
+    with sqlite3.connect(state / 'hub.sqlite3') as db:
+        db.execute("UPDATE lessons SET version=2 WHERE lesson_id='r1'")
+        db.execute("INSERT INTO transcription_jobs VALUES('r1',2,'review')")
+    assert module.build(state, now=100100, excluded=())['reviews'] == []

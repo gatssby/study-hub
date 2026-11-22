@@ -50,7 +50,7 @@ def _cache_key(folder, path):
 
 def _summary(body):
     chunks = body.get('chunks') if isinstance(body.get('chunks'), list) else []
-    return {'lesson_id': body.get('lesson_id'), 'duration': _number(body.get('duration_s')),
+    return {'lesson_id': body.get('lesson_id'), 'version': body.get('version'), 'duration': _number(body.get('duration_s')),
             'elapsed': _number(body.get('elapsed_s')), 'created': _number(body.get('created_at')),
             'chunks': len(chunks), 'reused': sum(1 for c in chunks if isinstance(c, dict) and c.get('reused') is True),
             'blockers': (body.get('qa') or {}).get('blockers') if isinstance(body.get('qa'), dict) else None}
@@ -112,7 +112,8 @@ def _artifacts(state, now):
             continue
         entry = cache.get(_cache_key(folder, path))
         if (isinstance(entry, dict) and entry.get('size') == stat.st_size
-                and entry.get('mtime_ns') == stat.st_mtime_ns and isinstance(entry.get('summary'), dict)):
+                and entry.get('mtime_ns') == stat.st_mtime_ns and isinstance(entry.get('summary'), dict)
+                and 'version' in entry['summary']):
             yield folder, entry['summary']
             continue
         try:
@@ -144,7 +145,7 @@ def _queue(db: Path, excluded):
         if excluded is None:
             excluded = frozenset(r[0] for r in connection.execute(
                 'SELECT discipline FROM transcription_discipline_exclusions')) if 'transcription_discipline_exclusions' in tables else frozenset()
-        rows = connection.execute('''SELECT j.state, l.subject, l.front, l.module, l.duration_s, l.lesson_id
+        rows = connection.execute('''SELECT j.state, l.subject, l.front, l.module, l.duration_s, l.lesson_id, l.version
             FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id
             WHERE l.present=1 AND j.version=l.version''').fetchall()
     finally:
@@ -152,9 +153,9 @@ def _queue(db: Path, excluded):
     remaining = ignored = 0
     unknown_duration = 0
     disciplines, states = {}, {}
-    for state, subject, front, module, duration, lesson in rows:
+    for state, subject, front, module, duration, lesson, version in rows:
         name = discipline_for(subject, front, module)
-        disciplines[lesson], states[lesson] = name, state
+        disciplines[lesson, version], states[lesson, version] = name, state
         if state not in ('queued', 'leased'):
             continue
         if name in excluded and state == 'queued':
@@ -184,7 +185,8 @@ def build(state: Path, *, now: float | None = None, excluded=None) -> dict:
         low, high = round(remaining * _quantile(ratios, .25)), round(remaining * _quantile(ratios, .75))
     reviews = []
     for item in reviewed:
-        if states.get(item['lesson_id']) != 'review':
+        identity = item['lesson_id'], item['version']
+        if states.get(identity) != 'review':
             continue  # historical artifact superseded by publication/new version
         blockers = item['blockers'] if isinstance(item['blockers'], list) else None
         kinds, intervals = {}, []
@@ -194,7 +196,7 @@ def build(state: Path, *, now: float | None = None, excluded=None) -> dict:
                 start, end = _number(flag.get('start')), _number(flag.get('end'))
                 if start is not None and end is not None and len(intervals) < 8:
                     intervals.append([round(start, 1), round(end, 1)])
-        reviews.append({'discipline': disciplines.get(item['lesson_id'], 'Outros'),
+        reviews.append({'discipline': disciplines.get(identity, 'Outros'),
                         'severity': 'grave' if kinds else ('desconhecida' if blockers is None else 'leve'),
                         'reasons': kinds, 'intervals': intervals, 'state': 'review'})
     # Aggregate over ALL current reviews, not the truncated display list.
