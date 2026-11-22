@@ -235,6 +235,65 @@ verified to be owned by a finished reviewer with no open descriptors.
 
 An unchanged receipt skips inference. Lexical agreement is not an acoustic
 verdict; adjudicate with the original audio, VAD and existing evidence, and
-keep uncertain academic content unchanged. No systemd timer or persistent
-reviewer is installed. Do not enable one until real cases demonstrate useful
-evidence, safe resource use, and a successful controlled handoff.
+keep uncertain academic content unchanged.
+
+### Explicitly authorized immediate cutover — November 22, 2026
+
+The production migration retired both earlier transient controllers before
+touching Whisper. The operator explicitly authorized interruption on this
+occasion. The old worker was stopped through systemd and the complete cgroup
+was checked before reconciling the lease. `fo_ab7589742bc156fd` v3 was requeued
+without charging a failed attempt, using an exact owner/version fence in a
+single transaction. The interrupted source identity and checkpoint hashes
+are in the private `immediate-recovery.json` alongside the legacy backup in
+`$FO_STATE_ROOT/tmp/parakeet-cutover.l7BQU2Uu`. Do not replay the recovery
+or reuse that receipt to change a newer lease. The deployed cooperative
+worker came from `06981f9`; verify the running singleton and real decoder,
+not just the deployed file. Normal maintenance still uses a quiescent boundary.
+
+The finite continuation is `study-hub-fo-parakeet-fixed-pilot.service`.
+Check its journal and the `study-hub-fo-acoustic-pilot.service` cgroup before
+starting another review. The controller waits at the current Whisper job,
+requests one bounded turn, then verifies a new Whisper lease before admitting
+the next case. It exits on a failed guard and does not publish.
+
+### Scheduled evidence-only reviewer
+
+The versioned `study-hub-fo-acoustic-review.service` and `.timer` in
+`ops/study-hub/systemd/` are not enabled by the cutover. Enable only after a
+real-audio pilot demonstrates useful evidence, no overlap and resumed Whisper
+decoding, and the FO Plugin still enforces existing QA. Confirm the fixed
+controller and its child are inactive. Deploy the matching `fo_hub` changes
+from one tested revision, create the private `transcripts/acoustic-review`
+directory (`ubuntu:ubuntu`, `0700`) if absent, and validate the unit files with
+`systemd-analyze verify` before installing them. The timer is the only unit
+that should be enabled for boot; its service is intentionally short-lived.
+
+- `sudo systemctl enable --now study-hub-fo-acoustic-review.timer` schedules
+  the first check in five minutes. `systemctl list-timers --all` and
+  `systemctl status study-hub-fo-acoustic-review.timer` show its schedule.
+- `journalctl -u study-hub-fo-acoustic-review.service` shows state and IDs,
+  not transcript text. A service in `activating` can be waiting for a turn.
+  The wait is bounded to two hours; once the decoder fence is acquired,
+  systemd caps active work at five minutes. Clean skips are also acknowledged
+  but exit immediately without inference.
+- Each activation checks eligibility read-only and admits at most one job.
+  Focal cases get a 24-hour priority boost, not absolute priority. Oversized
+  or corrupt inputs cannot block other lessons. The timer waits 15 minutes
+  after completion and yields to Whisper. An unchanged evidence receipt
+  prevents duplicate inference. At most two attempts per evidence key are
+  allowed, separated by 24 hours. An attempt is reserved before media
+  acquisition, not during runtime setup. After a crash, the next scheduled
+  turn cleans only verified disposable scratch while holding the decoder
+  fence, even when no case is eligible. The service is capped at 0.5 OCPU and
+  3 GiB with no swap.
+- To stop or roll back only the reviewer, disable and stop the timer first,
+  then stop its service: `sudo systemctl disable --now study-hub-fo-acoustic-review.timer`
+  and `sudo systemctl stop study-hub-fo-acoustic-review.service`. Verify that
+  both are inactive and Whisper acquires its next turn. Keep private receipts
+  and attempt history. No Whisper restart is required to disable reviews.
+
+The service records evidence, not approval. A correction must independently
+corroborate the timing and actual speech, preserve the immutable original, and
+pass the existing versioned QA publication path. A favorable VAD or Parakeet
+result alone is not permission to clear a blocker.

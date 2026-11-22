@@ -234,3 +234,23 @@ automação contínua após esse aceite. Runbook:
   Espaço livre: 164.355.276.800 B; reserva Whisper: 5.097.523.696 B.
   Nenhum serviço de revisão contínua está habilitado. O aceite continua
   condicionado aos recibos reais e à adjudicação da evidência.
+
+### Cutover imediato autorizado — 22/11/2026 UTC
+
+- Os dois controladores de espera foram retirados. O systemd encerrou o
+  Whisper legado (PID 2011009) e sua árvore. `fo_ab7589742bc156fd` v3 voltou
+  para `queued` com o lease removido por transação e sem contabilizar falha.
+  Os checkpoints duráveis e os hashes foram preservados; a confirmação está
+  no recibo privado `immediate-recovery.json`, ao lado do backup legado.
+- O Whisper cooperativo de `06981f9` está ativo e habilitado no boot. O PID
+  2734583 retomou a publicação normal (`fo_250074bc979134a1` v4 validada) e
+  iniciou nova decodificação real. O controlador único da coorte
+  `study-hub-fo-parakeet-fixed-pilot` aguarda a primeira fronteira do job do
+  processo novo. Na verificação inicial: 0/5 revisões reais, 0 recuperadas e
+  cinco HTTP 404 no endpoint de transcrição.
+- O timer e serviço de evidência ficaram preparados, não habilitados. A
+  sessão systemd validou a notificação de posse do turno, o limite de tempo
+  após a notificação, o disparo por timer e a ausência de reinício imediato.
+  O serviço só pode ser habilitado após evidência útil em áudio real, prova
+  de alternância com retomada do Whisper e verificação de QA e Plugin. Ele
+  não aprova transcrições; os limites e o rollback estão no runbook.

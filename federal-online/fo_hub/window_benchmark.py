@@ -63,7 +63,7 @@ def _source(cfg,plan):
     return source
 
 
-def run_process_group(args,*,check=True,capture_output=True,text=True,timeout=None):
+def run_process_group(args,*,check=True,capture_output=True,text=True,timeout=None,pass_fds=()):
     """Own the complete command group, including descendants of /usr/bin/time.
 
     Do not return (and therefore do not release the caller's lock) until the
@@ -71,7 +71,7 @@ def run_process_group(args,*,check=True,capture_output=True,text=True,timeout=No
     only their parent/init can reap them. Commands must not detach sessions.
     """
     process=subprocess.Popen(args,start_new_session=True,stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE,text=text)
+                             stderr=subprocess.PIPE,text=text,pass_fds=pass_fds)
     def send(sig):
         try:os.killpg(process.pid,sig)
         except ProcessLookupError:pass

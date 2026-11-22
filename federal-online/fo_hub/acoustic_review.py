@@ -35,6 +35,7 @@ HEADROOM = 2**30
 WORK_BYTES = 8 * 2**20
 MAX_WINDOWS = 12
 MAX_WAIT_SECONDS = 120
+MAX_SCHEDULED_WAIT_SECONDS = 7200
 MIN_AVAILABLE_RAM = 8 * 2**30
 MODEL_MEMORY_MAX = 3 * 2**30
 SCHEMA = 1
@@ -63,11 +64,17 @@ def plan_windows(duration, blockers, segments=()):
         raise ValueError('invalid duration')
     windows = []
     for flag in blockers:
+        if not isinstance(flag, dict) or not isinstance(flag.get('kind'), str):
+            raise Blocked('malformed_review_window_evidence')
         idx = flag.get('idx')
         row = segments[idx] if type(idx) is int and 0 <= idx < len(segments) else {}
+        if not isinstance(row, dict):
+            raise Blocked('malformed_review_window_evidence')
+        raw_start, raw_end = flag.get('start', row.get('start')), flag.get('end', row.get('end'))
+        if raw_start is None or raw_end is None:
+            continue
         try:
-            start = float(flag.get('start', row.get('start')))
-            end = float(flag.get('end', row.get('end')))
+            start, end = float(raw_start), float(raw_end)
         except (ValueError, TypeError):
             continue
         if not 0 <= start <= end <= duration:
@@ -204,7 +211,7 @@ def require_spare_capacity():
 
 @contextmanager
 def whisper_lock(cfg, *, wait=0):
-    if not 0 <= wait <= MAX_WAIT_SECONDS:
+    if not 0 <= wait <= MAX_SCHEDULED_WAIT_SECONDS:
         raise ValueError('invalid wait limit')
     path = cfg.state / 'locks/transcription.lock'
     with ExitStack() as stack:
@@ -232,7 +239,8 @@ def whisper_lock(cfg, *, wait=0):
                 if remaining <= 0:
                     raise Blocked('whisper_owns_transcription_lock') from None
                 time.sleep(min(1, remaining))
-        yield
+        # Preserve the fence when systemd kills Python before its command.
+        yield lock.fileno()
 
 
 def write_receipt(path, result):
@@ -339,9 +347,10 @@ def verify_runtime(runtime):
             raise Blocked('runtime_model_integrity_failure')
 
 
-def probe_video(video, duration):
+def probe_video(video, duration, *, pass_fds=()):
     probe = run_process_group(['ffprobe', '-v', 'error', '-select_streams', 'a:0', '-show_entries',
-                               'format=start_time,duration:stream=start_time', '-of', 'json', video], timeout=20)
+                               'format=start_time,duration:stream=start_time', '-of', 'json', video],
+                              timeout=20, pass_fds=pass_fds)
     meta = json.loads(probe.stdout)
     if (not abs(float(meta['format']['duration']) - duration) <= .05
             or not abs(float(meta['format']['start_time'])) <= .03
@@ -349,11 +358,11 @@ def probe_video(video, duration):
         raise Blocked('unverified_source_audio_timeline')
 
 
-def extract(video, audio, window):
+def extract(video, audio, window, *, pass_fds=()):
     run_process_group(['ffmpeg', '-v', 'error', '-nostdin', '-threads', '1', '-ss', f'{window.start:.6f}',
                        '-i', video, '-map', '0:a:0', '-t', f'{window.end - window.start:.6f}',
                        '-ar', str(RATE), '-ac', '1', '-c:a', 'pcm_s16le', '-threads', '1', '-y', audio],
-                      timeout=25)
+                      timeout=25, pass_fds=pass_fds)
     with wave.open(str(audio), 'rb') as stream:
         frames = stream.getnframes()
         if ((stream.getframerate(), stream.getnchannels(), stream.getsampwidth()) != (RATE, 1, 2)
@@ -387,11 +396,20 @@ def analyze_pcm(pcm, offset, asr, vad):
             'audio_seconds': len(waveform) / RATE, 'pcm_sha256': hashlib.sha256(pcm).hexdigest()}
 
 
-def review(cfg, runtime, lesson_id, version, *, wait=0):
+def evidence_key(lesson_id, version, digest, original_hash, receipt_hash, model_hash):
+    return hashlib.sha256(json.dumps([SCHEMA, lesson_id, version, digest, original_hash,
+                                      receipt_hash, model_hash, QA_POLICY_VERSION]).encode()).hexdigest()
+
+
+def review(cfg, runtime, lesson_id, version, *, wait=0, ready=None, reserve=None,
+           expected_key=None, work_prefix='work-'):
     # Gate in this order: a held Whisper lock precludes even model loading or downloads.
     if wait:
         require_limits()
-    with whisper_lock(cfg, wait=wait):
+    with whisper_lock(cfg, wait=wait) as lock_fd:
+        if ready is not None:
+            ready()
+        command_fds = (lock_fd,)
         started = time.monotonic()
         require_limits()
         require_spare_capacity()
@@ -402,8 +420,9 @@ def review(cfg, runtime, lesson_id, version, *, wait=0):
         blockers = art['qa']['blockers']
         windows = plan_windows(duration, blockers, art['segments'])
         model_hash = file_sha256(MODEL_MANIFEST)
-        fingerprint = hashlib.sha256(json.dumps([SCHEMA, lesson_id, version, digest, original_hash,
-                                                 receipt_hash, model_hash, QA_POLICY_VERSION]).encode()).hexdigest()
+        fingerprint = evidence_key(lesson_id, version, digest, original_hash, receipt_hash, model_hash)
+        if expected_key is not None and fingerprint != expected_key:
+            raise Blocked('evidence_changed_before_review')
         require_storage(shutil.disk_usage(cfg.state).free, largest, source['size'] + WORK_BYTES)
         root = cfg.state / 'transcripts/acoustic-review'
         root.mkdir(mode=0o700, exist_ok=True)
@@ -420,32 +439,49 @@ def review(cfg, runtime, lesson_id, version, *, wait=0):
                   'initial_blockers': blockers, 'peak_temporary_bytes': 0}
         measured = [(chunk['offset_s'] + a, chunk['offset_s'] + b)
                     for chunk in art['chunks'] for a, b in chunk.get('silence', [])]
+
+        def require_current(*, check_artifact=False):
+            if not gate(cfg)['allowed']:
+                raise Blocked('transcription_not_authorized')
+            latest, current_excluded, current_largest = snapshot(cfg, lesson_id, version)
+            if latest != source or discipline(latest) in EXCLUDABLE_DISCIPLINES | current_excluded:
+                raise Blocked('evidence_changed_during_review')
+            if check_artifact and verified_input(cfg, lesson_id, version, latest, current_excluded)[1:] != (
+                    digest, duration, original_hash, receipt_hash):
+                raise Blocked('evidence_changed_during_review')
+            return current_largest
+
         if windows:
             verify_runtime(runtime)
+            require_current()
             asr, vad = load_models(runtime / 'models')
-            require_storage(shutil.disk_usage(cfg.state).free, largest, source['size'] + WORK_BYTES)
             # A uniquely named private scratch directory. No cross-job reads or cache writes.
-            with tempfile.TemporaryDirectory(prefix='work-', dir=root) as folder:
+            with tempfile.TemporaryDirectory(prefix=work_prefix, dir=root) as folder:
                 video, audio = Path(folder) / 'source.mp4', Path(folder) / 'window.wav'
+                largest = require_current(check_artifact=True)
+                require_storage(shutil.disk_usage(cfg.state).free, largest, source['size'] + WORK_BYTES)
+                if reserve is not None:
+                    reserve(fingerprint)
                 run_process_group(['rclone', 'copyto', source['remote_path'], video, '--retries', '1',
-                                   '--low-level-retries', '1', '--transfers', '1', '--checkers', '1',
-                                   '--max-transfer', f"{source['size']}B", '--cutoff-mode', 'HARD'], timeout=130)
+                                   '--low-level-retries', '1', '--transfers', '1', '--checkers', '1', '--inplace',
+                                   '--max-transfer', f"{source['size']}B", '--cutoff-mode', 'HARD'],
+                                  timeout=130, pass_fds=command_fds)
                 if video.stat().st_size != source['size'] or file_sha256(video) != digest:
                     raise Blocked('remote_source_bytes_changed')
                 result['peak_temporary_bytes'] = video.stat().st_size
-                probe_video(video, duration)
+                require_current()
+                probe_video(video, duration, pass_fds=command_fds)
                 findings = {}
                 for window in windows:
-                    if not gate(cfg)['allowed']:
-                        raise Blocked('transcription_not_authorized')
-                    _, _, largest = snapshot(cfg, lesson_id, version)
-                    require_storage(shutil.disk_usage(cfg.state).free, largest, WORK_BYTES)
                     bounds = (window.start, window.end)
                     if bounds not in findings:
-                        pcm = extract(video, audio, window)
+                        largest = require_current()
+                        require_storage(shutil.disk_usage(cfg.state).free, largest, WORK_BYTES)
+                        pcm = extract(video, audio, window, pass_fds=command_fds)
                         result['peak_temporary_bytes'] = max(result['peak_temporary_bytes'],
                                                             video.stat().st_size + audio.stat().st_size)
                         audio.unlink()
+                        require_current()
                         findings[bounds] = analyze_pcm(pcm, window.start, asr, vad)
                     finding = findings[bounds]
                     whisper = [row for row in art['segments']
@@ -464,10 +500,7 @@ def review(cfg, runtime, lesson_id, version, *, wait=0):
         qa = recheck_unchanged(art['qa'], art['segments'], duration)
         result['qa'] = {'policy': QA_POLICY_VERSION, 'passed': qa['passed'],
                         'blocker_kinds': [flag['kind'] for flag in qa['blockers']]}
-        latest_source, latest_excluded, _ = snapshot(cfg, lesson_id, version)
-        if (latest_source != source or verified_input(cfg, lesson_id, version, latest_source,
-                latest_excluded)[1:] != (digest, duration, original_hash, receipt_hash)):
-            raise Blocked('evidence_changed_during_review')
+        require_current(check_artifact=True)
         usage = resource.getrusage(resource.RUSAGE_SELF)
         children = resource.getrusage(resource.RUSAGE_CHILDREN)
         result['resource_use'] = {'elapsed_seconds': time.monotonic() - started,
