@@ -20,7 +20,8 @@ CPUQuota=100%
 MemoryMax=2G
 TasksMax=512
 Type=simple
-ExecStart=/home/ubuntu/study-hub-venv/bin/python -m uvicorn fo_hub.api:app_from_env --factory --host 127.0.0.1 --port 8780
+# Transcript search URLs can contain private lecture excerpts.
+ExecStart=/home/ubuntu/study-hub-venv/bin/python -m uvicorn fo_hub.api:app_from_env --factory --host 127.0.0.1 --port 8780 --no-access-log
 Restart=on-failure
 RestartSec=10
 [Install]

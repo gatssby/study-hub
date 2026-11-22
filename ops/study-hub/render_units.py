@@ -62,7 +62,8 @@ Unit={unit}.service
 WantedBy=timers.target
 ''')
     (directory/'study-hub-fo-api.service').write_text(COMMON+f'''Type=simple
-ExecStart={PY} -m uvicorn fo_hub.api:app_from_env --factory --host 127.0.0.1 --port 8780
+# Transcript search URLs can contain private lecture excerpts.
+ExecStart={PY} -m uvicorn fo_hub.api:app_from_env --factory --host 127.0.0.1 --port 8780 --no-access-log
 Restart=on-failure
 RestartSec=10
 [Install]
