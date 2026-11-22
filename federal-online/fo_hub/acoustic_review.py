@@ -93,6 +93,37 @@ def plan_windows(duration, blockers, segments=()):
     return windows
 
 
+def window_evidence(artifact, duration):
+    """Validate the evidence used in both discovery and the acquired turn."""
+    def number(value):
+        return type(value) in (int, float) and math.isfinite(value)
+
+    def invalid():
+        return Blocked('malformed_review_window_evidence')
+
+    qa, segments, chunks = (artifact.get(key) for key in ('qa', 'segments', 'chunks'))
+    if not isinstance(qa, dict) or not isinstance(qa.get('blockers'), list):
+        raise invalid()
+    if not isinstance(segments, list) or not isinstance(chunks, list) or not chunks:
+        raise invalid()
+    if any(not isinstance(row, dict) or not number(row.get('start')) or
+           not number(row.get('end')) or not isinstance(row.get('text'), str) for row in segments):
+        raise invalid()
+    measured = []
+    for chunk in chunks:
+        if not isinstance(chunk, dict) or not number(chunk.get('offset_s')) or chunk['offset_s'] < 0:
+            raise invalid()
+        silence = chunk.get('silence', [])
+        if not isinstance(silence, list):
+            raise invalid()
+        for pair in silence:
+            if (not isinstance(pair, (list, tuple)) or len(pair) != 2 or
+                    not all(map(number, pair)) or not 0 <= pair[0] <= pair[1]):
+                raise invalid()
+            measured.append(tuple(chunk['offset_s'] + boundary for boundary in pair))
+    return plan_windows(duration, qa['blockers'], segments), measured
+
+
 def map_vad(offset, count, parts):
     result = []
     previous = 0
@@ -457,8 +488,8 @@ def review(cfg, runtime, lesson_id, version, *, wait=0, ready=None, reserve=None
             raise Blocked('transcription_not_authorized')
         source, excluded, largest = snapshot(cfg, lesson_id, version, cooperative=bool(wait))
         art, digest, duration, original_hash, receipt_hash = verified_input(cfg, lesson_id, version, source, excluded)
+        windows, measured = window_evidence(art, duration)
         blockers = art['qa']['blockers']
-        windows = plan_windows(duration, blockers, art['segments'])
         model_hash = file_sha256(MODEL_MANIFEST)
         fingerprint = evidence_key(lesson_id, version, digest, original_hash, receipt_hash, model_hash)
         if expected_key is not None and fingerprint != expected_key:
@@ -477,9 +508,6 @@ def review(cfg, runtime, lesson_id, version, *, wait=0, ready=None, reserve=None
                   'qa_receipt_sha256': receipt_hash, 'runtime_manifest_sha256': model_hash,
                   'published': False, 'correction': None, 'windows': [],
                   'initial_blockers': blockers, 'peak_temporary_bytes': 0}
-        measured = [(chunk['offset_s'] + a, chunk['offset_s'] + b)
-                    for chunk in art['chunks'] for a, b in chunk.get('silence', [])]
-
         def require_current(*, check_artifact=False):
             if not gate(cfg)['allowed']:
                 raise Blocked('transcription_not_authorized')

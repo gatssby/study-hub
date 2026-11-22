@@ -142,7 +142,8 @@ def test_discovery_is_read_only_and_skips_reviewed_or_stale_evidence(tmp_path, m
     assert store.conn.execute('SELECT state, attempts FROM transcription_jobs').fetchone()[:] == ('review', 1)
 
 
-@pytest.mark.parametrize('case', ['corrupt_gzip', 'malformed_blockers', 'does_not_fit', 'older_fallback'])
+@pytest.mark.parametrize('case', ['corrupt_gzip', 'malformed_blockers', 'missing_chunks', 'invalid_silence',
+                                 'does_not_fit', 'older_fallback'])
 def test_discovery_cannot_be_starved_by_a_higher_priority_lesson(tmp_path, monkeypatch, case):
     from fo_hub.acoustic_service import AttemptBudget, select
 
@@ -170,8 +171,12 @@ def test_discovery_cannot_be_starved_by_a_higher_priority_lesson(tmp_path, monke
         kind = 'acoustic_repetition_unconfirmed' if lesson_id == bad else 'ngram_repetition'
         flags = [None] if lesson_id == bad and case == 'malformed_blockers' else [
             {'kind': kind, 'start': 6, 'end': 7}]
-        return ({**artifact, 'qa': {'blockers': flags}},
-                'a' * 64, 30, 'b' * 64, 'c' * 64)
+        latest = {**artifact, 'qa': {'blockers': flags}}
+        if lesson_id == bad and case == 'missing_chunks':
+            del latest['chunks']
+        elif lesson_id == bad and case == 'invalid_silence':
+            latest['chunks'] = [{'offset_s': 0, 'duration_s': 30, 'silence': [[0, 'broken']]}]
+        return latest, 'a' * 64, 30, 'b' * 64, 'c' * 64
 
     monkeypatch.setattr(ar, 'verified_input', input_for)
     selected = select(worker.cfg, tmp_path, AttemptBudget(tmp_path), now=400_000)

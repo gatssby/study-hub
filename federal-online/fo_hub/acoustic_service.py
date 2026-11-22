@@ -136,7 +136,7 @@ def select(cfg, root, budget, now):
             receipt = root / f'{lesson}-v{version}-{key}.json.gz'
             if receipt.exists() or receipt.is_symlink() or not budget.allows(key, now=now):
                 continue
-            windows = ar.plan_windows(duration, review['qa']['blockers'], review['segments'])
+            windows, _ = ar.window_evidence(review, duration)
         except (ar.Blocked, OSError, ValueError, TypeError, KeyError, EOFError, zlib.error):
             continue
         if windows:
