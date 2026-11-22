@@ -186,6 +186,23 @@ service is stopped at a proven no-decoder, no-lease boundary. Start the
 primary unit and verify a single worker, new lease progress and intact
 checkpoints. Do not roll back by changing queue rows or lock files.
 
+For a single explicitly authorized cutover and fixed cohort that must survive
+SSH disconnection, prefer VPS-owned transient services with `Restart=no` and
+hard deadlines. The November 22 recovery uses
+`study-hub-fo-parakeet-cutover.service` and
+`study-hub-fo-parakeet-cohort.service`; neither is an installed or recurring
+service. Inspect `systemctl show` for both PIDs and states, then read their
+`journalctl -u` logs. Do not start a manual review while the cohort controller
+is active. The controller tied to that observer's invocation requires a
+logged zero-lease/no-decoder cutover, the verified new worker holding the
+leader lock and a new Whisper lease. It admits only the five authorized
+versions in order, once each, and stops on failure, lack of a private audio
+receipt, or failure to observe Whisper resuming. To prevent further admissions,
+stop only the cohort controller and, if necessary, separately stop its named
+transient acoustic pilot unit; do not terminate a cutover in progress or stop
+Whisper. After expiry or disconnect, re-read exact process state and receipts
+before scheduling any follow-up. A waiting controller is not a completed review.
+
 Once the cooperative Whisper process is verified, run **one** review per unit
 as `ubuntu`, from the deployed `federal-online` tree. Reuse the existing
 service's environment file without reading it into output. Do not run this

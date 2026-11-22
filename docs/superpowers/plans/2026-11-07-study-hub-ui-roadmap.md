@@ -209,3 +209,28 @@ automação contínua após esse aceite. Runbook:
   As cinco revisões piloto ainda estavam sem recibos acústicos, ocultas no
   Plugin (HTTP 404) e sem aprovação ou publicação. Anki e n8n responderam
   HTTP 200; a interface Study Hub retornou o desafio de autenticação esperado.
+
+### Retomada após desligamento do Mac — 22/11/2026, 01:43 UTC
+
+- Os observadores vinculados ao SSH já tinham saído. O job anterior,
+  `fo_ffc2128800c4dd37` v1, terminou com quatro checkpoints; os dois hashes
+  anotados antes da interrupção permaneceram idênticos. O Whisper legado
+  continuava no PID 2011009, com zero reinícios, decodificando o primeiro de
+  quatro blocos de `fo_ab7589742bc156fd` v3. Nenhuma fronteira segura tinha sido
+  observada: nenhum processo Whisper, lease ou lock foi interrompido.
+- O runtime ARM64 existente passou na verificação dos seis arquivos e de todos
+  os pins, sem reinstalação ou inferência adicional. As revisões atuais, os
+  hashes dos originais e as respectivas reavaliações QA v5 da coorte também
+  passaram na pré-verificação somente leitura.
+- O Oracle assumiu a espera em duas unidades systemd transitórias, sem timer
+  ou reinício automático: `study-hub-fo-parakeet-cutover` (observador único,
+  janela de 180 min) e `study-hub-fo-parakeet-cohort` (limite total de 14 h).
+  A segunda aguarda prova do cutover e um lease real do novo líder. Admite
+  somente os cinco IDs e versões acima, em ordem e uma vez cada, e encerra se
+  faltar recibo acústico privado ou evidência de que o Whisper retomou. Cada
+  inferência usa os limites já descritos no runbook e não publica.
+- Na retomada: 0 de 5 aulas revisadas com áudio,
+  0 recuperadas, 5 ainda em review e HTTP 404 no endpoint de transcrição.
+  Espaço livre: 164.355.276.800 B; reserva Whisper: 5.097.523.696 B.
+  Nenhum serviço de revisão contínua está habilitado. O aceite continua
+  condicionado aos recibos reais e à adjudicação da evidência.
