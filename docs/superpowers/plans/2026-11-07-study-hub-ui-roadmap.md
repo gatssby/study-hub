@@ -194,3 +194,18 @@ validado; medir recursos por aula, adjudicar a evidência acústica e preservar 
 transcrições originais. Só considerar correção versionada pelo QA existente ou
 automação contínua após esse aceite. Runbook:
 `federal-online/transcription/parakeet-runtime/README.md`.
+
+### Retomada do cutover — 22/11/2026 UTC
+
+- A interrupção da sessão de operação não encerrou o observador de cutover. Foi
+  confirmado um único observador remoto, ainda dentro do limite de 150 min, e
+  nenhum segundo observador foi iniciado. A instalação aguarda a primeira
+  fronteira comprovada entre tarefas; um decoder ativo ou um lease impede a troca.
+- Na retomada, o Whisper ainda rodava com o código legado, zero reinícios e
+  progresso persistido de 55,3% em `fo_ffc2128800c4dd37` v1 (janela 3 de 4).
+  Dois checkpoints v2 da fonte ativa foram lidos e conferidos por SHA-256. Nenhum
+  lease, checkpoint, lock ou gate foi alterado na retomada.
+- A API FO registrava 126 transcrições atuais validadas e 55 jobs em revisão.
+  As cinco revisões piloto ainda estavam sem recibos acústicos, ocultas no
+  Plugin (HTTP 404) e sem aprovação ou publicação. Anki e n8n responderam
+  HTTP 200; a interface Study Hub retornou o desafio de autenticação esperado.

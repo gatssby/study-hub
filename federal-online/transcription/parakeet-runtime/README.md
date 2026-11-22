@@ -173,6 +173,19 @@ rollback is needed, let the reviewer finish or stop only its transient unit,
 then restore the prior Whisper code at a similarly safe boundary. Keep all
 existing receipts, original artifacts and lock files.
 
+If the operator session ends during a cutover, first inspect the original
+observer's remote PID, command, parent and deadline. Compare the live worker
+hash and PID with the staged and legacy hashes, and cross-check the current
+lease, decoder child, leader lock and durable checkpoints. A live observer
+must not be duplicated; a disconnected operator or empty client log does not
+prove that it stopped. At expiry, confirm the process exited and whether it
+left a legacy, cooperative, or partial deployment before taking any action.
+Retain the hash-verified legacy worker backup. To roll back, first stop only
+review admissions, then restore the verified legacy file while the primary
+service is stopped at a proven no-decoder, no-lease boundary. Start the
+primary unit and verify a single worker, new lease progress and intact
+checkpoints. Do not roll back by changing queue rows or lock files.
+
 Once the cooperative Whisper process is verified, run **one** review per unit
 as `ubuntu`, from the deployed `federal-online` tree. Reuse the existing
 service's environment file without reading it into output. Do not run this
