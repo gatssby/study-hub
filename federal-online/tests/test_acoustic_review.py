@@ -1,11 +1,14 @@
+import fcntl
 import gzip
 import json
+import os
 from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
 
 from fo_hub import acoustic_review as ar
+from test_review_reassessment import fixture
 
 
 def test_plan_has_context_and_covers_long_flag_with_independent_targets():
@@ -76,6 +79,31 @@ def test_source_binding_and_exclusions():
             ar.source_identity(item, item['lesson_id'], {**source, **changed}, 1, set())
     with pytest.raises(ar.Blocked):
         ar.source_identity(item, item['lesson_id'], source, 1, {'Biologia'})
+
+
+def test_cooperative_review_accepts_live_primary_lease_but_not_foreign_lease(tmp_path):
+    worker, store, lesson, _, _ = fixture(tmp_path)
+    cfg = worker.cfg
+    locks = cfg.state / 'locks'
+    locks.mkdir(exist_ok=True)
+    (locks / 'transcription.lock').touch()
+    (locks / 'acoustic-review.turn').touch()
+    store.sync_lessons([{'course_id':'another', 'media_id':'one', 'title':'Aula', 'duration_s':30}])
+    other = next(row for row in store.list_lessons() if row['lesson_id'] != lesson['lesson_id'])
+    args = cfg, lesson['lesson_id'], 1
+    with store.conn:
+        store.conn.execute("INSERT INTO transcription_jobs(lesson_id,version,state,lease_owner,updated_at) VALUES(?,1,'leased',?,'0')",
+                           (other['lesson_id'], f'fo-worker:test:{os.getpid()}:test'))
+    with (locks / 'transcription-worker.lock').open('a+') as leader:
+        fcntl.flock(leader, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with ar.whisper_lock(cfg, wait=1):
+            with pytest.raises(ar.Blocked, match='whisper_lease_present'):
+                ar.snapshot(*args)
+            assert ar.snapshot(*args, cooperative=True)[0]['state'] == 'review'
+            with store.conn:
+                store.conn.execute("UPDATE transcription_jobs SET lease_owner='other' WHERE state='leased'")
+            with pytest.raises(ar.Blocked, match='whisper_lease_present'):
+                ar.snapshot(*args, cooperative=True)
 
 
 def test_storage_and_cgroup_limits():

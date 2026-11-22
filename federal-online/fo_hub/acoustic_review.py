@@ -301,7 +301,34 @@ def read_review(path):
     return json.loads(decoded), hashlib.sha256(raw).hexdigest()
 
 
-def snapshot(cfg, lesson_id, version):
+def has_primary_leader(cfg):
+    path = cfg.state / 'locks/transcription-worker.lock'
+    try:
+        with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), 'rb') as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return True
+    except FileNotFoundError:
+        pass
+    return False
+
+
+def live_primary_lease(cfg, owners):
+    if len(owners) != 1 or not has_primary_leader(cfg):
+        return False
+    owner = owners[0][0]
+    match = re.fullmatch(r'fo-worker:[^:]+:([1-9][0-9]{0,8}):[^:]+', owner or '')
+    if not match or int(match[1]) <= 1:
+        return False
+    try:
+        os.kill(int(match[1]), 0)
+    except OSError:
+        return False
+    return True
+
+
+def snapshot(cfg, lesson_id, version, *, cooperative=False):
     with closing(FOStore(cfg.db, readonly=True).conn) as db:
         db.execute('BEGIN')
         source = db.execute('SELECT l.version,l.present,l.subject,l.front,l.module,s.revision,s.size,'
@@ -313,7 +340,10 @@ def snapshot(cfg, lesson_id, version):
             raise Blocked('source_not_current_review')
         excluded = {r[0] for r in db.execute('SELECT discipline FROM transcription_discipline_exclusions')}
         largest = db.execute('SELECT COALESCE(MAX(size),0) FROM lesson_video_sources WHERE available=1').fetchone()[0]
-        if db.execute("SELECT 1 FROM transcription_jobs WHERE state='leased' LIMIT 1").fetchone():
+        owners = db.execute("SELECT lease_owner FROM transcription_jobs WHERE state='leased' LIMIT 2").fetchall()
+        # A job lease is not decoder ownership. Only a cooperative caller
+        # holding both flocks may coexist with the live singleton's lease.
+        if owners and not (cooperative and live_primary_lease(cfg, owners)):
             raise Blocked('whisper_lease_present')
     return dict(source), excluded, largest
 
@@ -425,7 +455,7 @@ def review(cfg, runtime, lesson_id, version, *, wait=0, ready=None, reserve=None
         require_spare_capacity()
         if not gate(cfg)['allowed']:
             raise Blocked('transcription_not_authorized')
-        source, excluded, largest = snapshot(cfg, lesson_id, version)
+        source, excluded, largest = snapshot(cfg, lesson_id, version, cooperative=bool(wait))
         art, digest, duration, original_hash, receipt_hash = verified_input(cfg, lesson_id, version, source, excluded)
         blockers = art['qa']['blockers']
         windows = plan_windows(duration, blockers, art['segments'])
@@ -453,7 +483,7 @@ def review(cfg, runtime, lesson_id, version, *, wait=0, ready=None, reserve=None
         def require_current(*, check_artifact=False):
             if not gate(cfg)['allowed']:
                 raise Blocked('transcription_not_authorized')
-            latest, current_excluded, current_largest = snapshot(cfg, lesson_id, version)
+            latest, current_excluded, current_largest = snapshot(cfg, lesson_id, version, cooperative=bool(wait))
             if latest != source or discipline(latest) in EXCLUDABLE_DISCIPLINES | current_excluded:
                 raise Blocked('evidence_changed_during_review')
             if check_artifact and verified_input(cfg, lesson_id, version, latest, current_excluded)[1:] != (

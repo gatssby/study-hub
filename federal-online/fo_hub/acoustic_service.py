@@ -2,7 +2,6 @@
 
 import argparse
 import ctypes
-import fcntl
 import json
 import math
 import os
@@ -17,6 +16,7 @@ from contextlib import closing
 from pathlib import Path
 
 from . import acoustic_review as ar
+from .acoustic_review import has_primary_leader
 from .scheduler import EXCLUDABLE_DISCIPLINES, discipline
 from .store import FOStore
 from .worker import Config, file_sha256, gate
@@ -106,19 +106,6 @@ def clean_work(root):
                     info.st_uid != os.getuid() or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) & 0o077):
                 raise ar.Blocked('untrusted_scheduled_work')
         shutil.rmtree(folder)
-
-
-def has_primary_leader(cfg):
-    path = cfg.state / 'locks/transcription-worker.lock'
-    try:
-        with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), 'rb') as lock:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                return True
-    except FileNotFoundError:
-        pass
-    return False
 
 
 def select(cfg, root, budget, now):

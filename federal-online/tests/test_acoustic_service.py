@@ -243,7 +243,7 @@ def test_attempt_and_each_heavy_step_are_fenced(tmp_path, monkeypatch, case, rea
     monkeypatch.setattr(ar, 'require_spare_capacity', lambda: None)
     monkeypatch.setattr(ar, 'require_storage', lambda *_: None)
     monkeypatch.setattr(ar, 'whisper_lock', lambda *_args, **_kwargs: nullcontext(1))
-    monkeypatch.setattr(ar, 'snapshot', lambda *_: (dict(source), set(), 9))
+    monkeypatch.setattr(ar, 'snapshot', lambda *_, **__: (dict(source), set(), 9))
     monkeypatch.setattr(ar, 'verified_input', lambda *_: (artifact, artifact['source_sha256'], 30, '', ''))
     monkeypatch.setattr(ar, 'verify_runtime', lambda _: None)
     monkeypatch.setattr(ar, 'load_models', load)
