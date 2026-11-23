@@ -14,8 +14,23 @@ _AUDIO_DURATION_TOLERANCE_S = 0.05  # container/audio frame tail and extraction 
 _SILENCE_EDGE_S = 0.05  # do not assert silence from uncertain detector edges
 _GAP_AGGREGATE_TOLERANCE_S = 0.5  # ignore small timestamp seams, not whole seconds
 _GAP_WARN_S = 8.0
-_GAP_BLOCK_S = 20.0  # retain the established 20 s bound for unsupported gaps
+_GAP_BLOCK_S = 60.0  # only a long unexplained absence blocks a full lesson
 _LOCAL_OVERLAP_S = 2.5
+_SHORT_QUIET_TEXT_WARNING_S = 5.0
+_MINOR_TIMESTAMP_OVERRUN_S = 0.05
+
+
+def _severe_loop(flag):
+    """Block prolonged decoder loops, not normal didactic word repetition."""
+    words = flag.get('words', 0)
+    seconds = flag.get('end', 0) - flag.get('start', 0)
+    return (words >= 30 and seconds >= 12.0) or (words >= 80 and seconds >= 3.0)
+
+
+def _append_repetitions(blockers, warnings, rows, **context):
+    for flag in repetition_candidates(rows)['flags']:
+        finding = {**flag, **context}
+        (blockers if _severe_loop(flag) else warnings).append(finding)
 
 
 def _number(value):
@@ -205,7 +220,12 @@ def assess(chunks: Sequence[Mapping], duration_s: float, *, chunk_s: float,
                 continue
             last_start = start
             if end > bound + _EPS:
-                if (final and ci == len(chunks) - 1 and ri == len(incoming) - 1 and raw_verified
+                if (raw_verified and ri == len(incoming) - 1 and start < bound
+                        and end - bound <= _MINOR_TIMESTAMP_OVERRUN_S + _EPS):
+                    warnings.append({'kind': 'timestamp_rounding', **location,
+                                     'raw_end': end, 'corrected_end': bound})
+                    end = bound
+                elif (final and ci == len(chunks) - 1 and ri == len(incoming) - 1 and raw_verified
                         and len(rows) == ri and abs(deficit) <= _AUDIO_DURATION_TOLERANCE_S + _EPS
                         and _padding_end(start, end, bound, duration)):
                     correction = {'kind': 'timestamp_correction', 'chunk_idx': ci, 'local_idx': ri,
@@ -219,8 +239,7 @@ def assess(chunks: Sequence[Mapping], duration_s: float, *, chunk_s: float,
             rows.append({'start': start, 'end': end, 'text': text})
             prepared.append((location, rows[-1], quiet))
         working.append({'offset_s': offset, 'duration_s': bound - offset, 'segments': rows})
-        blockers.extend({**f, 'chunk_idx': ci, 'origin': 'decoder'}
-                        for f in repetition_candidates(rows)['flags'])
+        _append_repetitions(blockers, warnings, rows, chunk_idx=ci, origin='decoder')
 
     if expected < duration - _EPS:
         blockers.append({'kind': 'missing_chunk', 'expected_offset_s': expected})
@@ -234,7 +253,8 @@ def assess(chunks: Sequence[Mapping], duration_s: float, *, chunk_s: float,
         # Two recordings of the same time must agree. Incomplete containment,
         # conflicting recordings, and edge-only evidence cannot prove a contradiction.
         if _contains(reliable_quiet, start, end):
-            blockers.append({'kind': 'text_during_measured_silence', **location, 'start': start, 'end': end})
+            (blockers if end - start >= _SHORT_QUIET_TEXT_WARNING_S else warnings).append(
+                {'kind': 'text_during_measured_silence', **location, 'start': start, 'end': end})
         elif _contains(local_quiet, start, end):
             warnings.append({'kind': 'uncertain_silence_overlap', **location, 'start': start, 'end': end})
 
@@ -256,16 +276,18 @@ def assess(chunks: Sequence[Mapping], duration_s: float, *, chunk_s: float,
         target = (warnings if span <= _LOCAL_OVERLAP_S and overlap_total <= budget
                   and boundary_total <= budget else blockers)
         target.append(flag)
-    for i, isolated in _repeat_pairs(segments):
-        (warnings if isolated else blockers).append({'kind': 'duplicate_segment', 'idx': i})
+    for i, _ in _repeat_pairs(segments):
+        # Repeated lecturer sentences are not proof of a generated ASR loop.
+        warnings.append({'kind': 'duplicate_segment', 'idx': i})
     if stitched['decisions']:
-        blockers.extend({**f, 'origin': 'stitched_text'} for f in repetition_candidates(segments)['flags'])
+        _append_repetitions(blockers, warnings, segments, origin='stitched_text')
     elif len(working) > 1:
-        # True loops can cross a seam even without a stitch decision.
+        # A real loop can cross a seam without an explicit stitch decision.
         for flag in repetition_candidates(segments)['flags']:
             if not any(flag['start'] >= c['offset_s'] and flag['end'] <= c['offset_s'] + c['duration_s']
                        for c in working):
-                blockers.append({**flag, 'origin': 'stitched_text'})
+                (blockers if _severe_loop(flag) else warnings).append(
+                    {**flag, 'origin': 'stitched_text'})
 
     if not segments:
         blockers.append({'kind': 'empty_output'})
@@ -276,8 +298,10 @@ def assess(chunks: Sequence[Mapping], duration_s: float, *, chunk_s: float,
     total = math.fsum(counted)
     limit = max(40.0, duration * 0.05)
     if total > limit + _EPS:
-        blockers.append({'kind': 'unsupported_coverage_total', 'total_s': total,
-                         'gap_count': len(counted), 'limit_s': limit})
+        # Summed one-second pauses do not prove missing lecture speech.
+        (blockers if total > max(20.0, duration * 0.30) else warnings).append(
+            {'kind': 'unsupported_coverage_total', 'total_s': total,
+             'gap_count': len(counted), 'limit_s': limit})
     for start, end in unsupported:
         gap = end - start
         if gap >= _GAP_WARN_S:

@@ -169,7 +169,7 @@ def test_confirmed_quiet_conflict_is_detected_on_original_rows_before_merging():
     c = row(600, 603, 'Como prosseguimos')
     _, qa = assess([chunk(0, 600, a, silence=[(0, 599.7)]),
                     chunk(598, 5, b, c, silence=[(0, 1.7)])], 603)
-    assert 'text_during_measured_silence' in kinds(qa, 'blockers')
+    assert 'text_during_measured_silence' in kinds(qa, 'warnings')
 
 
 def test_chunk_edge_quiet_that_conflicts_with_other_recording_is_not_proof():
@@ -231,7 +231,13 @@ def test_small_didactic_repetition_is_preserved_but_severe_loop_blocks():
     assert result == [once, twice] and qa['outcome'] == 'APPROVED_WITH_WARNING'
     longer = [row(i * 3, i * 3 + 3, phrase) for i in range(5)]
     result, qa = assess([chunk(0, 15, *longer)], 15)
-    assert result == longer and qa['outcome'] == 'REVIEW_REQUIRED'
+    assert result == longer and qa['outcome'] == 'APPROVED_WITH_WARNING'
+    assert 'ngram_repetition' in kinds(qa, 'warnings')
+
+    # A sustained decoder loop is a real blocker, not a normal oral repetition.
+    severe = [row(i * 3, i * 3 + 3, phrase) for i in range(20)]
+    result, qa = assess([chunk(0, 60, *severe)], 60)
+    assert result == severe and qa['outcome'] == 'REVIEW_REQUIRED'
     assert 'ngram_repetition' in kinds(qa, 'blockers')
 
 
@@ -269,3 +275,36 @@ def test_repeated_exact_phrase_in_a_boundary_row_makes_the_match_ambiguous():
     result, qa = assess([chunk(0, 600, a, silence=[(0, 597)]), chunk(598, 5, b)], 603)
     assert result == [a, b]
     assert 'ambiguous_overlap' in kinds(qa, 'warnings')
+
+
+def test_short_repetitions_and_ordinary_small_gaps_do_not_hide_lectures():
+    rows = [row(i * 10, i * 10 + 9, f'Registro {i}: seguimos a explicação.') for i in range(60)]
+    result, qa = assess([chunk(0, 600, *rows)], 600)
+    assert result == rows
+    assert qa['outcome'] == 'APPROVED_WITH_WARNING'
+    assert 'unsupported_coverage_total' in kinds(qa, 'warnings')
+    assert not qa['blockers']
+
+
+def test_sustained_missing_coverage_remains_blocked():
+    result, qa = assess([chunk(0, 600, row(0, 10, 'Início da explicação.'))], 600)
+    assert result
+    assert 'unsupported_coverage_total' in kinds(qa, 'blockers')
+    assert 'unsupported_coverage_gap' in kinds(qa, 'blockers')
+
+
+def test_minor_decoder_timestamp_rounding_is_not_a_content_failure():
+    rows = [row(0, 5, 'Início da aula.'), row(5, 10.02, 'Fim do bloco.')]
+    result, qa = assess([chunk(0, 10, *rows, raw=True)], 10)
+    assert qa['passed'] and qa['outcome'] == 'APPROVED_WITH_WARNING'
+    assert result[-1]['end'] == 10.0
+    assert 'timestamp_rounding' in kinds(qa, 'warnings')
+    _, qa = assess([chunk(0, 10, *rows, raw=False)], 10)
+    assert 'bad_timestamp' in kinds(qa, 'blockers')
+
+
+def test_small_text_during_measured_quiet_is_warning_but_long_text_blocks():
+    _, short = assess([chunk(0, 3, row(0, 3, 'Explicação curta.'), silence=[(0, 3)])], 3)
+    assert short['passed'] and 'text_during_measured_silence' in kinds(short, 'warnings')
+    _, long = assess([chunk(0, 10, row(0, 10, 'Explicação longa.'), silence=[(0, 10)])], 10)
+    assert not long['passed'] and 'text_during_measured_silence' in kinds(long, 'blockers')
