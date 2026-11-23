@@ -1,1184 +1,532 @@
-"""VPS-only, fail-closed transcription worker. No automatic authorization.
-
---check-only never leases or opens media. --run requires explicit true + a
-separate authorization phrase + Linux VPS marker + executable/model files.
-Tests inject subprocesses; no real inference is part of the test suite.
-"""
+"""Single VPS worker for revision-bound Whisper large-v3 transcription."""
 from __future__ import annotations
+
 import argparse
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 import fcntl
-import gzip
+from functools import lru_cache
 import hashlib
 import json
 import math
-from functools import lru_cache
 import os
 from pathlib import Path
 import re
 import shutil
-import socket
 import sqlite3
-from contextlib import closing, contextmanager, nullcontext
 import subprocess
 import sys
 import tempfile
-import threading
 import time
-from typing import BinaryIO
 import uuid
-import zlib
+import wave
 
-from .store import FOStore, ACCEPTED_CORPUS
-from .scheduler import EXCLUDABLE_DISCIPLINES, choose, discipline, discipline_key
-from .transcription import AUTH_PHRASE, DEFAULT_AUTH_FILE, DEFAULT_PLATFORM_MARKER, TranscriptionQueue, qa_segments, classify_qa, QA_POLICY_VERSION
+from .store import FOStore, TranscriptRejected, mvp_reset_applied
+from .onedrive import QUICKXOR_TYPE, normalize_quickxor, rclone_quickxor
+from .transcript_qa import assess
+from .transcription import (AUTH_PHRASE, DEFAULT_AUTH_FILE, DEFAULT_PLATFORM_MARKER,
+                            LeaseLost, SOURCE_FIELDS, TranscriptionQueue, db_worker_lock)
 
-RESERVE=4*1024**3
-REVIEW_ERROR_COOLDOWN_S=86400
-REVIEW_ERROR_MAX_ATTEMPTS=3
-PHASES=('downloading','hashing','probing','decoding','stitching','repetition_check','qa','publishing','finished')
-HEARTBEAT_INTERVAL_S=60
-# Production 600 s chunks have taken up to ~34 minutes on the 3-OCPU VPS.
-CHUNK_TIMEOUT_S=45*60
-REPETITION_TIMEOUT_S=5*60
-MODEL_SHA256='64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2'
-
-
-def file_sha256(path):
-    digest=hashlib.sha256()
-    with Path(path).open('rb') as handle:
-        for block in iter(lambda:handle.read(1024*1024),b''):digest.update(block)
-    return digest.hexdigest()
+CHUNK_SECONDS = 600
+OVERLAP_SECONDS = 2
+CHUNK_TIMEOUT = 45 * 60
+RESERVE = 4 * 1024**3
+WORK_BYTES = 100 * 1024**2
+MODEL_SHA256 = '64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2'
+WHISPER_FLAGS = ('-l', 'pt', '-t', '3', '-bs', '5', '-bo', '5', '-mc', '0', '-tp', '0',
+                 '-tpi', '0', '-nth', '0.6', '-et', '2.4', '-lpt', '-1', '-ng', '-ojf', '-nf')
 
 
-@lru_cache(maxsize=8)
-def _verified_hash(path,size,mtime_ns):
-    return file_sha256(path)
-
-
-def identity(path):
-    path=Path(path)
-    if not path.is_file():return None
-    stat=path.stat()
-    return _verified_hash(str(path.resolve()),stat.st_size,stat.st_mtime_ns)
-
-
-class SourceChanged(RuntimeError):
-    pass
-
-
-class SourceUnavailable(RuntimeError):
-    pass
-
-
-@dataclass
+@dataclass(frozen=True)
 class Config:
-    state:Path
-    db:Path
-    binary:Path
-    model:Path
-    auth:Path=Path(DEFAULT_AUTH_FILE)
-    marker:Path=Path(DEFAULT_PLATFORM_MARKER)
-    chunk_s:int=600
-    overlap_s:int=2
-    threads:int=3
-    model_sha256:str|None=None
-    beam_size:int=5
-    temperature_fallback:bool=False
-    review_only:bool=False
-    max_context:int=0
+    state: Path
+    db: Path
+    binary: Path
+    model: Path
+    auth: Path = Path(DEFAULT_AUTH_FILE)
+    marker: Path = Path(DEFAULT_PLATFORM_MARKER)
 
     @classmethod
     def from_env(cls):
-        state=Path(os.environ.get('FO_STATE_ROOT','/home/ubuntu/study-hub-state/federal-online'))
-        config=cls(state,Path(os.environ.get('STUDY_HUB_FO_DB',str(state/'hub.sqlite3'))),
-                   Path(os.environ.get('WHISPER_CPP_BIN','/home/ubuntu/study-hub-models/whisper.cpp/build/bin/whisper-cli')),
-                   Path(os.environ.get('WHISPER_MODEL','/home/ubuntu/study-hub-models/ggml-large-v3.bin')),
-                   Path(os.environ.get('STUDY_HUB_FO_TRANSCRIPTION_AUTH',DEFAULT_AUTH_FILE)),
-                   Path(os.environ.get('STUDY_HUB_FO_PLATFORM_MARKER',DEFAULT_PLATFORM_MARKER)))
-        config.model_sha256=MODEL_SHA256
-        config.max_context=int(os.environ.get('FO_ASR_MAX_CONTEXT','0'))
-        config.threads=int(os.environ.get('FO_ASR_THREADS','3'))
-        config.beam_size=int(os.environ.get('FO_ASR_BEAM_SIZE','5'))
-        config.temperature_fallback=os.environ.get('FO_ASR_TEMPERATURE_FALLBACK','false').lower()=='true'
-        config.review_only=os.environ.get('FO_ASR_REVIEW_ONLY','false').lower()=='true'
-        return config
-
-    def parameters(self):
-        return {'language':'pt','threads':self.threads,'beam_size':self.beam_size,
-                'temperature':0,'temperature_fallback':self.temperature_fallback,
-                'temperature_increment':0.2 if self.temperature_fallback else 0,
-                'best_of':5,'no_speech_threshold':0.6,'max_context':self.max_context,
-                'entropy_threshold':2.4,'logprob_threshold':-1.0,'vad':False,
-                'chunk_s':self.chunk_s,'overlap_s':self.overlap_s,'stitching_version':1,'checkpoint_version':1}
+        state = Path(os.environ.get('FO_STATE_ROOT', '/home/ubuntu/study-hub-state/federal-online'))
+        model_dir = Path('/home/ubuntu/study-hub-models')
+        return cls(state, Path(os.environ.get('STUDY_HUB_FO_DB', str(state / 'hub.sqlite3'))),
+                   Path(os.environ.get('WHISPER_CPP_BIN', str(model_dir / 'whisper.cpp/build/bin/whisper-cli'))),
+                   Path(os.environ.get('WHISPER_MODEL', str(model_dir / 'ggml-large-v3.bin'))),
+                   Path(os.environ.get('STUDY_HUB_FO_TRANSCRIPTION_AUTH', DEFAULT_AUTH_FILE)),
+                   Path(os.environ.get('STUDY_HUB_FO_PLATFORM_MARKER', DEFAULT_PLATFORM_MARKER)))
 
 
-def gate(config,env=None,platform=None):
-    env=os.environ if env is None else env
-    reasons=[]
-    if env.get('TRANSCRIPTION_ENABLED','false').strip().lower()!='true':reasons.append('TRANSCRIPTION_ENABLED is not true')
-    if not (platform or sys.platform).startswith('linux') or not config.marker.is_file():reasons.append('not running on marked Linux VPS')
+def file_sha256(path):
+    with path.open('rb') as handle:
+        return hashlib.file_digest(handle, 'sha256').hexdigest()
+
+
+@lru_cache(maxsize=16)
+def _digest(path, stat_key):
+    return file_sha256(path)
+
+
+def file_identity(path):
+    s = path.stat()
+    return _digest(path.resolve(), (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns))
+
+
+def authorized(cfg):
     try:
-        if config.auth.read_text().strip()!=AUTH_PHRASE:reasons.append('authorization phrase invalid')
-    except OSError:reasons.append('authorization file missing')
-    if not config.binary.is_file() or not os.access(config.binary,os.X_OK):reasons.append('whisper executable missing')
-    if not config.model.is_file():reasons.append('model weights missing')
-    elif config.model_sha256 and identity(config.model)!=config.model_sha256:reasons.append('model SHA-256 mismatch')
-    if config.chunk_s<=config.overlap_s or config.overlap_s<0 or not 1<=config.threads<=3 or config.beam_size<1:reasons.append('invalid chunk configuration')
-    return {'allowed':not reasons,'reasons':reasons,'TRANSCRIPTION_ENABLED':env.get('TRANSCRIPTION_ENABLED','false')}
+        return (os.environ.get('TRANSCRIPTION_ENABLED', '').strip().lower() == 'true'
+                and sys.platform.startswith('linux') and cfg.marker.is_file()
+                and cfg.auth.read_text().strip() == AUTH_PHRASE)
+    except OSError:
+        return False
 
 
-def parse_whisper(payload,offset=0):
-    out=[]
-    for row in payload.get('transcription',[]):
-        times=row.get('offsets')
-        if not times or 'from' not in times or 'to' not in times:raise ValueError('missing millisecond offsets')
-        start,end=float(times['from'])/1000,float(times['to'])/1000
-        if not all(math.isfinite(x) for x in (offset,start,end)) or offset<0 or start<0 or end<start:raise ValueError('invalid millisecond offsets')
-        out.append({'start':offset+start,'end':offset+end,'text':str(row.get('text','')).strip()})
-    return out
+def encode(data):
+    return json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(',', ':'),
+                      allow_nan=False).encode()
 
 
-def atomic_json(path,data):
-    path.parent.mkdir(parents=True,exist_ok=True)
-    tmp=path.with_suffix('.tmp')
-    payload=json.dumps(data,ensure_ascii=False,indent=2,allow_nan=False).encode('utf-8')
-    with tmp.open('wb') as handle:
-        handle.write(gzip.compress(payload,mtime=0) if path.suffix=='.gz' else payload)
-        handle.flush();os.fsync(handle.fileno())
-    os.replace(tmp,path)
-    directory=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY)
-    try:os.fsync(directory)
-    finally:os.close(directory)
+def digest(data):
+    return hashlib.sha256(encode(data)).hexdigest()
 
 
-def evidence_checksum(data):
-    fields=('source_sha256','fingerprint','offset_s','duration_s','raw','silence')
-    if data.get('schema_version')==2:
-        fields+=('schema_version','created_at','decoder_command','decoding')
-    payload={key:data[key] for key in fields}
-    return hashlib.sha256(json.dumps(payload,sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False).encode()).hexdigest()
-
-
-def validate_checkpoint(data,source_sha256,fingerprint,offset,length):
-    if not isinstance(data,dict) or data.get('schema_version') not in (1,2):raise ValueError('checkpoint schema')
-    for key,value in (('source_sha256',source_sha256),('fingerprint',fingerprint),('offset_s',offset),('duration_s',length)):
-        if data.get(key)!=value:raise ValueError('checkpoint identity or bounds')
-    if data.get('evidence_sha256')!=evidence_checksum(data):raise ValueError('checkpoint checksum')
-    if not isinstance(data.get('created_at'),(int,float)) or not math.isfinite(data['created_at']):raise ValueError('checkpoint timestamp')
-    if data['schema_version']==2:
-        diagnostic=data.get('decoding')
-        if not isinstance(diagnostic,dict) or type(diagnostic.get('wall_s')) not in (int,float) or not math.isfinite(diagnostic['wall_s']) or diagnostic['wall_s']<0:
-            raise ValueError('checkpoint decoding timing')
-        if not all(isinstance(diagnostic.get(key),str) for key in ('stdout','stderr')):
-            raise ValueError('checkpoint decoding logs')
-        if not isinstance(data.get('decoder_command'),list) or not all(isinstance(x,str) for x in data['decoder_command']):
-            raise ValueError('checkpoint decoding command')
-    raw=data['raw']
-    if not isinstance(raw,dict) or not isinstance(raw.get('transcription'),list):raise ValueError('checkpoint raw schema')
-    for row in raw['transcription']:
-        if not isinstance(row,dict) or not isinstance(row.get('text'),str):raise ValueError('checkpoint row schema')
-    parse_whisper(raw)
-    if not isinstance(data['silence'],list):raise ValueError('checkpoint silence schema')
-    for pair in data['silence']:
-        if not isinstance(pair,list) or len(pair)!=2 or not all(type(x) in (int,float) and math.isfinite(x) for x in pair) or not 0<=pair[0]<=pair[1]<=length:raise ValueError('checkpoint silence bounds')
-
-
-def silence_intervals(log,duration):
-    intervals=[];start=None
-    for match in re.finditer(r'silence_(start|end):\s*([0-9.]+)',log):
-        value=float(match[2])
-        if match[1]=='start':start=value
-        elif start is not None:intervals.append((start,value));start=None
-    if start is not None:intervals.append((start,duration))
-    return intervals
-
-
-def decoder_command(cfg,audio,prefix):
-    command=[cfg.binary,'-m',cfg.model,'-f',audio,'-l','pt','-t',str(cfg.threads),'-bs',str(cfg.beam_size),'-bo','5','-mc',str(cfg.max_context),'-tp','0','-tpi','0.2' if cfg.temperature_fallback else '0','-nth','0.6','-et','2.4','-lpt','-1','-ng','-ojf','-of',prefix]
-    if not cfg.temperature_fallback:command.append('-nf')
-    return command
-
-
-_VERIFY_TOKEN=re.compile(r'[+−-]?\d+(?:[.,]\d+)?|\w[\w\u0300-\u036f]*',re.UNICODE)
-REPETITION_VERIFY_MAX=8
-REPETITION_VERIFY_WINDOW_S=2.6
-_FILLERS={'então','entendeu','exatamente','beleza','certinho','pessoal','galera','obrigado','obrigada','legenda','legendas'}
-
-
-def _verify_tokens(text):
-    import unicodedata
-    return _VERIFY_TOKEN.findall(unicodedata.normalize('NFC',text).casefold())
-
-
-def _heard_at(wanted,rows,target,tolerance=0.3):
-    """Exactly one contiguous occurrence of ``wanted`` whose decoder rows
-    overlap the target occurrence's own time span (absolute seconds)."""
-    tokens=[(w,i) for i,row in enumerate(rows) for w in _verify_tokens(row['text'])]
-    words=[w for w,_ in tokens];n=len(wanted)
-    hits=[p for p in range(len(words)-n+1) if words[p:p+n]==wanted]
-    if len(hits)!=1:return False
-    used={tokens[k][1] for k in range(hits[0],hits[0]+n)}
-    start=min(rows[i]['start'] for i in used);end=max(rows[i]['end'] for i in used)
-    return start<target['end']+tolerance and end>target['start']-tolerance
-
-
-def confirmable_repetitions(segments,qa,limit=REPETITION_VERIFY_MAX):
-    """Isolated adjacent exact repeats that an acoustic check may confirm.
-
-    Runs of three or more identical rows are loop candidates and never
-    eligible; neither are overlapping rows (not separately audible) nor
-    lessons with more candidates than ``limit`` (systematic decoder issue).
-    """
-    def norm(i):return segments[i]['text'].strip().casefold()
-    pairs=[]
-    for flag in qa['flags']:
-        if flag['kind']!='duplicate_segment' or flag.get('origin')!='stitched_text':continue
-        i=flag['idx']
-        if not 1<=i<len(segments):return []
-        words=_verify_tokens(segments[i]['text'])
-        # Fillers/short words ("Né?") cannot be located reliably: stay in review.
-        # A single long content word ("Glicerídeo.") is eligible only when the
-        # occurrences are far enough apart that the two windows share no audio.
-        if not words:return []
-        if len(words)==1:
-            w=words[0]
-            if (not w.isalpha() or len(w)<6 or w in _FILLERS
-                    or segments[i]['start']-segments[i-1]['end']<REPETITION_VERIFY_WINDOW_S):return []
-        if (i+1<len(segments) and norm(i+1)==norm(i)) or (i>=2 and norm(i-2)==norm(i)):return []
-        if segments[i]['start']<segments[i-1]['end']-0.05:return []
-        pairs.append(i)
-    return pairs if len(pairs)<=limit else []
-
-
-def reconcile_silent_gaps(qa,segments,chunks,duration):
-    intervals=sorted((c['offset_s']+start,c['offset_s']+end)
-                     for c in chunks for start,end in c['silence'])
-    qa['observations']=[]
-    retained=[]
-    for flag in qa['flags']:
-        if flag['kind']!='silence_gap':retained.append(flag);continue
-        idx=flag['idx']
-        start=max((s['end'] for s in segments[:idx]),default=0)
-        end=segments[idx]['start'] if idx<len(segments) else duration
-        covered=start
-        for left,right in intervals:
-            if left<=covered+0.05:covered=max(covered,right)
-        if covered>=end-0.05:
-            qa['observations'].append({**flag,'kind':'measured_silence_gap','start':start,'end':end})
-        else:retained.append(flag)
-    qa['flags']=retained
-
-
-def normalize_final_padding(chunks,segments,duration):
-    """Correct only the synthetic final-segment timestamp overrun, bound to evidence.
-
-    whisper.cpp pads the last decoder row of the final chunk to ~start+30s, so its
-    end exceeds the measured audio duration (ffprobe ``duration_s``) even though the
-    speech starts within the audio. This is a deterministic formatting defect, not
-    spoken content: the text is untouched and the end is clamped to the proven audio
-    bound. Returns corrected copies plus a correction record, or the originals and
-    None when no such defect exists or the correction cannot be verified. Original
-    evidence is never mutated; callers verify identity on the originals first.
-    """
-    from copy import deepcopy
-    from .stitching import stitch_chunks
-    if not chunks or not segments:return chunks,segments,None
-    ci=len(chunks)-1;chunk=chunks[ci]
-    offset,length=float(chunk['offset_s']),float(chunk['duration_s'])
-    bound=offset+length;local=chunk['segments']
-    if not local:return chunks,segments,None
-    li=len(local)-1;raw_end=float(local[li]['end']);final_end=float(segments[-1]['end'])
-    if not (raw_end>bound+1 and final_end>duration+1 and float(segments[-1]['start'])<=duration
-            and abs(bound-duration)<=0.01 and raw_end>=final_end-0.01):
-        return chunks,segments,None
-    new_chunks=deepcopy(chunks);new_segments=deepcopy(segments)
-    new_chunks[ci]['segments'][li]['end']=bound
-    new_segments[-1]['end']=duration
-    if stitch_chunks(new_chunks)['segments']!=new_segments:
-        return chunks,segments,None  # fail closed: correction not independently consistent
-    correction={'kind':'timestamp_correction','idx':len(segments)-1,'chunk_idx':ci,'local_idx':li,
-                'raw_end':raw_end,'corrected_end':duration,'bound':bound,'source':'final_decoder_padding'}
-    return new_chunks,new_segments,correction
-
-
-def resolved_timestamp_flags(qa,correction):
-    """Split off the bad_timestamp flags the final-padding correction resolves.
-
-    Only the final segment's flags (stitched global idx and decoder local idx) are
-    resolved; every other flag — including earlier timestamp defects and all
-    repetition/duplicate flags — is retained untouched.
-    """
-    resolved,kept=[],[]
-    for flag in qa['flags']:
-        if flag['kind']=='bad_timestamp' and (
-            (flag.get('origin')=='decoder' and flag.get('chunk_idx')==correction['chunk_idx']
-             and flag.get('idx')==correction['local_idx'])
-            or (flag.get('origin')!='decoder' and flag.get('idx')==correction['idx'])):
-            resolved.append(flag)
-        else:kept.append(flag)
-    return kept,resolved
-
-
-def preflight(config,runner=subprocess.run):
-    """Inspect files, SQLite, versions and CLI capabilities, never open media.
-
-    Preparation readiness is separate from authorization. Network publication
-    access is audited separately, not silently treated as verified here.
-    """
-    checks={};problems=[]
-    for name,args in [('ffmpeg',['-version']),('ffprobe',['-version']),('rclone',['version']),
-                      ('whisper',["--version"])]:
-        executable=str(config.binary) if name=='whisper' else shutil.which(name)
-        entry:dict={'available':bool(executable and Path(executable).is_file())}
-        if entry['available']:
-            try:
-                result=runner([executable,*args],check=True,capture_output=True,text=True,timeout=30)
-                entry['version']=(result.stdout or result.stderr or '').splitlines()[0]
-            except (OSError,subprocess.SubprocessError,IndexError):entry['available']=False
-        if not entry['available']:problems.append(f'{name} unavailable')
-        checks[name]=entry
-    if checks['whisper']['available']:
-        try:
-            result=runner([str(config.binary),'--help'],check=True,capture_output=True,text=True,timeout=30)
-            help_text=(result.stdout or '')+(result.stderr or '')
-            missing=[flag for flag in ('-ojf','-nth','-et','-lpt','-tpi','-nf','-bs') if flag not in help_text]
-            checks['whisper']['missing_flags']=missing
-            if missing:problems.append('required whisper flags unavailable')
-        except (OSError,subprocess.SubprocessError):problems.append('whisper help failed')
-    digest=identity(config.model)
-    if not digest or (config.model_sha256 and digest!=config.model_sha256):problems.append('model integrity failed')
-    eligible=largest=invalid=0
+def sync_dir(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
-        with closing(FOStore(config.db,readonly=True).conn) as c:
-            eligible=c.execute("SELECT COUNT(*) FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version JOIN lesson_video_sources s ON s.lesson_id=j.lesson_id WHERE j.state='queued' AND l.present=1 AND s.available=1 AND s.revision=CAST(j.version AS TEXT) AND s.remote_path IS NOT NULL").fetchone()[0]
-            largest=c.execute('SELECT COALESCE(MAX(size),0) FROM lesson_video_sources WHERE available=1').fetchone()[0]
-            invalid=c.execute("SELECT count(*) FROM lesson_video_sources WHERE available=1 AND (remote_path IS NULL OR remote_path NOT LIKE 'onedrive:Federal Online/%' OR size IS NULL OR size<=0)").fetchone()[0]
-            if invalid:problems.append('unclassified or invalid sources')
-    except (sqlite3.Error,OSError):
-        eligible=largest=invalid=0
-        problems.append('database unavailable or required schema missing')
-    free=None
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def private_dir(path):
+    path.mkdir(mode=0o700, exist_ok=True)
+    if path.is_symlink() or not path.is_dir() or path.stat().st_uid != os.geteuid():
+        raise OSError('unsafe_worker_directory')
+    return path
+
+
+def atomic_json(path, identity, data):
+    record = {'identity': identity, 'data': data}
+    payload = encode({**record, 'sha256': digest(record)})
+    fd, name = tempfile.mkstemp(dir=path.parent, prefix='.writing-')
     try:
-        free=shutil.disk_usage(config.state).free
-        if free<RESERVE+largest+100*1024**2:problems.append('insufficient storage reserve')
-    except OSError:problems.append('state storage unavailable')
-    available=None
-    if Path('/proc/meminfo').exists():
-        entries={line.split(':')[0]:line.split(':')[1].strip() for line in Path('/proc/meminfo').read_text().splitlines()}
-        available=int(entries['MemAvailable'].split()[0])*1024
-        if available<12*1024**3:problems.append('less than 12 GiB RAM available')
-    return {'ready':not problems,'problems':problems,'dependencies':checks,
-            'model_sha256':digest,'model_expected_sha256':config.model_sha256,
-            'runtime_sha256':identity(config.binary),'parameters':config.parameters(),
-            'eligible_jobs':eligible,'invalid_sources':invalid,
-            'storage':{'free_bytes':free,'reserve_bytes':RESERVE,'largest_source_bytes':largest},
-            'resources':{'cpu_count':os.cpu_count(),'threads':config.threads,'memory_available_bytes':available,
-                         'service_memory_max_bytes':12*1024**3,'service_cpu_quota_percent':300},
-            'publication':{'source_root':'onedrive:Federal Online/',
-                           'target':'onedrive:Study Hub/Federal Online/Transcripts/generated_v2',
-                           'remote_access_verified':False},'inference_executed':False}
+        with os.fdopen(fd, 'wb') as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(name, path)
+        sync_dir(path.parent)
+    finally:
+        Path(name).unlink(missing_ok=True)
 
 
-class Worker:
-    def __init__(self,config,store=None,runner=subprocess.run,gate_fn=None,free_bytes=None):
-        self.decoder_turn: DecoderTurn | None = None
-        self.leader: BinaryIO | None = None
-        self.cfg=config;self.store=store or FOStore(config.db);self.c=self.store.conn
-        self.runner=runner;self.gate_fn=gate_fn or (lambda:gate(config))
-        self.free_bytes=free_bytes or (lambda:shutil.disk_usage(config.state).free)
-        self.owner='fo-worker:'+socket.gethostname()+':'+str(os.getpid())+':'+uuid.uuid4().hex
-        self.c.execute('CREATE TABLE IF NOT EXISTS lesson_video_sources(lesson_id TEXT PRIMARY KEY,remote_path TEXT,revision TEXT,size INTEGER,available INTEGER,checked_at TEXT)')
-        if 'retry_at' not in {x[1] for x in self.c.execute('PRAGMA table_info(transcription_jobs)')}:
-            self.c.execute('ALTER TABLE transcription_jobs ADD COLUMN retry_at REAL DEFAULT 0')
-        self.c.execute('CREATE TABLE IF NOT EXISTS focused_reviews(lesson_id TEXT,version INTEGER,start REAL,end REAL,reason TEXT,state TEXT,PRIMARY KEY(lesson_id,version,start,end,reason))')
-        self.c.execute('CREATE TABLE IF NOT EXISTS transcription_rr_cursor(id INTEGER PRIMARY KEY CHECK(id=1),last_discipline TEXT,cycle INTEGER,updated_at REAL)')
-        self.c.execute('INSERT OR IGNORE INTO transcription_rr_cursor VALUES(1,NULL,0,0)')
-        self.c.execute('CREATE TABLE IF NOT EXISTS transcription_breaker(fingerprint TEXT PRIMARY KEY,consecutive_failures INTEGER,consecutive_reviews INTEGER,opened_at REAL,reason TEXT)')
-        self.c.execute('CREATE TABLE IF NOT EXISTS transcription_source_deferrals(lesson_id TEXT,version INTEGER,remote_path TEXT,size INTEGER,reason TEXT,retry_after REAL,observed_at REAL,PRIMARY KEY(lesson_id,version))')
-        # Persistent scheduling preference: jobs stay queued, never rewritten.
-        self.c.execute('CREATE TABLE IF NOT EXISTS transcription_discipline_exclusions(discipline TEXT PRIMARY KEY,reason TEXT,created_at REAL)')
-        # Observable phase telemetry; one row per job version, best effort.
-        self.c.execute('CREATE TABLE IF NOT EXISTS transcription_job_phases(lesson_id TEXT,version INTEGER,phase TEXT,phase_started_at REAL,chunk_index INTEGER,chunk_total INTEGER,updated_at REAL,PRIMARY KEY(lesson_id,version))')
-        # One reassessment outcome per review job version; unchanged deterministic
-        # failures are never reprocessed, errors back off and stop after a limit.
-        self.c.execute('CREATE TABLE IF NOT EXISTS transcription_review_log(lesson_id TEXT,version INTEGER,input_sha256 TEXT,policy_version INTEGER,outcome TEXT,detail TEXT,attempts INTEGER NOT NULL DEFAULT 1,at REAL,PRIMARY KEY(lesson_id,version))')
-        self.c.commit()
-
-    def excluded_disciplines(self):
-        return {r[0] for r in self.c.execute('SELECT discipline FROM transcription_discipline_exclusions')}
-
-    def exclude_discipline(self,name,reason):
-        if name not in EXCLUDABLE_DISCIPLINES:raise ValueError('discipline not in exact owner allowlist')
-        with self.c:self.c.execute('INSERT OR IGNORE INTO transcription_discipline_exclusions VALUES(?,?,?)',(name,str(reason)[:200],time.time()))
-
-    def include_discipline(self,name):
-        if name not in EXCLUDABLE_DISCIPLINES:raise ValueError('discipline not in exact owner allowlist')
-        with self.c:self.c.execute('DELETE FROM transcription_discipline_exclusions WHERE discipline=?',(name,))
-
-    def record_phase(self,job,phase,chunk_index=None,chunk_total=None):
-        if phase not in PHASES:raise ValueError('unknown phase')
-        try:
-            now=time.time()
-            with self.c:self.c.execute('INSERT OR REPLACE INTO transcription_job_phases VALUES(?,?,?,?,?,?,?)',
-                                       (job['lesson_id'],job['version'],phase,now,chunk_index,chunk_total,now))
-        except sqlite3.Error:
-            pass  # telemetry must never fail inference or lose a lease
-
-    def catalog_order(self):
-        """item_id -> portal 'ordem' from the current catalog (cached per mtime set)."""
-        files=sorted((self.cfg.state/'catalog/courses').glob('*/aulas_index.json')) if (self.cfg.state/'catalog/courses').is_dir() else []
-        key=tuple((str(f),f.stat().st_mtime_ns) for f in files)
-        if getattr(self,'_order_key',None)!=key:
-            order={}
-            for f in files:
-                try:items=json.loads(f.read_text()).get('aulas',[])
-                except (OSError,ValueError):continue
-                for x in items:
-                    if x.get('item_id') and str(x.get('ordem','')).isdigit():order[x['item_id']]=int(x['ordem'])
-            self._order,self._order_key=order,key
-        return self._order
-
-    def recover(self):
-        # Caller must hold the process lock. A dead predecessor cannot retain work.
-        temporary=self.cfg.state/'tmp/transcription'
-        if temporary.is_dir():
-            for folder in temporary.glob('job-*'):
-                marker=folder/'.worker-owned'
-                if folder.is_dir() and not folder.is_symlink() and marker.is_file() and not marker.is_symlink() and marker.read_text()=='study-hub-fo-worker':
-                    shutil.rmtree(folder)
-        with self.c:
-            self.c.execute("UPDATE transcription_jobs SET state=CASE WHEN attempts>=max_attempts THEN 'failed' ELSE 'queued' END,lease_owner=NULL,lease_until=NULL,last_error='worker interrupted; resumed from persistent queue' WHERE state='leased' AND lease_owner LIKE 'fo-worker:%'")
-
-    def lease(self,lesson_id=None):
-        now=time.time()
-        self.c.execute('BEGIN IMMEDIATE')
-        try:
-            self.c.execute("UPDATE transcription_jobs SET state='superseded' WHERE state='queued' AND EXISTS(SELECT 1 FROM lessons l WHERE l.lesson_id=transcription_jobs.lesson_id AND l.version!=transcription_jobs.version)")
-            self.c.execute("UPDATE transcription_jobs SET state='done',progress=1 WHERE state='queued' AND EXISTS(SELECT 1 FROM transcripts t WHERE t.lesson_id=transcription_jobs.lesson_id AND t.version=transcription_jobs.version AND t.corpus=?)",(ACCEPTED_CORPUS,))
-            rows=self.c.execute("SELECT j.*,l.subject,l.front,l.module,l.title,l.item_id,s.remote_path,s.size FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version JOIN lesson_video_sources s ON s.lesson_id=j.lesson_id WHERE j.state='queued' AND COALESCE(j.retry_at,0)<=? AND j.attempts<j.max_attempts AND l.present=1 AND s.available=1 AND CAST(j.version AS TEXT)=s.revision AND s.remote_path IS NOT NULL AND (? IS NULL OR j.lesson_id=?) AND NOT EXISTS(SELECT 1 FROM transcription_jobs busy JOIN lesson_video_sources bs ON bs.lesson_id=busy.lesson_id WHERE busy.state='leased' AND bs.remote_path=s.remote_path)",(now,lesson_id,lesson_id)).fetchall()
-            cursor=self.c.execute('SELECT * FROM transcription_rr_cursor WHERE id=1').fetchone()
-            deferred={(r['lesson_id'],r['version'],r['remote_path'],r['size']) for r in self.c.execute('SELECT * FROM transcription_source_deferrals WHERE retry_after>?',(now,))}
-            rows=[r for r in rows if (r['lesson_id'],r['version'],r['remote_path'],r['size']) not in deferred]
-            row=choose([dict(r,ordem=self.catalog_order().get(r['item_id'])) for r in rows],cursor['last_discipline'],self.excluded_disciplines())
-            if row is None:self.c.commit();return None
-            self.c.execute("UPDATE transcription_jobs SET state='leased',attempts=attempts+1,lease_owner=?,lease_until=?,updated_at=? WHERE lesson_id=? AND version=?",(self.owner,now+7*86400,str(now),row['lesson_id'],row['version']))
-            name=discipline(row)
-            wrapped=cursor['last_discipline'] is not None and discipline_key(name)<=discipline_key(cursor['last_discipline'])
-            self.c.execute('UPDATE transcription_rr_cursor SET last_discipline=?,cycle=cycle+?,updated_at=? WHERE id=1',(name,int(wrapped),now))
-            self.c.commit();return dict(row)
-        except BaseException:self.c.rollback();raise
-
-    def command(self,cmd,timeout=7200,**options):
-        # Raw stderr/command arguments stay private; no signed URLs in logs.
-        if self.leader is not None:
-            # Scratch may outlive the parent until systemd reaps its children.
-            options['pass_fds']=(self.leader.fileno(), *options.get('pass_fds', ()))
-        return self.runner([str(x) for x in cmd],check=True,capture_output=True,text=True,timeout=timeout,**options)
-
-    def decode(self,cmd,timeout):
-        # The child retains the same open description if the worker dies first.
-        options={'pass_fds': (self.decoder_turn.lock.fileno(),)} if self.decoder_turn else {}
-        return self.command(cmd,timeout=timeout,**options)
-
-    @contextmanager
-    def publication_lock(self):
-        path=self.cfg.state/'locks/transcript-publication.lock';path.parent.mkdir(parents=True,exist_ok=True)
-        with path.open('a+') as handle:
-            try:
-                fcntl.flock(handle,fcntl.LOCK_EX|fcntl.LOCK_NB)
-            except BlockingIOError:
-                # External publication can run for minutes without using ASR.
-                with self.decoder_turn.pause() if self.decoder_turn else nullcontext():
-                    fcntl.flock(handle,fcntl.LOCK_EX)
-            yield
-
-    @contextmanager
-    def heartbeat(self,job):
-        """Renew only our live lease while a long decoder/download is running.
-
-        Use a separate bounded SQLite connection, never the main thread's
-        connection. A busy DB cannot trap shutdown or steal another owner.
-        Chunk progress remains the last durable checkpoint, not fabricated work.
-        """
-        stopped=threading.Event()
-        def renew():
-            while not stopped.wait(HEARTBEAT_INTERVAL_S):
-                try:
-                    with closing(sqlite3.connect(str(self.cfg.db),timeout=1)) as connection:
-                        now=time.time()
-                        with connection:
-                            connection.execute("UPDATE transcription_jobs SET lease_until=?,updated_at=? "
-                                               "WHERE lesson_id=? AND version=? AND state='leased' AND lease_owner=?",
-                                               (now+7*86400,str(now),job['lesson_id'],job['version'],self.owner))
-                except (OSError,sqlite3.Error):
-                    # Normal chunk commits still validate ownership and renew.
-                    continue
-        thread=threading.Thread(target=renew,name='fo-lease-heartbeat',daemon=True)
-        thread.start()
-        try:yield
-        finally:
-            stopped.set()
-            thread.join()
-
-    def current_source(self,job):
-        lesson=self.store.get_lesson(job['lesson_id'])
-        source=self.c.execute('SELECT * FROM lesson_video_sources WHERE lesson_id=?',(job['lesson_id'],)).fetchone()
-        if not lesson or not lesson['present'] or lesson['version']!=job['version'] or not source or not source['available'] or source['revision']!=str(job['version']):raise SourceChanged('source revision no longer current')
-        if not str(source['remote_path']).startswith('onedrive:Federal Online/') or '..' in Path(source['remote_path']).parts:raise ValueError('source outside classified FO remote')
-        return lesson,dict(source)
-
-    def pipeline(self,job,work):
-        cfg=self.cfg;lesson,source=self.current_source(job)
-        started=time.time()
-        checkout=cfg.binary.parent.parent.parent
-        runtime_commit=None
-        if (checkout/'.git').exists():
-            runtime_commit=self.command(['git','-C',checkout,'rev-parse','HEAD'],timeout=30).stdout.strip()
-        provenance={'model_sha256':identity(cfg.model),'runtime_sha256':identity(cfg.binary),
-                    'runtime_commit':runtime_commit,
-                    'runtime_libraries':{p.name:identity(p) for p in sorted(cfg.binary.parent.glob('*.so*')) if p.is_file()},
-                    'parameters':cfg.parameters()}
-        fingerprint=hashlib.sha256(json.dumps(provenance,sort_keys=True).encode()).hexdigest()
-        size=int(source.get('size') or 0)
-        if size<=0 or self.free_bytes()<RESERVE+size+100*1024**2:raise RuntimeError('storage budget or source size invalid')
-        video=work/'source.mp4'
-        self.record_phase(job,'downloading')
-        try:
-            # A rejected copy is not resumable. Let known source failures use the
-            # revision-scoped backoff rather than re-copying in this lease.
-            with self.decoder_turn.pause() if self.decoder_turn else nullcontext():
-                self.command(['rclone','copyto',source['remote_path'],video,'--retries','1','--transfers','1',
-                              '--max-transfer',f'{size+1024**2}B','--cutoff-mode','HARD'])
-        except subprocess.CalledProcessError as exc:
-            detail=str(exc.stderr or '').casefold()
-            missing=any(x in detail for x in ('object not found','directory not found','file not found','404 not found'))
-            denied=any(x in detail for x in ('unauthorized','forbidden','token expired',
-                                             'invalid token','status code 401','status code 403'))
-            if missing and not denied:raise SourceUnavailable('remote_object_not_found') from exc
-            if 'corrupted on transfer: sizes differ' in detail and not denied:
-                raise SourceUnavailable('source_download_size_mismatch') from exc
-            raise
-        if video.stat().st_size!=size:raise SourceUnavailable('source_download_size_mismatch')
-        self.record_phase(job,'hashing')
-        source_sha256=file_sha256(video)
-        self.record_phase(job,'probing')
-        probe=self.command(['ffprobe','-v','error','-show_entries','format=duration','-of','json',video],timeout=60)
-        duration=float(json.loads(probe.stdout)['format']['duration'])
-        if not math.isfinite(duration) or duration<=0 or duration>24*3600:raise ValueError('invalid source duration')
-        expected=lesson.get('duration_s')
-        if expected and abs(duration-float(expected))>max(5,float(expected)*0.05):
-            atomic_json(cfg.state/'transcripts/errors'/job['lesson_id']/f"v{job['version']}-source-duration-{uuid.uuid4().hex}.json.gz",
-                        {'expected_s':float(expected),'observed_s':duration,'source_sha256':source_sha256,'at':time.time()})
-            raise SourceUnavailable('source_duration_mismatch')
-        chunks=[];acoustic_flags=[];raw_flags=[];offset=0.0
-        # Reuse only after byte identity, never a shared title, size or remote path.
-        # The video is still downloaded to prove identity; no persistent video cache.
-        evidence=cfg.state/'transcripts/evidence'/source_sha256/fingerprint
-        evidence.mkdir(parents=True,exist_ok=True)
-        queue=TranscriptionQueue(self.store)
-        step=max(1e-9,cfg.chunk_s-cfg.overlap_s)
-        chunk_total=1+max(0,math.ceil((duration-cfg.chunk_s)/step)) if duration>cfg.chunk_s else 1
-        while offset<duration:
-            self.record_phase(job,'decoding',chunk_index=len(chunks)+1,chunk_total=chunk_total)
-            if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
-            if self.free_bytes()<RESERVE+100*1024**2:raise RuntimeError('storage reserve reached')
-            length=min(cfg.chunk_s,duration-offset);audio=work/'chunk.wav';prefix=work/'asr'
-            checkpoint=evidence/f'{offset:.3f}-{length:.3f}.json.gz'
-            cached=None;rejected=None
-            if checkpoint.is_file():
-                try:
-                    if checkpoint.is_symlink():raise RuntimeError('checkpoint symlink refused')
-                    cached=json.loads(gzip.decompress(checkpoint.read_bytes()))
-                    validate_checkpoint(cached,source_sha256,fingerprint,offset,length)
-                except (OSError,EOFError,zlib.error,ValueError,TypeError,KeyError,AttributeError,OverflowError) as exc:
-                    quarantine=checkpoint.with_name(checkpoint.name+'.rejected-'+uuid.uuid4().hex)
-                    checkpoint.rename(quarantine)
-                    rejected={'path':str(quarantine),'reason':type(exc).__name__,'rejected_at':time.time()}
-                    cached=None
-            if cached is not None:
-                payload=cached['raw'];intervals=cached['silence']
-                # V1 authenticated raw/schema/bounds only, not logs or timings.
-                decoding=cached.get('decoding') if cached['schema_version']==2 else None
-            else:
-                if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
-                with self.decoder_turn.pause() if self.decoder_turn else nullcontext():
-                    self.command(['ffmpeg','-nostdin','-y','-threads','1','-ss',str(offset),'-i',video,'-t',str(length),'-ar','16000','-ac','1','-c:a','pcm_s16le','-threads','1',audio])
-                    silence=self.command(['ffmpeg','-nostdin','-threads','1','-i',audio,'-af','silencedetect=noise=-40dB:d=1','-f','null','-'])
-                if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
-                command=decoder_command(cfg,audio,prefix)
-                decode_started=time.monotonic()
-                decoded=None;failure=None;raw_text=None
-                try:
-                    decoded=self.decode(command,timeout=CHUNK_TIMEOUT_S)
-                    raw_text=prefix.with_suffix('.json').read_text()
-                except Exception as exc:
-                    failure=exc
-                finally:
-                    def log_text(value):
-                        return value.decode('utf-8',errors='replace') if isinstance(value,bytes) else value or ''
-                    logs=decoded if decoded is not None else failure
-                    decoding={'wall_s':time.monotonic()-decode_started,
-                              'stderr':log_text(getattr(logs,'stderr',None)),
-                              'stdout':log_text(getattr(logs,'stdout',None))}
-                    created_at=time.time()
-                    try:
-                        raw_path=prefix.with_suffix('.json')
-                        if raw_text is None and raw_path.is_file():raw_text=raw_path.read_text(errors='replace')
-                        # Preserve partial/missing output while the temporary
-                        # directory still exists, including a failed decoder.
-                        atomic_json(evidence/f'{offset:.3f}-{length:.3f}.decoder-{uuid.uuid4().hex}.json.gz',
-                                    {'raw_text':raw_text,'created_at':created_at,'rejected_cache':rejected,
-                                     'source_sha256':source_sha256,'fingerprint':fingerprint,
-                                     'offset_s':offset,'duration_s':length,'decoding':decoding,
-                                     'failure_type':type(failure).__name__ if failure else None})
-                    except Exception as diagnostic_exc:
-                        if failure is None:raise
-                        setattr(failure,'fo_evidence_error',type(diagnostic_exc).__name__)
-                if failure is not None:raise failure
-                if raw_text is None:raise ValueError('decoder output unavailable')
-                payload=json.loads(raw_text)
-                intervals=silence_intervals(silence.stderr or '',length)
-                record={'schema_version':2,'source_sha256':source_sha256,'fingerprint':fingerprint,
-                        'offset_s':offset,'duration_s':length,'raw':payload,'silence':intervals,
-                        'created_at':created_at,'rejected_cache':rejected,
-                        'decoder_command':[str(x) for x in command],'decoding':decoding}
-                record['evidence_sha256']=evidence_checksum(record)
-                atomic_json(checkpoint,record)
-            current=parse_whisper(payload,offset)
-            chunk_qa=qa_segments(current,offset+length)
-            for flag in chunk_qa['flags']:
-                if flag['kind']!='silence_gap':
-                    row=current[flag['idx']]
-                    end_row=current[flag.get('end_idx',flag['idx'])]
-                    raw_flags.append({**flag,'origin':'decoder','chunk_idx':len(chunks),
-                                      'start':row['start'],'end':end_row['end']})
-            for row in current:
-                for start,end in intervals:
-                    if row['text'] and row['start']>=offset+start and row['end']<=offset+end:acoustic_flags.append({'kind':'text_during_measured_silence','start':row['start'],'end':row['end']})
-            chunks.append({'offset_s':offset,'duration_s':length,'segments':current,'silence':intervals,'raw':payload,'reused':cached is not None,'decoding':decoding,'qa':chunk_qa})
-            queue.progress(job['lesson_id'],job['version'],self.owner,min(1,(offset+length)/duration))
-            with self.c:self.c.execute('UPDATE transcription_jobs SET lease_until=?,updated_at=? WHERE lesson_id=? AND version=? AND lease_owner=?',(time.time()+7*86400,str(time.time()),job['lesson_id'],job['version'],self.owner))
-            audio.unlink(missing_ok=True);prefix.with_suffix('.json').unlink(missing_ok=True)
-            if self.decoder_turn:
-                self.decoder_turn.checkpoint(lesson_id=job['lesson_id'],version=job['version'],
-                                             offset_s=offset,duration_s=length,reused=cached is not None)
-            if offset+length>=duration:break
-            offset+=cfg.chunk_s-cfg.overlap_s
-        from .stitching import stitch_chunks
-        self.record_phase(job,'stitching')
-        stitched=stitch_chunks(chunks)
-        segments=stitched['segments']
-        qa=qa_segments(segments,duration)
-        reconcile_silent_gaps(qa,segments,chunks,duration)
-        for flag in qa['flags']:flag['origin']='stitched_text'
-        qa['flags'].extend({**flag,'origin':'stitching'} for flag in stitched['flags'])
-        qa['flags'].extend(raw_flags)
-        qa['flags'].extend(acoustic_flags)
-        self.record_phase(job,'repetition_check')
-        self.verify_repetitions(video,work,segments,qa,chunks)
-        if not segments:qa['flags'].append({'kind':'empty_output'})
-        if cfg.review_only:qa['flags'].append({'kind':'pilot_manual_review_required','start':0,'end':duration})
-        # Real focal evidence found likely PT/ES code-switch damage under the
-        # forced-PT decoder. Subject is a risk signal, NOT an audio language
-        # assignment: retain raw speech, do not force ES or publish blindly.
-        if discipline(lesson)=='Espanhol':
-            qa['flags'].append({'kind':'mixed_language_configuration_unverified','start':0,'end':duration})
-        self.record_phase(job,'qa')
-        classify_qa(qa,segments,duration)
-        _,latest=self.current_source(job)
-        if any(latest[k]!=source[k] for k in ('remote_path','revision','size','available')):raise SourceChanged('source changed during inference')
-        artifact={'lesson_id':job['lesson_id'],'version':job['version'],'model':'whisper-large-v3','model_path':str(cfg.model),'runtime_path':str(cfg.binary),**provenance,'source_size':size,'source_sha256':source_sha256,'source_revision':source['revision'],'source_remote_path':source['remote_path'],'duration_s':duration,'created_at':time.time(),'elapsed_s':time.time()-started,'corpus':ACCEPTED_CORPUS,'qa':qa,'chunks':chunks,'segments':segments,'stitching':stitched.get('decisions',[])}
-        status='validated' if qa['passed'] else 'review'
-        artifact['qa_policy_version']=QA_POLICY_VERSION
-        path=cfg.state/'transcripts'/('private' if qa['passed'] else 'review')/job['lesson_id']/f"v{job['version']}.json.gz"
-        self.record_phase(job,'publishing')
-        atomic_json(path,artifact)
-        if qa['passed']:
-            with self.publication_lock():
-                _,latest=self.current_source(job)
-                if any(latest[k]!=source[k] for k in ('remote_path','revision','size','available')):raise SourceChanged('source changed before publication')
-                public={k:artifact[k] for k in ('lesson_id','version','corpus','segments')}
-                public['qa']={'passed':True}
-                atomic_json(cfg.state/'transcripts/generated_v2'/job['lesson_id']/f"v{job['version']}.json",public)
-                self.store.add_transcript(job['lesson_id'],job['version'],segments,artifact['model'],ACCEPTED_CORPUS,True,qa)
-        else:
-            with self.c:
-                for flag in qa['flags']:
-                    idx=min(int(flag.get('idx',0)),max(0,len(segments)-1))
-                    seg=segments[idx] if segments else {'start':0,'end':duration}
-                    start=max(0,float(flag.get('start',seg['start']))-2);end=min(duration,float(flag.get('end',seg['end']))+2)
-                    self.c.execute("INSERT OR IGNORE INTO focused_reviews VALUES(?,?,?,?,?,'pending_manual_review')",(job['lesson_id'],job['version'],start,end,flag['kind']))
-        self.record_phase(job,'finished')
-        return status
-
-    def reassess_review(self,lesson_id,extra_flags=()):
-        """Reapply QA to intact saved evidence, never redownload or decode.
-
-        Caller holds transcription.lock, just like run_once. Original review
-        bytes remain immutable; the new receipt links their SHA256.
-        """
-        from copy import deepcopy
-        from .stitching import stitch_chunks
-
-        if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
-        if not re.fullmatch(r'fo_[0-9a-f]{16}',lesson_id):raise ValueError('invalid lesson ID')
-        lesson=self.store.get_lesson(lesson_id)
-        if not lesson:raise ValueError('lesson missing')
-        job={'lesson_id':lesson_id,'version':lesson['version']}
-        _,source=self.current_source(job)
-        state=self.c.execute('SELECT state FROM transcription_jobs WHERE lesson_id=? AND version=?',(lesson_id,job['version'])).fetchone()
-        if state and state[0]=='done' and self.store.get_transcript(lesson_id):
-            return {'state':'already_validated','lesson_id':lesson_id,'version':job['version']}
-        if not state or state[0]!='review':raise ValueError('not a current review job')
-        original=self.cfg.state/'transcripts/review'/lesson_id/f"v{job['version']}.json.gz"
-        if original.is_symlink():raise ValueError('review symlink refused')
-        content=original.read_bytes();artifact=json.loads(gzip.decompress(content))
-        expected={'lesson_id':lesson_id,'version':job['version'],'corpus':ACCEPTED_CORPUS,
-                  'source_revision':source['revision'],'source_size':source['size'],
-                  'source_remote_path':source['remote_path']}
-        if any(artifact.get(k)!=v for k,v in expected.items()):raise ValueError('review source identity mismatch')
-        if not re.fullmatch('[0-9a-f]{64}',str(artifact.get('source_sha256',''))):raise ValueError('missing byte identity')
-        duration=float(artifact['duration_s'])
-        if not math.isfinite(duration) or duration<=0:raise ValueError('invalid saved duration')
-        chunks=artifact['chunks'];segments=artifact['segments']
-        if not chunks or not segments:raise ValueError('incomplete saved inference')
-        covered=0.0
-        for chunk in chunks:
-            offset,length=float(chunk['offset_s']),float(chunk['duration_s'])
-            if not 0<=offset<=covered or not 0<length<=600 or offset+length>duration+0.01:
-                raise ValueError('incomplete saved chunk coverage')
-            if parse_whisper(chunk['raw'],offset)!=chunk['segments']:raise ValueError('saved raw/segment mismatch')
-            covered=max(covered,offset+length)
-        if abs(covered-duration)>0.01:raise ValueError('incomplete saved chunk tail')
-        if stitch_chunks(chunks)['segments']!=segments:raise ValueError('saved stitching mismatch')
-        # Identity verified on the intact originals above. Apply only the
-        # evidence-bound final-timestamp correction (policy v5); text is unchanged.
-        chunks,segments,correction=normalize_final_padding(chunks,segments,duration)
-        qa=deepcopy(artifact['qa'])
-        if correction:
-            qa['flags'],resolved=resolved_timestamp_flags(qa,correction)
-            qa.setdefault('observations',[]).append({**correction,'resolved_flags':resolved,
-                                                     'policy_version':QA_POLICY_VERSION})
-            artifact['chunks']=chunks;artifact['segments']=segments
-        # Recompute structural checks while retaining all original detector
-        # evidence and confirmed acoustic observations (including measured silence).
-        fresh=qa_segments(segments,duration)
-        reconcile_silent_gaps(fresh,segments,chunks,duration)
-        confirmed={o.get('idx') for o in qa.get('observations',[])
-                   if o.get('kind')=='acoustic_repetition_check' and o.get('confirmed') is True}
-        for flag in fresh['flags']:
-            if flag['kind']=='duplicate_segment' and flag.get('idx') in confirmed:continue
-            if not any(f['kind']==flag['kind'] and f.get('idx')==flag.get('idx') for f in qa['flags']):
-                qa['flags'].append({**flag,'origin':'stitched_text'})
-        qa['flags'].extend(deepcopy(list(extra_flags)))
-        if discipline(lesson)=='Espanhol':
-            qa['flags'].append({'kind':'mixed_language_configuration_unverified','start':0,'end':duration})
-        classify_qa(qa,segments,duration)
-        artifact.update(qa=qa,qa_policy_version=QA_POLICY_VERSION,
-                        reassessment={'input_sha256':hashlib.sha256(content).hexdigest(),'at':time.time()})
-        status='validated' if qa['passed'] else 'review'
-        path=self.cfg.state/'transcripts'/('private' if qa['passed'] else 'review')/lesson_id/f"v{job['version']}.qa-v{QA_POLICY_VERSION}.json.gz"
-        atomic_json(path,artifact)
-        if qa['passed']:
-            with self.publication_lock():
-                _,latest=self.current_source(job)
-                if any(latest[k]!=source[k] for k in ('remote_path','revision','size','available')):raise SourceChanged('source changed during reassessment')
-                public={k:artifact[k] for k in ('lesson_id','version','corpus','segments')}
-                public['qa']={'passed':True}
-                atomic_json(self.cfg.state/'transcripts/generated_v2'/lesson_id/f"v{job['version']}.json",public)
-                self.store.add_transcript(lesson_id,job['version'],segments,artifact['model'],ACCEPTED_CORPUS,True,qa)
-                with self.c:
-                    self.c.execute("UPDATE transcription_jobs SET state='done',progress=1,lease_owner=NULL,lease_until=NULL,updated_at=? WHERE lesson_id=? AND version=? AND state='review'",(str(time.time()),lesson_id,job['version']))
-                    self.c.execute("UPDATE focused_reviews SET state='accepted_mvp_warning' WHERE lesson_id=? AND version=? AND state='pending_manual_review'",(lesson_id,job['version']))
-        return {'state':status,'lesson_id':lesson_id,'version':job['version'],
-                'input_sha256':artifact['reassessment']['input_sha256'],'artifact':str(path),
-                'warnings':len(qa['warnings']),'blockers':len(qa['blockers'])}
-
-    def review_pass(self,limit=2,now=None):
-        """Bounded evidence-only reassessment of pending reviews.
-
-        Caller holds transcription.lock (the run loop does). Never downloads,
-        decodes or touches the circuit breaker. A review whose saved bytes and
-        QA policy are unchanged since a blocking outcome is deterministic: skip
-        it. Errors back off for a day and stop after three attempts until the
-        input or policy changes. Excluded disciplines stay untouched.
-        """
-        now=time.time() if now is None else now
-        if limit<1:raise ValueError('invalid review budget')
-        excluded=self.excluded_disciplines()
-        rows=self.c.execute("SELECT j.lesson_id,j.version,l.subject,l.front,l.module FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version WHERE j.state='review' AND l.present=1 ORDER BY CAST(j.updated_at AS REAL),j.lesson_id").fetchall()
-        processed=[]
-        for row in rows:
-            if len(processed)>=limit:break
-            job=dict(row)
-            if discipline(job) in excluded:continue
-            path=self.cfg.state/'transcripts/review'/job['lesson_id']/f"v{job['version']}.json.gz"
-            try:
-                digest=hashlib.sha256(path.read_bytes()).hexdigest()
-            except OSError:digest=None
-            log=self.c.execute('SELECT * FROM transcription_review_log WHERE lesson_id=? AND version=?',(job['lesson_id'],job['version'])).fetchone()
-            unchanged=log is not None and log['input_sha256']==digest and log['policy_version']==QA_POLICY_VERSION
-            if unchanged:
-                if log['outcome']=='review':continue
-                if log['outcome']=='error' and (log['attempts']>=REVIEW_ERROR_MAX_ATTEMPTS or now-log['at']<REVIEW_ERROR_COOLDOWN_S):continue
-            detail=None
-            try:
-                outcome=self.reassess_review(job['lesson_id'])['state']
-            except Exception as exc:
-                outcome,detail='error',type(exc).__name__
-            attempts=(log['attempts'] if unchanged else 0)+1
-            with self.c:self.c.execute('INSERT OR REPLACE INTO transcription_review_log VALUES(?,?,?,?,?,?,?,?)',
-                                       (job['lesson_id'],job['version'],digest,QA_POLICY_VERSION,outcome,detail,attempts,now))
-            entry={'lesson_id':job['lesson_id'],'version':job['version'],'outcome':outcome}
-            if detail:entry['detail']=detail
-            processed.append(entry)
-        return {'processed':processed}
-
-    def verify_repetitions(self,video,work,segments,qa,chunks):
-        """Resolve isolated duplicate rows only with independent acoustic proof.
-
-        Each occurrence is re-decoded alone, without context, in a window that
-        never reaches the other occurrence. Only when BOTH windows hear every
-        word of the phrase is the pair recorded as a confirmed repetition and
-        its duplicate flags (stitched and decoder origin) moved to
-        observations. Text is never removed; anything else stays flagged.
-        """
-        pairs=confirmable_repetitions(segments,qa)
-        if not pairs:return
-        cfg=self.cfg;confirmed=[]
-        qa.setdefault('observations',[])
-        for i in pairs:
-            first,second=segments[i-1],segments[i]
-            wanted=_verify_tokens(second['text'])
-            heard=[]
-            for row,low,high in ((first,0.0,second['start']),(second,first['end'],float('inf'))):
-                pad=max(0.0,(REPETITION_VERIFY_WINDOW_S-(row['end']-row['start']))/2)
-                start=max(low,row['start']-pad,0.0);end=min(high,row['end']+pad)
-                if end-start<0.3:heard.append(None);continue
-                if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
-                audio=work/'verify.wav';prefix=work/'verify'
-                with self.decoder_turn.pause() if self.decoder_turn else nullcontext():
-                    self.command(['ffmpeg','-nostdin','-y','-threads','1','-ss',f'{start:.3f}','-i',video,'-t',f'{end-start:.3f}','-ar','16000','-ac','1','-c:a','pcm_s16le','-threads','1',audio])
-                if not self.gate_fn()['allowed']:raise RuntimeError('authorization revoked')
-                self.decode(decoder_command(cfg,audio,prefix),timeout=REPETITION_TIMEOUT_S)
-                rows=parse_whisper(json.loads(prefix.with_suffix('.json').read_text()),offset=start)
-                audio.unlink(missing_ok=True);prefix.with_suffix('.json').unlink(missing_ok=True)
-                heard.append({'start':start,'end':end,'rows':rows,
-                              'located':_heard_at(wanted,rows,row)})
-            ok=all(h is not None and h['located'] for h in heard)
-            qa['observations'].append({'kind':'acoustic_repetition_check','idx':i,'confirmed':ok,
-                                       'phrase':second['text'],'windows':heard,'config':'isolated_no_context'})
-            if ok:confirmed.append(i)
-        def same(a,b):
-            return (a['text'].strip().casefold()==b['text'].strip().casefold()
-                    and abs(a['start']-b['start'])<=0.3 and abs(a['end']-b['end'])<=0.3)
-        def covered(flag):
-            if flag['kind']!='duplicate_segment':return False
-            if flag.get('origin')=='stitched_text':return flag['idx'] in confirmed
-            if flag.get('origin')=='decoder':
-                # Only the decoder pair whose BOTH original rows are the
-                # verified occurrences (text and time); anything else stays.
-                try:rows=chunks[flag['chunk_idx']]['segments'];j=flag['idx']
-                except (KeyError,IndexError,TypeError):return False
-                if not 1<=j<len(rows):return False
-                return any(same(rows[j-1],segments[i-1]) and same(rows[j],segments[i]) for i in confirmed)
-            return False
-        qa['flags']=[f for f in qa['flags'] if not covered(f)]
-
-
-    def fingerprint(self):
-        return hashlib.sha256(json.dumps({'parameters':self.cfg.parameters(),'model_sha256':identity(self.cfg.model),'binary_sha256':identity(self.cfg.binary) if Path(self.cfg.binary).is_file() else None},sort_keys=True).encode()).hexdigest()
-
-    def record_outcome(self,fingerprint,outcome):
-        row=self.c.execute('SELECT * FROM transcription_breaker WHERE fingerprint=?',(fingerprint,)).fetchone()
-        failures=(row['consecutive_failures'] if row else 0)+1 if outcome=='failure' else 0
-        reviews=(row['consecutive_reviews'] if row else 0)+1 if outcome=='review' else 0
-        reason='consecutive_failures' if failures>=max(1,int(os.environ.get('FO_ASR_BREAKER_FAILURES','3'))) else ('consecutive_reviews' if reviews>=max(1,int(os.environ.get('FO_ASR_BREAKER_REVIEWS','5'))) else None)
-        with self.c:self.c.execute('INSERT OR REPLACE INTO transcription_breaker VALUES(?,?,?,?,?)',(fingerprint,failures,reviews,time.time() if reason else None,reason))
-
-    def run_once(self,lesson_id=None):
-        g=self.gate_fn()
-        if not g['allowed']:return {'state':'blocked','gate':g}
-        fingerprint=self.fingerprint()
-        breaker=self.c.execute('SELECT * FROM transcription_breaker WHERE fingerprint=?',(fingerprint,)).fetchone()
-        if breaker and breaker['opened_at'] is not None:return {'state':'breaker_open',**dict(breaker)}
-        largest=self.c.execute('SELECT COALESCE(MAX(size),0) FROM lesson_video_sources WHERE available=1').fetchone()[0]
-        if self.free_bytes()<RESERVE+largest+100*1024**2:
-            return {'state':'paused_storage','reserve_bytes':RESERVE,'largest_source_bytes':largest}
-        job=self.lease(lesson_id)
-        if job is None:return {'state':'idle'}
-        temp=self.cfg.state/'tmp/transcription';temp.mkdir(parents=True,exist_ok=True)
-        try:
-            with self.heartbeat(job), tempfile.TemporaryDirectory(prefix='job-',dir=temp) as folder:
-                (Path(folder)/'.worker-owned').write_text('study-hub-fo-worker')
-                status=self.pipeline(job,Path(folder))
-            with self.c:self.c.execute("UPDATE transcription_jobs SET state=?,progress=1,lease_owner=NULL,lease_until=NULL,updated_at=? WHERE lesson_id=? AND version=? AND lease_owner=?",('done' if status=='validated' else 'review',str(time.time()),job['lesson_id'],job['version'],self.owner))
-        except Exception as exc:
-            return self._failed(job,fingerprint,exc)
-        self.record_outcome(fingerprint,status)
-        # Path/size equality cannot approve another lesson's transcript. Aliases
-        # remain queued until their own bounded download proves SHA256 identity;
-        # pipeline() then reuses matching raw checkpoints without another decode.
-        return {'state':status,'lesson_id':job['lesson_id'],'version':job['version']}
-
-    def _failed(self,job,fingerprint,exc):
-        if isinstance(exc,SourceUnavailable):
-            now=time.time()
-            cause=exc.__cause__
-            if isinstance(cause,subprocess.CalledProcessError):
-                atomic_json(self.cfg.state/'transcripts/errors'/job['lesson_id']/f"v{job['version']}-unavailable-{uuid.uuid4().hex}.json.gz",
-                            {'reason':str(exc),'returncode':cause.returncode,'stderr':str(cause.stderr or ''),'at':now})
-            with self.c:
-                self.c.execute('INSERT OR REPLACE INTO transcription_source_deferrals VALUES(?,?,?,?,?,?,?)',
-                               (job['lesson_id'],job['version'],job['remote_path'],job['size'],str(exc),now+86400,now))
-                self.c.execute("UPDATE transcription_jobs SET state='queued',attempts=MAX(0,attempts-1),last_error=?,lease_owner=NULL,lease_until=NULL,updated_at=? WHERE lesson_id=? AND version=? AND lease_owner=?",
-                               (str(exc),str(now),job['lesson_id'],job['version'],self.owner))
-            return {'state':'deferred_source','lesson_id':job['lesson_id'],'reason':str(exc),'retry_after':now+86400}
-        # Gate, storage and source-identity events are infrastructure, not ASR failures.
-        infrastructure=isinstance(exc,SourceChanged) or str(exc) in {'authorization revoked','storage reserve reached','storage budget or source size invalid'}
-        if not infrastructure:self.record_outcome(fingerprint,'failure')
-        diagnostic_error=getattr(exc,'fo_evidence_error',None)
-        if isinstance(exc,(subprocess.CalledProcessError,subprocess.TimeoutExpired)):
-            # Full diagnostics may contain academic text or private paths.
-            # Preserve outside the publication allowlist, never in DB/logs.
-            def text(value):
-                return value.decode('utf-8',errors='replace') if isinstance(value,bytes) else value
-            try:
-                atomic_json(self.cfg.state/'transcripts/errors'/job['lesson_id']/
-                            f"v{job['version']}-{uuid.uuid4().hex}.json.gz",
-                            {'lesson_id':job['lesson_id'],'version':job['version'],
-                             'error_type':type(exc).__name__,'created_at':time.time(),
-                             'command':[str(x) for x in exc.cmd],
-                             'returncode':getattr(exc,'returncode',None),
-                             'stdout':text(exc.stdout),'stderr':text(exc.stderr)})
-            except Exception as diagnostic_exc:
-                diagnostic_error=type(diagnostic_exc).__name__
-        current=self.c.execute('SELECT attempts,max_attempts FROM transcription_jobs WHERE lesson_id=? AND version=?',(job['lesson_id'],job['version'])).fetchone()
-        state='superseded' if isinstance(exc,SourceChanged) else ('failed' if current['attempts']>=current['max_attempts'] else 'queued')
-        with self.c:self.c.execute('UPDATE transcription_jobs SET state=?,retry_at=?,last_error=?,lease_owner=NULL,lease_until=NULL WHERE lesson_id=? AND version=?',(state,time.time()+min(86400,60*2**current['attempts']),type(exc).__name__,job['lesson_id'],job['version']))
-        result={'state':'retry' if state=='queued' else state,'error_type':type(exc).__name__,'lesson_id':job['lesson_id']}
-        if diagnostic_error:result['diagnostic_error_type']=diagnostic_error
-        return result
-
-
-def worker_status(cfg):
-    with closing(FOStore(cfg.db,readonly=True).conn) as c:
-        tables={r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        counts={r[0]:r[1] for r in c.execute('SELECT state,count(*) FROM transcription_jobs GROUP BY state')}
-        leased=[{**dict(r),'discipline':discipline(dict(r))} for r in c.execute("SELECT j.lesson_id,j.version,l.subject,l.front,l.module FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id WHERE j.state='leased' ORDER BY j.lesson_id")]
-        cursor=c.execute('SELECT last_discipline FROM transcription_rr_cursor WHERE id=1').fetchone() if 'transcription_rr_cursor' in tables else None
-        rows=[]
-        if 'lesson_video_sources' in tables:
-            retry='COALESCE(j.retry_at,0)' if 'retry_at' in {r[1] for r in c.execute('PRAGMA table_info(transcription_jobs)')} else '0'
-            rows=[dict(r) for r in c.execute(f"SELECT j.lesson_id,l.subject,l.front,l.module,l.title FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version JOIN lesson_video_sources s ON s.lesson_id=j.lesson_id WHERE j.state='queued' AND {retry}<=? AND j.attempts<j.max_attempts AND l.present=1 AND s.available=1 AND s.revision=CAST(j.version AS TEXT) AND s.remote_path IS NOT NULL AND NOT EXISTS(SELECT 1 FROM transcription_jobs busy JOIN lesson_video_sources bs ON bs.lesson_id=busy.lesson_id WHERE busy.state='leased' AND bs.remote_path=s.remote_path)",(time.time(),))]
-        excluded=None
-        if 'transcription_discipline_exclusions' in tables:
-            names={r[0] for r in c.execute('SELECT discipline FROM transcription_discipline_exclusions')}
-            excluded={n:{} for n in sorted(names)}
-            for r in c.execute('SELECT j.state,l.subject,l.front,l.module FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id AND l.version=j.version'):
-                name=discipline(dict(r))
-                if name in excluded:excluded[name][r[0]]=excluded[name].get(r[0],0)+1
-        skip=set(excluded or ())
-        next_job=choose(rows,cursor[0] if cursor else None,skip)
-        if 'transcription_source_deferrals' in tables:
-            blocked={r[0] for r in c.execute("SELECT d.lesson_id FROM transcription_source_deferrals d JOIN lesson_video_sources s ON s.lesson_id=d.lesson_id AND s.revision=CAST(d.version AS TEXT) WHERE d.remote_path IS s.remote_path AND d.size IS s.size AND d.retry_after>?",(time.time(),))}
-            next_job=choose([r for r in rows if r['lesson_id'] not in blocked],cursor[0] if cursor else None,skip)
-        breakers=[dict(r) for r in c.execute('SELECT * FROM transcription_breaker ORDER BY fingerprint')] if 'transcription_breaker' in tables else []
-        phase=[]
-        if 'transcription_job_phases' in tables:
-            for r in c.execute("SELECT p.lesson_id,p.version,p.phase,p.phase_started_at,p.chunk_index,p.chunk_total,p.updated_at,l.subject,l.front,l.module FROM transcription_job_phases p JOIN transcription_jobs j ON j.lesson_id=p.lesson_id AND j.version=p.version AND j.state='leased' JOIN lessons l ON l.lesson_id=p.lesson_id ORDER BY p.lesson_id"):
-                d=dict(r);d['discipline']=discipline(d)
-                for k in ('subject','front','module'):d.pop(k)
-                phase.append(d)
-    return {'leased':leased,'next_discipline':discipline(next_job) if next_job else None,'counts':counts,'breaker':breakers,
-            'excluded_disciplines':excluded,'phase':phase,'free_bytes':shutil.disk_usage(cfg.state).free}
-
-
-AUDIT_METRICS=('segments','words','repetition_ratio','covered_until_s','flag_count','warning_count','blocker_count','overlap_total_s','boundary_total_s','local_defect_budget_s')
-
-
-def _kinds(rows):
-    out={}
-    for f in rows or ():
-        if isinstance(f,dict) and isinstance(f.get('kind'),str):out[f['kind']]=out.get(f['kind'],0)+1
-    return out
-
-
-def review_audit(cfg):
-    """Read-only, allowlisted projection of review jobs; never emits speech text."""
-    reviews=[]
-    with closing(FOStore(cfg.db,readonly=True).conn) as c:
-        tables={r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        excluded={r[0] for r in c.execute('SELECT discipline FROM transcription_discipline_exclusions')} if 'transcription_discipline_exclusions' in tables else set()
-        jobs=[dict(r) for r in c.execute("SELECT j.lesson_id,j.version,j.attempts,l.subject,l.front,l.module FROM transcription_jobs j JOIN lessons l ON l.lesson_id=j.lesson_id WHERE j.state='review' ORDER BY j.lesson_id")]
-    for job in jobs:
-        if not re.fullmatch(r'[A-Za-z0-9_\-]+',str(job['lesson_id'])):continue
-        name=discipline(job)
-        folder=cfg.state/'transcripts/review'/job['lesson_id']
-        path=folder/f"v{job['version']}.json.gz"
-        receipts=[p for p in folder.glob(f"v{job['version']}.qa-v*.json.gz") if not p.is_symlink()] if folder.is_dir() else []
-        item={'lesson_id':job['lesson_id'],'version':job['version'],'attempts':job['attempts'],'discipline':name,
-              'excluded_discipline':name in excluded,'artifact_present':False,'artifact_sha256':None,
-              'qa_policy_version':None,'duration_s':None,'passed':None,'blocker_kinds':None,'warning_kinds':None,
-              'flag_kinds':None,'metrics':None,'chunks':None,'reused_chunks':None,'reassessment_receipts':len(receipts)}
-        if path.is_file() and not path.is_symlink():
-            content=path.read_bytes()
-            try:art=json.loads(gzip.decompress(content))
-            except (OSError,EOFError,ValueError,zlib.error):art=None
-            item.update(artifact_present=True,artifact_sha256=hashlib.sha256(content).hexdigest())
-            if isinstance(art,dict):
-                qa=art.get('qa') if isinstance(art.get('qa'),dict) else {}
-                metrics=qa.get('metrics') if isinstance(qa.get('metrics'),dict) else {}
-                chunks=art.get('chunks') if isinstance(art.get('chunks'),list) else []
-                number=lambda v:isinstance(v,(int,float)) and not isinstance(v,bool)
-                item.update(qa_policy_version=art.get('qa_policy_version') if isinstance(art.get('qa_policy_version'),int) else None,
-                            duration_s=float(art['duration_s']) if number(art.get('duration_s')) else None,
-                            passed=qa.get('passed') if isinstance(qa.get('passed'),bool) else None,
-                            blocker_kinds=_kinds(qa.get('blockers')) if 'blockers' in qa else None,
-                            warning_kinds=_kinds(qa.get('warnings')) if 'warnings' in qa else None,
-                            flag_kinds=_kinds(qa.get('flags')),
-                            metrics={k:metrics[k] for k in AUDIT_METRICS if number(metrics.get(k))},
-                            chunks=len(chunks),reused_chunks=sum(1 for x in chunks if isinstance(x,dict) and x.get('reused') is True))
-        reviews.append(item)
-    return {'reviews':reviews,'excluded_disciplines':sorted(excluded),'inference_executed':False,'mutations':0}
-
-
-class DecoderTurn:
-    def __init__(self, request, lock):
-        self.request, self.lock = request, lock
-
-    @contextmanager
-    def pause(self):
-        """No heavy child is running; preserve the leader and live job lease."""
-        fcntl.flock(self.lock,fcntl.LOCK_UN)
-        try:
-            yield
-        finally:
-            # Request-before-decoder order lets an admitted reviewer run first.
-            fcntl.flock(self.request,fcntl.LOCK_EX)
-            try:
-                fcntl.flock(self.lock,fcntl.LOCK_EX)
-            finally:
-                fcntl.flock(self.request,fcntl.LOCK_UN)
-
-    def checkpoint(self, **boundary):
-        try:
-            fcntl.flock(self.request,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        except BlockingIOError:
-            started=time.monotonic()
-            print(json.dumps({'state':'review_turn_yielded','worker_pid':os.getpid(),**boundary}),flush=True)
-            with self.pause():
-                pass
-            print(json.dumps({'state':'review_turn_resumed','worker_pid':os.getpid(),
-                              'paused_s':round(time.monotonic()-started,3),**boundary}),flush=True)
-        else:
-            fcntl.flock(self.request,fcntl.LOCK_UN)
+def load_checkpoint(path, identity):
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, 'rb') as handle:
+            record = json.loads(handle.read(8 * 1024**2))
+        if (record.pop('sha256') == digest(record) and record['identity'] == identity
+                and isinstance(record['data'], dict)):
+            return record['data']
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        pass
+    return None
 
 
 @contextmanager
-def transcription_turn(locks):
-    """Reserve the next decoder turn without holding the request lock during a job."""
-    flags=os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW
-    with os.fdopen(os.open(locks/'acoustic-review.turn',flags,0o600),'rb+') as turn, \
-            os.fdopen(os.open(locks/'transcription.lock',flags,0o600),'rb+') as lock:
+def leader_lock(state):
+    path = private_dir(state / 'locks') / 'transcription-worker.lock'
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield fd
+    finally:
+        # Close, don't unlock: a surviving child still owns this file description.
+        os.close(fd)
+
+
+def parse_whisper(raw, offset):
+    rows = raw['transcription']
+    if not isinstance(rows, list):
+        raise ValueError('invalid_decoder_output')
+    segments = []
+    for row in rows:
+        start, end = (row['offsets'][k] for k in ('from', 'to'))
+        if (not all(type(x) in (int, float) and math.isfinite(x) for x in (start, end))
+                or not isinstance(row['text'], str)):
+            raise ValueError('invalid_decoder_output')
+        segments.append({'start': offset + start / 1000, 'end': offset + end / 1000,
+                         'text': row['text'].strip()})
+    return segments
+
+
+def silence_intervals(log, duration):
+    intervals, start = [], None
+    for match in re.finditer(r'silence_(start|end):\s*([-+0-9.eE]+)', log):
+        value = min(duration, max(0, float(match[2])))
+        if match[1] == 'start':
+            start = value
+        elif start is not None:
+            if value > start:
+                intervals.append([start, value])
+            start = None
+    if start is not None and duration > start:
+        intervals.append([start, duration])
+    return intervals
+
+
+def decoder_command(cfg, audio, prefix):
+    return [cfg.binary, '-m', cfg.model, '-f', audio, *WHISPER_FLAGS, '-of', prefix]
+
+
+class JobProblem(Exception):
+    def __init__(self, reason, *, defer=False, review=False):
+        super().__init__(reason)
+        self.defer, self.review = defer, review
+
+
+class Worker:
+    def __init__(self, cfg, queue, lock_fd, *, runner=subprocess.run, check_auth=authorized):
+        self.cfg, self.queue, self.lock_fd = cfg, queue, lock_fd
+        self.runner, self.check_auth = runner, check_auth
+        self.owner = f'fo-worker:{os.getpid()}:{uuid.uuid4().hex}'
+
+    def command(self, args, timeout):
+        return self.runner([str(a) for a in args], capture_output=True, check=True, text=True,
+                           timeout=timeout, pass_fds=(self.lock_fd,))
+
+    def require_auth(self):
+        if not self.check_auth(self.cfg):
+            raise PermissionError('transcription authorization revoked')
+
+    def roots(self):
+        state = private_dir(self.cfg.state / 'transcription-mvp')
+        return private_dir(state / 'scratch'), private_dir(state / 'checkpoints')
+
+    def recover(self):
+        scratch, _ = self.roots()
+        for path in scratch.iterdir():
+            if (re.fullmatch(r'job-[a-z0-9_]{8}', path.name) and not path.is_symlink()
+                    and path.is_dir() and path.stat().st_uid == os.geteuid()):
+                shutil.rmtree(path)
+        self.queue.recover()
+
+    def extract(self, video, wav, offset, length):
+        rate = 16000
+        # Keep source PTS relative to the media origin across seeks (-copyts also
+        # disables FFmpeg's gap repair). Check the exact trimmed samples before
+        # rewriting timestamps for the WAV and relative silence measurements.
+        max_samples = round(length * rate)
+        result = self.command(['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'info', '-xerror',
+                               '-nostats', '-threads', '1', '-filter_threads', '1', '-copyts', '-start_at_zero',
+                               '-ss', f'{offset:.6f}', '-i', video, '-map', '0:a:0', '-vn', '-af',
+                               f'aresample={rate}:ochl=mono:async=0,asettb=1/{rate},atrim=end_sample={max_samples},'
+                               'ashowinfo,asetpts=N/SR/TB,silencedetect=n=-50dB:d=1', '-c:a', 'pcm_s16le', wav], 120)
+        with wave.open(str(wav), 'rb') as handle:
+            n = handle.getnframes()
+            if (handle.getnchannels(), handle.getsampwidth(), handle.getframerate()) != (1, 2, rate):
+                raise JobProblem('invalid_pcm_format', review=True)
+            if n:
+                handle.setpos(n - 1)
+                if len(handle.readframes(1)) != 2:
+                    raise JobProblem('truncated_pcm_file', review=True)
+
+        # Integer PTS are in 1/16000 s ticks; printed pts_time loses precision.
+        # Bound both local jumps and accumulated drift from the requested seek.
+        first_tick = previous_end = round(offset * rate)
+        tolerance = round(0.05 * rate)  # codec-frame seek rounding and resampling
+        sample_count = 0
+        for index, line in enumerate(re.finditer(r'(?m)^\[Parsed_ashowinfo_\d+ @ [^\]\r\n]+\] ([^\r\n]*)',
+                                                 result.stderr)):
+            frame = re.match(r'n:\s*(\d+)\s+pts:\s*(-?\d+)\s+.*\brate:\s*(\d+)\s+nb_samples:\s*(\d+)\b',
+                             line[1])
+            if frame is None:
+                raise JobProblem('invalid_audio_pts_evidence', review=True)
+            frame_index, pts, frame_rate, samples = map(int, frame.groups())
+            if frame_index != index or frame_rate != rate or not 0 < samples <= max_samples - sample_count:
+                raise JobProblem('invalid_audio_pts_evidence', review=True)
+            if abs(pts - previous_end) > tolerance or abs(pts - first_tick - sample_count) > tolerance:
+                raise JobProblem('audio_pts_discontinuity', review=True)
+            sample_count += samples
+            previous_end = pts + samples
+        if not sample_count or sample_count != n:
+            raise JobProblem('invalid_audio_pts_evidence', review=True)
+        duration = n / rate
+        return duration, silence_intervals(result.stderr, duration)
+
+    def download(self, job, video):
+        size = job['size']
+        expected = None
         try:
-            fcntl.flock(turn,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        except BlockingIOError:
-            yield False
-            return
+            observation = self.queue.c.execute('''SELECT metadata FROM lesson_source_observations
+                WHERE lesson_id=? AND remote_path=? AND version=?''',
+                (job['lesson_id'], job['remote_path'], job['version'])).fetchone()
+            metadata = json.loads(observation['metadata']) if observation else None
+            if isinstance(metadata, dict) and metadata.get('Size') == size:
+                expected = normalize_quickxor(metadata.get(QUICKXOR_TYPE))
+        except (sqlite3.OperationalError, TypeError, ValueError):
+            pass  # Old databases or invalid evidence must not authorize a download.
+        if expected is None:
+            raise JobProblem('source_hash_unavailable', defer=True)
         try:
+            self.command(['rclone', 'copyto', job['remote_path'], video, '--retries', '1',
+                          '--low-level-retries', '2', '--transfers', '1', '--max-transfer',
+                          f'{size + 1024**2}B', '--cutoff-mode', 'HARD'], 900)
+        except subprocess.CalledProcessError as exc:
+            detail = (exc.stderr or '').casefold()
+            if any(x in detail for x in ('unauthorized', 'forbidden', 'invalid token', 'status code 401',
+                                         'status code 403')):
+                raise JobProblem('source_authentication_failed') from exc
+            if any(x in detail for x in ('object not found', 'file not found', '404 not found')):
+                raise JobProblem('remote_object_not_found', defer=True) from exc
+            if 'sizes differ' in detail:
+                raise JobProblem('source_download_size_mismatch', defer=True) from exc
+            raise JobProblem('source_download_failed', defer=True) from exc
+        except subprocess.TimeoutExpired as exc:
+            raise JobProblem('source_download_timeout', defer=True) from exc
+        if not video.is_file() or video.stat().st_size != size:
+            raise JobProblem('source_download_size_mismatch', defer=True)
+        try:
+            result = self.command(['rclone', 'hashsum', QUICKXOR_TYPE, video, '--config', '/dev/null'], 900)
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise JobProblem('source_download_hash_failed', defer=True) from exc
+        match = re.fullmatch(r'([0-9a-fA-F]{40})  ' + re.escape(video.name) + r'\n?', result.stdout)
+        if match is None:
+            raise JobProblem('source_download_hash_failed', defer=True)
+        if match[1].lower() != expected:
+            raise JobProblem('source_download_hash_mismatch', defer=True)
+        return expected
+
+    def verify_remote(self, job, expected):
+        try:
+            result = self.command(['rclone', 'lsjson', job['remote_path'], '--stat', '--hash',
+                                   '--hash-type', QUICKXOR_TYPE, '--retries', '1', '--low-level-retries', '2'], 90)
+            remote = json.loads(result.stdout)
+        except (subprocess.SubprocessError, ValueError) as exc:
+            raise JobProblem('source_recheck_failed', defer=True) from exc
+        if (not isinstance(remote, dict) or remote.get('IsDir') is not False
+                or remote.get('Size') != job['size'] or rclone_quickxor(remote.get('Hashes')) != expected):
+            raise JobProblem('source_changed_before_publication', defer=True)
+
+    def probe(self, video, expected):
+        try:
+            result = self.command(['ffprobe', '-v', 'error', '-select_streams', 'a:0',
+                                   '-show_entries', 'stream=index,start_time,duration:format=start_time,duration',
+                                   '-of', 'json', video], 60)
+            media = json.loads(result.stdout)
+            duration = float(media['format']['duration'])
+            audio, = media['streams']
+            if not math.isfinite(duration) or not 0 < duration <= 86400:
+                raise ValueError('invalid audio duration or stream')
+            # A video track can slightly outlast its audio. Extraction separately
+            # verifies PCM and PTS against the declared audio timeline.
+            audio_end = duration
+            if audio.get('duration') not in (None, 'N/A'):
+                start = float(audio.get('start_time', '0')) - float(media['format'].get('start_time', '0'))
+                audio_end = start + float(audio['duration'])
+                if not math.isfinite(audio_end) or audio_end <= 0 or not math.isfinite(start):
+                    raise ValueError('invalid audio timeline')
+                if not -0.05 <= start <= 0.05 or abs(duration - audio_end) > 0.25:
+                    raise JobProblem('source_audio_timeline_mismatch', review=True)
+                audio_end = min(audio_end, duration)
+        except (subprocess.SubprocessError, TypeError, KeyError, ValueError) as exc:
+            raise JobProblem('source_audio_probe_failed', review=True) from exc
+        if expected and abs(duration - float(expected)) > max(5, float(expected) * 0.05):
+            raise JobProblem('source_duration_mismatch', defer=True)
+        return audio_end
+
+    def process(self, job, work, checkpoints):
+        cfg = self.cfg
+        started = time.monotonic()
+        self.require_auth()
+        self.queue.check_source(job, self.owner)
+        video = work / 'source.mp4'
+        quickxor = self.download(job, video)
+        download_s = time.monotonic() - started
+        processed = time.monotonic()
+        source_sha = file_sha256(video)
+        duration = self.probe(video, job['duration_s'])
+        runtime = file_identity(cfg.binary)
+        if file_identity(cfg.model) != MODEL_SHA256:
+            raise PermissionError('model identity changed')
+        signature = digest([3, runtime, MODEL_SHA256, WHISPER_FLAGS, CHUNK_SECONDS, OVERLAP_SECONDS])
+        source = {k: job[k] for k in SOURCE_FIELDS}
+        chunks = []
+        reused = 0
+        offset = 0.0
+        while offset < duration:
+            self.require_auth()
+            self.queue.check_source(job, self.owner)
+            if shutil.disk_usage(cfg.state).free < RESERVE + WORK_BYTES:
+                raise JobProblem('storage_reserve_reached', defer=True)
+            length = min(CHUNK_SECONDS, duration - offset)
+            identity = [source, source_sha, signature, offset, length]
+            checkpoint = checkpoints / f'{len(chunks)}.json'
+            data = load_checkpoint(checkpoint, identity)
+            if data is None:
+                wav, prefix = work / 'chunk.wav', work / 'asr'
+                try:
+                    actual, quiet = self.extract(video, wav, offset, length)
+                except (subprocess.CalledProcessError, wave.Error, EOFError) as exc:
+                    raise JobProblem('source_audio_decode_failed', review=True) from exc
+                raw = {'transcription': []}
+                if actual > 0:
+                    try:
+                        self.require_auth()
+                        self.command(decoder_command(cfg, wav, prefix), CHUNK_TIMEOUT)
+                    except subprocess.SubprocessError as exc:
+                        raise JobProblem('whisper_timeout' if isinstance(exc, subprocess.TimeoutExpired)
+                                         else 'whisper_failed') from exc
+                    try:
+                        result = json.loads(prefix.with_suffix('.json').read_text())
+                        rows = result['transcription']
+                        if not isinstance(rows, list):
+                            raise ValueError('invalid_decoder_output')
+                        raw = {'transcription': [{'offsets': row['offsets'], 'text': row['text']} for row in rows]}
+                        parse_whisper(raw, offset)
+                    except (OSError, KeyError, TypeError, ValueError, OverflowError) as exc:
+                        raise JobProblem('invalid_decoder_output', review=True) from exc
+                data = {'audio_duration_s': actual, 'silence': quiet, 'raw': raw}
+                atomic_json(checkpoint, identity, data)
+                wav.unlink(missing_ok=True)
+                prefix.with_suffix('.json').unlink(missing_ok=True)
+            else:
+                reused += 1
+            chunks.append({**data, 'offset_s': offset, 'duration_s': length,
+                           'segments': parse_whisper(data['raw'], offset)})
+            self.queue.progress(job, self.owner, (offset + length) / duration)
+            if offset + length >= duration:
+                break
+            offset += CHUNK_SECONDS - OVERLAP_SECONDS
+        processing_s = time.monotonic() - processed
+        began_qa = time.monotonic()
+        segments, qa = assess(chunks, duration, chunk_s=CHUNK_SECONDS, overlap_s=OVERLAP_SECONDS)
+        qa_s = time.monotonic() - began_qa
+        qa.update(source_sha256=source_sha, decoder_sha256=runtime, duration_s=duration)
+        self.require_auth()
+        began_publish = time.monotonic()
+        if qa['passed']:
+            self.verify_remote(job, quickxor)
+            self.queue.finish(job, self.owner, segments, qa, source)
+            state = 'done'
+        else:
+            state = self.queue.review(job, self.owner, qa)
+        publication_s = time.monotonic() - began_publish
+        return {'state': state, 'outcome': qa['outcome'],
+                'reasons': sorted({f['kind'] for f in qa['blockers'] or qa['warnings']}),
+                'audio_s': round(duration, 3), 'download_s': round(download_s, 3),
+                'processing_s': round(processing_s, 3), 'qa_s': round(qa_s, 3),
+                'publication_s': round(publication_s, 3), 'reused_chunks': reused,
+                'active_s_per_audio_s': round((time.monotonic() - started) / duration, 3)}
+
+    def run_once(self, lesson_id=None):
+        self.require_auth()
+        free = shutil.disk_usage(self.cfg.state).free
+        available = free - RESERVE - WORK_BYTES - 1024**2
+        if available <= 0:
+            return {'state': 'paused_storage'}
+        job = self.queue.lease(self.owner, lesson_id=lesson_id, max_source_bytes=available)
+        if job is None:
+            return {'state': 'idle'}
+        key = {k: job[k] for k in ('lesson_id', 'version')}
+        scratch, root = self.roots()
+        checkpoints = private_dir(root / digest(key))
+        sync_dir(root)
+        try:
+            with tempfile.TemporaryDirectory(prefix='job-', dir=scratch) as work:
+                result = self.process(job, Path(work), checkpoints)
+        except LeaseLost:
+            result = {'state': 'lease_lost'}
+        except (TranscriptRejected, JobProblem) as exc:
             try:
-                fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-                acquired=DecoderTurn(turn,lock)
-            except BlockingIOError:
-                acquired=False
-        finally:
-            fcntl.flock(turn,fcntl.LOCK_UN)
-        yield acquired
+                if isinstance(exc, TranscriptRejected):
+                    result = {'state': self.queue.fail(job, self.owner, 'source_changed', stale=True)}
+                elif exc.review:
+                    state = self.queue.review(job, self.owner, {'passed': False, 'blockers': [{'kind': str(exc)}]})
+                    result = {'state': state, 'outcome': 'REVIEW_REQUIRED', 'reason': str(exc)}
+                else:
+                    result = {'state': self.queue.fail(job, self.owner, str(exc), defer=exc.defer),
+                              'reason': str(exc)}
+            except LeaseLost:
+                result = {'state': 'lease_lost'}
+        if result['state'] in {'done', 'superseded'}:
+            shutil.rmtree(checkpoints)
+        return {**key, **result}
+
+
+def status(cfg):
+    with closing(FOStore(cfg.db, readonly=True).conn) as c:
+        return {'reset_applied': mvp_reset_applied(c),
+                'counts': dict(c.execute('SELECT state,count(*) FROM transcription_jobs GROUP BY state')),
+                'leased': [dict(row) for row in c.execute('''SELECT lesson_id,version,progress,updated_at
+                                                         FROM transcription_jobs WHERE state='leased' ''')],
+                'free_bytes': shutil.disk_usage(cfg.state).free}
+
+
+def preflight(cfg):
+    state = status(cfg)
+    if not os.access(cfg.binary, os.X_OK) or file_identity(cfg.model) != MODEL_SHA256:
+        raise ValueError('Whisper executable or pinned model unavailable')
+    if not all(shutil.which(name) for name in ('ffmpeg', 'ffprobe', 'rclone')):
+        raise ValueError('FFmpeg, ffprobe or rclone unavailable')
+    if state['free_bytes'] < RESERVE + WORK_BYTES:
+        raise ValueError('insufficient storage reserve')
+    return {**state, 'authorized': authorized(cfg), 'model_sha256': MODEL_SHA256,
+            'decoder_sha256': file_identity(cfg.binary), 'inference_executed': False}
 
 
 def main(argv=None):
-    p=argparse.ArgumentParser(description=__doc__);mode=p.add_mutually_exclusive_group(required=True)
-    mode.add_argument('--check-only',action='store_true');mode.add_argument('--run',action='store_true')
-    mode.add_argument('--reset-breaker',action='store_true');mode.add_argument('--status',action='store_true')
-    mode.add_argument('--review-audit',action='store_true',help='Read-only allowlisted review projection')
-    mode.add_argument('--exclude-discipline',metavar='NAME',help='Exact allowlisted name: '+', '.join(sorted(EXCLUDABLE_DISCIPLINES)))
-    mode.add_argument('--include-discipline',metavar='NAME')
-    once=p.add_mutually_exclusive_group();once.add_argument('--once',action='store_true');once.add_argument('--loop',action='store_true')
-    p.add_argument('--lesson-id',help='Restrict an authorized pilot to exactly this queued lesson')
-    a=p.parse_args(argv);cfg=Config.from_env()
-    if a.status:
-        print(json.dumps(worker_status(cfg)));return 0
-    if a.review_audit:
-        print(json.dumps(review_audit(cfg)));return 0
-    if a.exclude_discipline is not None or a.include_discipline is not None:
-        name=a.exclude_discipline if a.exclude_discipline is not None else a.include_discipline
-        if name not in EXCLUDABLE_DISCIPLINES:
-            print(json.dumps({'error':'discipline not in exact owner allowlist','allowed':sorted(EXCLUDABLE_DISCIPLINES)}));return 2
-        # Preference write only: no lease, no job rewrite. A running worker
-        # honours it at its next lease transaction once it runs this code.
-        w=Worker(cfg,gate_fn=lambda:{'allowed':False})
-        try:
-            if a.exclude_discipline is not None:w.exclude_discipline(name,'owner_authorized_exact_exclusion')
-            else:w.include_discipline(name)
-            print(json.dumps({'excluded':sorted(w.excluded_disciplines())}))
-        finally:w.c.close()
-        return 0
-    if a.reset_breaker:
-        with closing(FOStore(cfg.db).conn) as c:
-            if c.execute("SELECT 1 FROM sqlite_master WHERE name='transcription_breaker'").fetchone():
-                with c:c.execute('DELETE FROM transcription_breaker')
-        print(json.dumps({'state':'breaker_reset'}));return 0
-    g=gate(cfg)
-    if a.lesson_id and a.loop:p.error('--lesson-id cannot be combined with --loop')
-    if a.check_only:
-        counts={}
-        try:
-            with closing(FOStore(cfg.db,readonly=True).conn) as c:
-                counts={r[0]:r[1] for r in c.execute('SELECT state,count(*) FROM transcription_jobs GROUP BY state')}
-        except (sqlite3.Error,OSError):pass
-        print(json.dumps({'gate':g,'queue':counts,'preflight':preflight(cfg),'inference_executed':False}));return 0
-    if not g['allowed']:print(json.dumps({'state':'blocked','gate':g}));return 3
-    preparation=preflight(cfg)
-    if not preparation['ready']:
-        print(json.dumps({'state':'blocked','preflight':preparation}));return 3
-    locks=cfg.state/'locks';locks.mkdir(parents=True,exist_ok=True)
-    with os.fdopen(os.open(locks/'transcription-worker.lock',os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600),'rb+') as leader:
-        try:fcntl.flock(leader,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        except BlockingIOError:print('transcription worker already owns lock',file=sys.stderr);return 4
-        worker=None
-        while True:
-            state=None
-            with transcription_turn(locks) as acquired:
-                if acquired:
-                    if worker is None:
-                        worker=Worker(cfg);worker.leader=leader;worker.decoder_turn=acquired
-                        worker.recover()
-                        evidence_pass(worker,startup=True)
-                    worker.decoder_turn=acquired
-                    result=worker.run_once(a.lesson_id);print(json.dumps(result),flush=True)
-                    state=result['state']
-                    if state=='breaker_open':return 5
-                    if state=='blocked':return 3
-                    if state in ('done','review','idle') and a.lesson_id is None:
-                        evidence_pass(worker)
-                    if not a.loop:return 0
-            if not acquired:
-                if not a.loop:print('transcription lock busy',file=sys.stderr);return 4
-                time.sleep(2)
-                continue
-            if state in ('idle','retry','failed','paused_storage'):time.sleep(60)
-
-
-def evidence_pass(worker, *, startup=False):
-    # Evidence-only reassessment must not destabilize the primary loop.
+    p = argparse.ArgumentParser(description=__doc__)
+    mode = p.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--check-only', action='store_true')
+    mode.add_argument('--status', action='store_true')
+    mode.add_argument('--run', action='store_true')
+    mode.add_argument('--retry', metavar='LESSON_ID')
+    p.add_argument('--loop', action='store_true')
+    p.add_argument('--lesson-id', action='append', help='Run only this lesson; repeat for a serial pilot')
+    a = p.parse_args(argv)
+    if (a.loop or a.lesson_id) and (not a.run or (a.loop and a.lesson_id)):
+        p.error('--loop and --lesson-id require --run and cannot be combined')
+    cfg = Config.from_env()
     try:
-        passed=worker.review_pass()
-        if passed['processed']:
-            print(json.dumps({'state':'review_pass',**({'startup':True} if startup else {}),**passed}),flush=True)
-    except Exception as exc:
-        print(json.dumps({'state':'review_pass_error','error_type':type(exc).__name__}),flush=True)
+        if a.check_only or a.status:
+            print(json.dumps(preflight(cfg) if a.check_only else status(cfg)))
+            return 0
+        if not authorized(cfg) or not preflight(cfg)['reset_applied']:
+            print('transcription authorization and MVP reset required', file=sys.stderr)
+            return 3
+        if a.retry:
+            store = FOStore(cfg.db)
+            with closing(store.conn):
+                return 0 if TranscriptionQueue(store).retry(a.retry) else 2
+        with leader_lock(cfg.state), db_worker_lock(cfg.db) as fd:
+            store = FOStore(cfg.db)
+            with closing(store.conn):
+                worker = Worker(cfg, TranscriptionQueue(store), fd)
+                worker.recover()
+                if not a.loop:
+                    for lesson in a.lesson_id or (None,):
+                        print(json.dumps(worker.run_once(lesson)), flush=True)
+                    return 0
+                last_state = None
+                while True:
+                    result = worker.run_once()
+                    state = result['state']
+                    if 'lesson_id' in result or state != last_state:
+                        print(json.dumps(result), flush=True)
+                    last_state = state
+                    if state in ('idle', 'paused_storage'):
+                        time.sleep(60)
+    except BlockingIOError:
+        print('transcription leader already holds the lock', file=sys.stderr)
+        return 4
+    except PermissionError:
+        print('transcription authorization or model identity changed', file=sys.stderr)
+        return 3
+    except (OSError, sqlite3.Error, ValueError, LeaseLost, TranscriptRejected) as exc:
+        print(f'transcription worker stopped: {type(exc).__name__}', file=sys.stderr)
+        return 1
 
 
-if __name__=='__main__':raise SystemExit(main())
+if __name__ == '__main__':
+    raise SystemExit(main())

@@ -18,7 +18,7 @@ def healthy(**overrides):
     base = {'now': NOW, 'transcription_service': 'active', 'transcription_result': 'success',
             'breaker_open': False, 'leased': 1, 'phase_age_s': 60.0, 'last_finished_age_s': 3600.0,
             'eligible_queued': 100, 'materials_active': 'inactive', 'materials_result': 'success',
-            'onedrive_age_s': 600.0, 'pdf_sync': 'verified', 'transcript_sync': 'verified',
+            'onedrive_age_s': 600.0, 'pdf_sync': 'verified',
             'free_bytes': 10 * 1024**3, 'reserve_bytes': 5 * 1024**3, 'growth_bytes_per_day': None,
             'active_deferrals': 0, 'persistent_deferrals': 0}
     base.update(overrides)
@@ -75,6 +75,7 @@ def test_onedrive_staleness_and_sync_failure():
     assert module.assess(healthy(onedrive_age_s=4 * 3600.0))['alerts'] == ['onedrive_stale']
     assert module.assess(healthy(onedrive_age_s=None))['alerts'] == []
     assert module.assess(healthy(pdf_sync='failed'))['alerts'] == ['onedrive_sync_failed']
+    assert module.assess(healthy(metadata_sync='failed'))['alerts'] == ['onedrive_sync_failed']
 
 
 def test_storage_warnings_are_reused_not_reinvented():
@@ -117,7 +118,8 @@ def test_observe_reads_real_sqlite_and_persists_sanitized_snapshot(tmp_path):
     db.execute("INSERT INTO lessons VALUES('fo_d',1,1)")
     db.execute("INSERT INTO lesson_video_sources VALUES('fo_d','onedrive:Federal Online/d.mp4','1',9,1)")
     db.commit(); db.close()
-    (state / 'onedrive-status.json').write_text(json.dumps({'updated_at': NOW - 600, 'pdf_sync': 'verified', 'transcript_sync': 'verified'}))
+    (state / 'onedrive-status.json').write_text(json.dumps({'updated_at': NOW - 600, 'pdf_sync': 'verified',
+                                                          'transcript_sync': 'failed'}))
     units = SimpleNamespace(stdout='Id=study-hub-fo-transcription.service\nActiveState=active\nResult=success\n\n'
                                    'Id=study-hub-fo-materials.service\nActiveState=inactive\nResult=success\n',
                             stderr='', returncode=0)
@@ -132,6 +134,7 @@ def test_observe_reads_real_sqlite_and_persists_sanitized_snapshot(tmp_path):
     assert result['transcription_service'] == 'active'
     persisted = json.loads((state / 'telemetry/health.json').read_text())
     assert persisted == result
+    assert 'transcript_sync' not in persisted
     assert 'fo_a' not in json.dumps(persisted)  # no lesson IDs or paths escape
 
 
@@ -143,3 +146,12 @@ def test_observe_missing_database_is_unknown_not_healthy(tmp_path):
     assert result['breaker_open'] is None and result['leased'] is None
     assert result['alerts'] == []
     assert (state / 'telemetry/health.json').exists()
+
+
+def test_observe_alerts_when_metadata_readback_fails(tmp_path):
+    (tmp_path / 'onedrive-status.json').write_text(json.dumps({'updated_at': NOW, 'pdf_sync': 'verified',
+                                                             'metadata_sync': 'failed', 'error_phase': 'metadata_readback'}))
+    units = SimpleNamespace(stdout='', stderr='', returncode=1)
+    result = module.observe(tmp_path, now=NOW, runner=lambda *a, **k: units, available_bytes=10 * 1024**3)
+    assert result['metadata_sync'] == 'failed'
+    assert result['alerts'] == ['onedrive_sync_failed']

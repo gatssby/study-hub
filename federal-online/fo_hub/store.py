@@ -22,7 +22,16 @@ from .pdf_privacy import PRIVACY_POLICY_VERSION, sanitize_page
 
 DB_ENV = "STUDY_HUB_FO_DB"
 DEFAULT_DB = "fo_hub.db"
-ACCEPTED_CORPUS = "generated_v2"
+ACCEPTED_CORPUS = "whisper_mvp_v1"
+LEGACY_CORPUS = "generated_v2"
+
+TRANSCRIPT_MVP_SCHEMA = (
+    """CREATE TABLE IF NOT EXISTS transcript_source_bindings(
+        lesson_id TEXT NOT NULL, version INTEGER NOT NULL, revision TEXT NOT NULL,
+        remote_path TEXT NOT NULL, size INTEGER NOT NULL, PRIMARY KEY(lesson_id,version))""",
+    """CREATE TABLE IF NOT EXISTS transcription_mvp_reset(
+        id INTEGER PRIMARY KEY CHECK(id=1), reset_at TEXT NOT NULL)""",
+)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS lessons(
@@ -65,7 +74,7 @@ CREATE TABLE IF NOT EXISTS transcription_jobs(
   last_error TEXT, created_at TEXT, updated_at TEXT, PRIMARY KEY(lesson_id, version));
 CREATE INDEX IF NOT EXISTS ix_mat_subject ON materials(subject);
 CREATE INDEX IF NOT EXISTS ix_seg_lv ON transcript_segments(lesson_id, version);
-"""
+""" + ";\n".join(TRANSCRIPT_MVP_SCHEMA) + ";"
 
 
 class TranscriptRejected(ValueError):
@@ -86,6 +95,15 @@ def lesson_id_for(course_id: str, media_id: str | None, item_id: str | None) -> 
 
 def _like(v: str) -> str:
     return "%" + v.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
+def table_names(conn: sqlite3.Connection) -> set[str]:
+    return {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+
+
+def mvp_reset_applied(conn: sqlite3.Connection) -> bool:
+    return ('transcription_mvp_reset' in table_names(conn)
+            and conn.execute('SELECT 1 FROM transcription_mvp_reset WHERE id=1').fetchone() is not None)
 
 
 class FOStore:
@@ -348,36 +366,58 @@ class FOStore:
     def add_transcript(self, lesson_id: str, version: int, segments: list[Mapping[str, Any]],
                        model: str, corpus: str, validated: bool,
                        qa: Mapping[str, Any] | None = None) -> None:
-        if corpus != ACCEPTED_CORPUS:
-            raise TranscriptRejected(f"corpus {corpus!r} not accepted (need {ACCEPTED_CORPUS})")
+        # Only historical fixtures/readers can use this path. MVP publication
+        # must go through TranscriptionQueue.finish with a source-bound lease.
+        if corpus != LEGACY_CORPUS:
+            raise TranscriptRejected("MVP publication requires a source-bound lease")
         if not validated or (qa is not None and qa.get('passed') is False):
             raise TranscriptRejected("transcript not validated")
         qa = {**(qa or {}), 'passed': True}
-        les = self.get_lesson(lesson_id)
-        if les is None or les["version"] != version:
-            raise TranscriptRejected("lesson missing or version is not current")
         with self.conn:
-            self.conn.execute("DELETE FROM transcript_segments WHERE lesson_id=? AND version=?",
-                              (lesson_id, version))
-            self.conn.execute("INSERT OR REPLACE INTO transcripts VALUES(?,?,?,?,?,?)",
-                              (lesson_id, version, model, corpus, json.dumps(qa or {}), _now()))
-            self.conn.executemany(
-                "INSERT INTO transcript_segments VALUES(?,?,?,?,?,?)",
-                [(lesson_id, version, i, s["start"], s["end"], s["text"])
-                 for i, s in enumerate(segments)])
+            self.conn.execute('BEGIN IMMEDIATE')
+            if mvp_reset_applied(self.conn) or self.conn.execute(
+                    'SELECT 1 FROM transcript_source_bindings WHERE lesson_id=? AND version=?',
+                    (lesson_id, version)).fetchone():
+                raise TranscriptRejected("legacy transcript publication is disabled")
+            les = self.get_lesson(lesson_id)
+            if les is None or not les['present'] or les['version'] != version:
+                raise TranscriptRejected("lesson missing or version is not current")
+            self._write_transcript(lesson_id, version, segments, model, corpus, qa)
+
+    def _write_transcript(self, lesson_id, version, segments, model, corpus, qa):
+        """Write inside a caller-owned transaction; do not commit independently."""
+        self.conn.execute('DELETE FROM transcript_segments WHERE lesson_id=? AND version=?',
+                          (lesson_id, version))
+        self.conn.execute('INSERT OR REPLACE INTO transcripts VALUES(?,?,?,?,?,?)',
+                          (lesson_id, version, model, corpus, json.dumps(qa), _now()))
+        self.conn.executemany('INSERT INTO transcript_segments VALUES(?,?,?,?,?,?)',
+                              ((lesson_id, version, i, s['start'], s['end'], s['text'])
+                               for i, s in enumerate(segments)))
 
     @property
     def _CURRENT(self):
         # Read-only API instances must also work against the legacy schema.
-        source_guard = ''
-        if self.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='lesson_video_sources'").fetchone():
-            source_guard = (" AND EXISTS(SELECT 1 FROM lesson_video_sources src WHERE "
-                            "src.lesson_id=l.lesson_id AND src.available=1 "
-                            "AND src.revision=CAST(l.version AS TEXT) AND src.remote_path IS NOT NULL)")
+        tables = table_names(self.conn)
+        legacy = f"t.corpus='{LEGACY_CORPUS}'"
+        if 'transcription_mvp_reset' in tables:
+            legacy += ' AND NOT EXISTS(SELECT 1 FROM transcription_mvp_reset WHERE id=1)'
+        accepted = '0'
+        if 'lesson_video_sources' in tables:
+            source = ("src.lesson_id=l.lesson_id AND src.available=1 "
+                      "AND src.revision=CAST(l.version AS TEXT) AND src.remote_path IS NOT NULL")
+            legacy += f' AND EXISTS(SELECT 1 FROM lesson_video_sources src WHERE {source})'
+            if ('transcript_source_bindings' in tables and 'size' in
+                    {r[1] for r in self.conn.execute('PRAGMA table_info(lesson_video_sources)')}):
+                accepted = (f"t.corpus='{ACCEPTED_CORPUS}' AND t.model='whisper-large-v3' "
+                            'AND l.media_type=\'video\' AND EXISTS('
+                            'SELECT 1 FROM lesson_video_sources src JOIN transcript_source_bindings b '
+                            'ON b.lesson_id=src.lesson_id AND b.version=t.version '
+                            f'WHERE {source} AND b.revision=src.revision '
+                            'AND b.remote_path=src.remote_path AND b.size=src.size)')
         return ("JOIN lessons l ON l.lesson_id=t.lesson_id AND l.version=t.version "
-                "AND l.present=1 AND t.corpus='" + ACCEPTED_CORPUS + "' "
+                f"AND l.present=1 AND (({accepted}) OR ({legacy})) "
                 "AND CASE WHEN json_valid(t.qa_json) THEN "
-                "json_type(t.qa_json,'$.passed')='true' ELSE 0 END" + source_guard)
+                "json_type(t.qa_json,'$.passed')='true' ELSE 0 END")
 
     @staticmethod
     def _transcript_citation(lesson_id, title, version, segment=None):
@@ -387,18 +427,19 @@ class FOStore:
         return citation
 
     def get_transcript(self, lesson_id: str) -> dict | None:
-        t = self.conn.execute(
-            f"SELECT t.*,l.title FROM transcripts t {self._CURRENT} WHERE t.lesson_id=?",
-            (lesson_id,)).fetchone()
-        if t is None:
+        rows = self.conn.execute(
+            f"SELECT t.version,t.model,l.title,s.idx,s.start,s.end,s.text FROM transcripts t {self._CURRENT} "
+            "LEFT JOIN transcript_segments s ON s.lesson_id=t.lesson_id AND s.version=t.version "
+            "WHERE t.lesson_id=? ORDER BY s.idx", (lesson_id,)).fetchall()
+        if not rows:
             return None
-        segs = [dict(r) for r in self.conn.execute(
-            "SELECT idx,start,end,text FROM transcript_segments WHERE lesson_id=? AND version=? "
-            "ORDER BY idx", (lesson_id, t["version"]))]
+        t = rows[0]
+        segs = [{k: row[k] for k in ('idx', 'start', 'end', 'text')}
+                for row in rows if row['idx'] is not None]
         for segment in segs:
             segment['citation'] = self._transcript_citation(lesson_id, t['title'], t['version'], segment)
         return {"lesson_id": lesson_id, "version": t["version"], "model": t["model"],
-                "qa": json.loads(t["qa_json"] or "{}"), "segments": segs,
+                "qa": {'passed': True}, "segments": segs,
                 "citation": self._transcript_citation(lesson_id, t['title'], t['version'])}
 
     def search_transcripts(self, query: str, subject: str | None = None,

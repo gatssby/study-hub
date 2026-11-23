@@ -24,7 +24,7 @@ MIN_SAMPLES = 5
 MIN_DURATION_S = 300
 MAX_ARTIFACT_BYTES = 8 * 1024 * 1024
 MAX_ARTIFACTS = 4000
-SYNC_STATES = ('verified', 'failed', 'absent', 'not_generated')
+SYNC_STATES = ('verified', 'failed', 'absent')
 CACHE_PATH = 'telemetry/pipeline-artifacts.json'
 CACHE_MAX_AGE_S = 4500  # hourly producer plus margin, like storage/health receipts
 
@@ -236,8 +236,9 @@ def build(state: Path, *, now: float | None = None, excluded=None) -> dict:
     except (OSError, ValueError):
         receipt = {}
     receipt = receipt if isinstance(receipt, dict) else {}
-    onedrive = {key: receipt.get(key) if receipt.get(key) in SYNC_STATES else 'unknown' for key in ('pdf_sync', 'transcript_sync')}
-    onedrive.update({key: _number(receipt.get(key)) for key in ('updated_at', 'transcript_files', 'remote_videos', 'remote_video_bytes')})
+    pdf_sync = receipt.get('pdf_sync')
+    onedrive = {'pdf_sync': pdf_sync if pdf_sync in SYNC_STATES else 'unknown',
+                **{key: _number(receipt.get(key)) for key in ('updated_at', 'remote_videos', 'remote_video_bytes')}}
     return {'observed_at': now,
             'transcription': {'comparable_samples': len(ratios), 'median_processing_per_audio': median,
                               'remaining_active_audio_s': round(remaining), 'unknown_duration_jobs': unknown_duration,

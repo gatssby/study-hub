@@ -1,4 +1,5 @@
 """Non-destructive OneDrive copy + byte verification, and source reconciliation."""
+import argparse
 from pathlib import Path
 import fcntl
 import hashlib
@@ -7,50 +8,30 @@ import os
 import re
 import subprocess
 import time
-import tempfile
-
-from .store import FOStore
 
 
-def _transcript_allowlist(state, root):
-    """Only minimal public JSON matching approved DB segments is eligible."""
-    database = Path(os.environ.get('STUDY_HUB_FO_DB', str(state/'hub.sqlite3')))
-    if not database.is_file() or root.is_symlink():
-        return []
-    store = FOStore(database, readonly=True)
-    paths = []
-    try:
-        rows = store.conn.execute(f'SELECT t.lesson_id,t.version FROM transcripts t {store._CURRENT}').fetchall()
-        for row in rows:
-            lid, version = row['lesson_id'], row['version']
-            if not re.fullmatch(r'[A-Za-z0-9_-]+', lid):
-                continue
-            relative = Path(lid)/f'v{version}.json'
-            path = root/relative
-            if path.is_symlink() or path.parent.is_symlink() or not path.is_file():
-                continue
-            try:
-                artifact = json.loads(path.read_text())
-                if set(artifact) != {'lesson_id', 'version', 'corpus', 'qa', 'segments'}:
-                    continue
-                if (artifact['lesson_id'] != lid or type(artifact['version']) is not int
-                        or artifact['version'] != version or artifact['corpus'] != 'generated_v2'
-                        or artifact['qa'] != {'passed': True} or artifact['qa'].get('passed') is not True):
-                    continue
-                segments = artifact['segments']
-                if not isinstance(segments, list) or not segments:
-                    continue
-                if any(not isinstance(s, dict) or set(s) != {'start', 'end', 'text'} for s in segments):
-                    continue
-                approved = store.get_transcript(lid)
-                if approved is None or segments != [{k: s[k] for k in ('start', 'end', 'text')} for s in approved['segments']]:
-                    continue
-                paths.append(relative.as_posix())
-            except (ValueError, TypeError, KeyError, OSError):
-                continue
-    finally:
-        store.conn.close()
-    return sorted(paths)
+QUICKXOR_TYPE = 'QuickXorHash'
+VIDEO_SUFFIXES = {'.mp4', '.mkv', '.mov', '.webm', '.m4v'}
+
+
+def normalize_quickxor(value):
+    return value.lower() if isinstance(value, str) and re.fullmatch(r'[0-9a-fA-F]{40}', value) else None
+
+
+def rclone_quickxor(hashes):
+    # rclone's JSON key is the short name, not --hash-type's display name.
+    return normalize_quickxor(hashes.get('quickxor') if isinstance(hashes, dict) else None)
+
+
+def video_inventory(runner=subprocess.run):
+    started = time.time()
+    result = runner(['rclone', 'lsjson', 'onedrive:Federal Online', '--recursive', '--files-only',
+                     '--hash', '--hash-type', QUICKXOR_TYPE, '--retries', '1', '--low-level-retries', '2'],
+                    check=True, capture_output=True, text=True, timeout=300)
+    finished = time.time()
+    rows = [{key: item.get(key) for key in ('Path', 'Size', 'ModTime', 'ID', 'Hashes')}
+            for item in json.loads(result.stdout) if Path(item['Path']).suffix.lower() in VIDEO_SUFFIXES]
+    return {'started_at': started, 'finished_at': finished, 'rows': rows}
 
 
 def _save_status(state,status):
@@ -62,7 +43,6 @@ def _save_status(state,status):
 def _record_failure(state,status,phase,exc):
     status.update(error_type=type(exc).__name__,error_phase=phase)
     if phase.startswith('pdf_'):status['pdf_sync']='failed'
-    if phase.startswith('transcript_'):status['transcript_sync']='failed'
     if phase.startswith('metadata_'):status['metadata_sync']='failed'
     if isinstance(exc,subprocess.CalledProcessError):
         status['exit_code']=exc.returncode
@@ -79,7 +59,7 @@ def _record_failure(state,status,phase,exc):
 
 def sync(state,runner=subprocess.run):
     state=Path(state)
-    status={'updated_at':time.time(),'TRANSCRIPTION_ENABLED':False,'pdf_sync':'absent','transcript_sync':'not_generated'}
+    status={'updated_at':time.time(),'TRANSCRIPTION_ENABLED':False,'pdf_sync':'absent'}
     phase='initializing'
     try:
         source=state/'materials'
@@ -94,33 +74,19 @@ def sync(state,runner=subprocess.run):
                 phase='pdf_check'
                 runner(['rclone','check',str(source),'onedrive:Federal Online PDFs',*filters,'--one-way','--download','--retries','3','--checkers','2'],check=True,capture_output=True,text=True,timeout=7200)
             status['pdf_sync']='verified'
-        # New generated-v2 transcripts only. Old corpus is never an input.
-        transcripts=state/'transcripts/generated_v2'
-        if transcripts.is_dir():
-            phase='transcript_selection'
-            lock=state/'locks/transcript-publication.lock';lock.parent.mkdir(parents=True,exist_ok=True)
-            with lock.open('a+') as handle:
-                fcntl.flock(handle,fcntl.LOCK_SH)
-                paths=_transcript_allowlist(state,transcripts)
-                status['transcript_files']=len(paths)
-                if paths:
-                    with tempfile.NamedTemporaryFile(mode='w+',dir=lock.parent,prefix='transcript-files-',suffix='.txt') as allowlist:
-                        allowlist.write('\n'.join(paths)+'\n');allowlist.flush()
-                        selection=['--files-from',allowlist.name]
-                        phase='transcript_copy'
-                        runner(['rclone','copy',str(transcripts),'onedrive:Study Hub/Federal Online/Transcripts/generated_v2',*selection,'--retries','3','--transfers','1'],check=True,capture_output=True,text=True,timeout=7200)
-                        phase='transcript_check'
-                        runner(['rclone','check',str(transcripts),'onedrive:Study Hub/Federal Online/Transcripts/generated_v2',*selection,'--one-way','--download'],check=True,capture_output=True,text=True,timeout=7200)
-                    status['transcript_sync']='verified'
         phase='video_inventory'
-        inventory_started_at=time.time()
-        result=runner(['rclone','lsjson','onedrive:Federal Online','--recursive','--files-only'],check=True,capture_output=True,text=True,timeout=300)
-        videos=[{k:x.get(k) for k in ('Path','Size','ModTime','ID')} for x in json.loads(result.stdout) if Path(x['Path']).suffix.lower() in ('.mp4','.mkv','.mov','.webm','.m4v')]
+        inventory=video_inventory(runner)
+        videos=[]
+        for item in inventory['rows']:
+            row={key:item.get(key) for key in ('Path','Size','ModTime','ID')}
+            row[QUICKXOR_TYPE]=rclone_quickxor(item.get('Hashes'))
+            videos.append(row)
         snapshot=json.dumps(videos,ensure_ascii=False).encode('utf-8')
         temporary=state/'remote-videos.json.tmp';temporary.write_bytes(snapshot);os.replace(temporary,state/'remote-videos.json')
-        status['inventory_started_at']=inventory_started_at
+        status['inventory_started_at']=inventory['started_at']
         status['inventory_sha256']=hashlib.sha256(snapshot).hexdigest()
         status['remote_videos']=len(videos)
+        status['remote_videos_without_quickxor']=sum(x[QUICKXOR_TYPE] is None for x in videos)
         status['remote_video_bytes']=sum(x['Size'] for x in videos)
         status['remote_deletion_policy']='never'
     except Exception as exc:
@@ -141,6 +107,21 @@ def sync(state,runner=subprocess.run):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--reset-inventory', type=Path, help='Write an exclusive mode-0600 video inventory; no remote writes.')
+    args = parser.parse_args()
+    if args.reset_inventory:
+        try:
+            inventory = video_inventory()
+            if not inventory['rows']:
+                raise ValueError('empty inventory')
+            with os.fdopen(os.open(args.reset_inventory, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'w') as out:
+                json.dump(inventory, out, ensure_ascii=False)
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+            parser.exit(2, 'FO video inventory collection failed\n')
+        print(json.dumps({'video_objects': len(inventory['rows']),
+                          'hashed_objects': sum(bool(rclone_quickxor(r['Hashes'])) for r in inventory['rows'])}))
+        return
     print(json.dumps(sync(Path(os.environ.get('FO_STATE_ROOT','/home/ubuntu/study-hub-state/federal-online')))))
 
 

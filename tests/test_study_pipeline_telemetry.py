@@ -95,7 +95,7 @@ def test_downloads_and_reviews_are_scalar_and_never_leak_text_or_ids(tmp_path):
     text = json.dumps(result)
     assert 'SECRET' not in text and 'private' not in text and 'r1' not in text
     assert result['videos'] == {'verified': 2, 'error': 1, 'unavailable': 1, 'other': 0, 'verified_bytes': 15}
-    assert result['onedrive']['transcript_sync'] == 'failed'
+    assert result['onedrive'] == {'pdf_sync': 'verified', 'updated_at': 99000, 'remote_videos': 2, 'remote_video_bytes': 15}
     assert result['reviews'] == [{'discipline': 'Química', 'severity': 'grave', 'reasons': {'ngram_repetition': 1},
                                   'intervals': [[5.0, 9.0]], 'state': 'review'}]
 

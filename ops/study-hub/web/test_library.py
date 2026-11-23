@@ -194,3 +194,33 @@ def test_recovered_remote_lessons_show_canonical_metadata_and_merge_course(tmp_p
     # inherits the canonical portal course label (groups with it, not a neutral duplicate)
     assert recovered['course'] == rows[IDS['approved']]['course'] == 'Curso 2027'
     assert 'INTERNAL' not in json.dumps(recovered)
+
+
+def test_reset_corpus_binding_guards_library_and_timestamp(tmp_path):
+    from production import read_database
+    seed(tmp_path)
+    app = DashboardApplication(state=tmp_path)
+    lid = IDS['approved']
+    detail = f'/api/lessons/{lid}'
+    with closing(sqlite3.connect(tmp_path / 'hub.sqlite3')) as db, db:
+        db.execute("INSERT INTO transcription_mvp_reset VALUES(1,'2026-01-01')")
+        db.execute("UPDATE transcripts SET created_at='2026-01-01T00:00:00Z'")
+    assert request(app, detail)[1]['segments'] == []
+    assert read_database(tmp_path / 'hub.sqlite3')['last_validated_at'] is None
+    with closing(sqlite3.connect(tmp_path / 'hub.sqlite3')) as db, db:
+        db.execute("UPDATE transcripts SET corpus='whisper_mvp_v1', model='whisper-large-v3' WHERE lesson_id=?", (lid,))
+        db.execute("INSERT INTO transcript_source_bindings VALUES(?,2,'2','onedrive:PRIVATE_PATH',8)", (lid,))
+    assert request(app, detail)[1]['lesson']['status'] == 'validated'
+    assert read_database(tmp_path / 'hub.sqlite3')['last_validated_at'] == 1767225600
+    for column, value in [('remote_path', 'changed'), ('size', 9), ('revision', '1'), ('available', 0)]:
+        with closing(sqlite3.connect(tmp_path / 'hub.sqlite3')) as db, db:
+            original = db.execute(f'SELECT {column} FROM lesson_video_sources WHERE lesson_id=?', (lid,)).fetchone()[0]
+            db.execute(f'UPDATE lesson_video_sources SET {column}=? WHERE lesson_id=?', (value, lid))
+        assert request(app, detail)[1]['segments'] == []
+        assert read_database(tmp_path / 'hub.sqlite3')['last_validated_at'] is None
+        with closing(sqlite3.connect(tmp_path / 'hub.sqlite3')) as db, db:
+            db.execute(f'UPDATE lesson_video_sources SET {column}=? WHERE lesson_id=?', (original, lid))
+    with closing(sqlite3.connect(tmp_path / 'hub.sqlite3')) as db, db:
+        db.execute("UPDATE transcripts SET model='other' WHERE lesson_id=?", (lid,))
+    assert request(app, detail)[1]['segments'] == []
+    assert read_database(tmp_path / 'hub.sqlite3')['last_validated_at'] is None

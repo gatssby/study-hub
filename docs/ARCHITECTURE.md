@@ -12,7 +12,7 @@ Portal autenticado → catálogo dinâmico por curso → adaptadores de ingestã
 
 Materiais: opções reais de curso/disciplina → download autenticado → validação PDF e SHA-256 → índice de páginas → rclone copy/check OneDrive.
 Vídeos: catálogo/manifestos/OneDrive → processamento sequencial com reserva de disco → upload versionado → verificação de bytes → remoção apenas do temporário confirmado.
-Transcrição: fila persistente e fontes versionadas; execução real bloqueada aguardando autorização explícita. Metadados de fontes e jobs não contêm texto antigo.
+Transcrição MVP candidata: fila persistente no SQLite existente, fontes versionadas e um worker Whisper large-v3 por vez. Reset de produção e resultados do piloto ainda não comprovados; execução depende de autorização explícita. Contrato e operação em `federal-online/transcription/ACTIVATION.md`.
 
 Código FO em `/home/ubuntu/study-hub/federal-online`; estado privado `/home/ubuntu/study-hub-state/federal-online`; ambiente `/home/ubuntu/.config/study-hub`; logs por unit e domínio. Nenhuma dependência operacional de `/opt/cronograma-fo` ou do backend Anki antigo.
 
@@ -22,7 +22,7 @@ Serviços independentes: catálogo, materiais, vídeos, indexação, OneDrive, A
 
 As 19 ferramentas Anki continuam inalteradas. O opt-in `STUDY_HUB_FO_TOOLS=true` registra sete ferramentas FO read-only no mesmo endpoint MCP. Elas chamam HTTP loopback FO sem acessar coleção Anki ou disparar jobs. O adaptador FO também suporta stdio independente.
 
-PDFs são citáveis por identificador de conteúdo, SHA-256 e página. Aulas têm IDs por curso e mídia/item; títulos não definem identidade. URLs com query de autenticação rotativa não criam revisão de vídeo por si só. Transcrições publicáveis precisam pertencer ao corpus `generated_v2`, versão atual e QA aprovado.
+PDFs são citáveis por identificador de conteúdo, SHA-256 e página. Aulas têm IDs por curso e mídia/item; títulos não definem identidade. URLs com query de autenticação rotativa não criam revisão de vídeo por si só. No candidato MVP, transcrições publicáveis precisam pertencer ao corpus `whisper_mvp_v1`, ter fonte e revisão atuais e QA aprovado. O texto é servido pela API FO e MCP, sem espelho OneDrive de derivados; `generated_v2` é legado, não prova de migração concluída.
 
 ## Limites e decisões
 

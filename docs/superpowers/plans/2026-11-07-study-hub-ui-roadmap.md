@@ -1,6 +1,12 @@
 # Study Hub — roadmap UI e observabilidade
 Atualização: 20/11/2026. Documento ativo; substitui apenas o planejamento de interface, sem apagar histórico técnico da reconstrução FO.
 
+## Migração do MVP de transcrição — 22/11/2026
+
+Decisão vigente: substituir a revisão acústica pelo worker único Whisper large-v3 FP16, checkpoints de 600 s/2 s e corpus `whisper_mvp_v1` no SQLite existente; preservar API FO e MCP Anki reais, sem espelho OneDrive de derivados ou alteração dos originais. Os registros de transcrição abaixo são históricos, não instruções atuais. O runbook é `federal-online/transcription/ACTIVATION.md`.
+
+O piloto real isolado e serial recebeu 2.828 jobs verificados em uma cópia do banco; **não houve reset no banco de produção**. O worker legado foi desabilitado e o revisor acústico foi retirado. Antes do corte: concluir QA do piloto, medir tempos ativos, obter referência de fala independente e verificar entrega automática (ou bloqueio) via API/MCP. O gate de QA não mede WER. Não instalar outro modelo, não reabilitar a fila anterior e não retomar as instruções históricas de Parakeet abaixo.
+
 ## Decisão
 
 Começar pela **Visão geral operacional** (read-only) e, em seguida, criar Biblioteca → Aula → PDFs/Busca → integração Anki. Interface web responsiva, desktop-first, visual sóbrio, modos claro/escuro, busca e estados explícitos. A futura UI deve mostrar indisponibilidades como avisos, não como bloqueios globais. Não reproduzir o Cronograma FO legado.
@@ -355,9 +361,9 @@ automação contínua após esse aceite. Runbook:
 
 ---
 
-## Reavaliação técnica de estratégia — MVP de transcrições FO (22/11/2026)
+## Histórico — propostas anteriores ao MVP de transcrição FO (22/11/2026)
 
-**Status: proposta de priorização para discussão, não autorização de execução.** Este adendo complementa o histórico acima. Nenhuma alteração de serviços, modelos ou política de QA decorre automaticamente deste documento.
+**Substituído pela decisão vigente no topo deste documento.** Não executar alternativas, benchmarks ou instruções de revisão acústica deste registro histórico.
 
 ### Diagnóstico observado (VPS 22/11, ~22h51 UTC)
 

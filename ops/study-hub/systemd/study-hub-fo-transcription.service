@@ -1,5 +1,6 @@
 [Unit]
-Description=Study Hub transcription - explicit manual authorization required
+Description=Study Hub Federal Online Whisper large-v3 worker
+Wants=network-online.target
 After=network-online.target
 ConditionPathExists=/etc/study-hub/fo-transcription.authorized
 ConditionPathExists=/etc/study-hub/fo-vps.marker
@@ -13,6 +14,7 @@ ExecStart=/home/ubuntu/study-hub-venv/bin/python -m fo_hub.worker --run --loop
 Restart=on-failure
 RestartPreventExitStatus=3
 RestartSec=60
+KillMode=control-group
 CPUQuota=300%
 MemoryMax=12G
 TasksMax=128
@@ -21,6 +23,6 @@ PrivateTmp=true
 ProtectSystem=strict
 ReadWritePaths=/home/ubuntu/study-hub-state/federal-online /home/ubuntu/.config/rclone
 UMask=0077
-# No timer. Install target is optional, NEVER enable without new approval.
+# Persistent worker, enabled only after production activation.
 [Install]
 WantedBy=multi-user.target

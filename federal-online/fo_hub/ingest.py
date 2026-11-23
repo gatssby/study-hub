@@ -6,8 +6,9 @@ import json
 import math
 import os
 import time
-from .store import FOStore, lesson_id_for
-from .transcription import TranscriptionQueue
+from .onedrive import QUICKXOR_TYPE, normalize_quickxor, rclone_quickxor
+from .store import FOStore, lesson_id_for, mvp_reset_applied
+from .transcription import TranscriptionQueue, valid_source
 from .pdf_privacy import PRIVACY_POLICY_VERSION, PagePrivacy, sanitize_page
 from portal.fo_media_identity import canonical_media_url
 
@@ -60,30 +61,52 @@ def review_indexed_pages(store):
 
 
 def observe_video_source(store, lid, full, source):
-    """Compare known metadata only; absence of metadata is not content identity.
-
-    First observation establishes a baseline, including on existing databases.
-    Keep stronger known fields when a later inventory omits them. Metadata cannot
-    detect same-size replacement without an ID/ModTime change; worker hashing
-    protects inference, not already validated transcripts in that case.
-    """
+    """Bind OneDrive's checksum to the numeric revision atomically with the registry."""
     c = store.conn
     with c:
+        c.execute('BEGIN IMMEDIATE')
         lesson = store.get_lesson(lid)
+        registered = c.execute('SELECT remote_path,size,revision FROM lesson_video_sources WHERE lesson_id=?',
+                               (lid,)).fetchone()
+        if not valid_source(full, source.get('Size')):
+            c.execute('UPDATE lesson_video_sources SET available=0 WHERE lesson_id=? AND remote_path=?',
+                      (lid, full))
+            return lesson
         old = c.execute('SELECT * FROM lesson_source_observations WHERE lesson_id=? AND remote_path=?',
                         (lid, full)).fetchone()
-        metadata = {key: source.get(key) for key in ('ID', 'Size', 'ModTime')}
         previous = json.loads(old['metadata']) if old else {}
+        expected_hash = normalize_quickxor(source.get(QUICKXOR_TYPE))
+        previous_hash = normalize_quickxor(previous.get(QUICKXOR_TYPE))
+        if expected_hash is None and (QUICKXOR_TYPE in source or previous_hash
+                                     or mvp_reset_applied(c)):
+            # Don't let an unproven listing replace a known source or erase its proof.
+            if registered is None:
+                c.execute('INSERT INTO lesson_video_sources VALUES(?,?,?,?,0,?)',
+                          (lid, full, str(lesson['version']), None, str(time.time())))
+            else:
+                c.execute('UPDATE lesson_video_sources SET available=0 WHERE lesson_id=?', (lid,))
+            return lesson
+        metadata = {key: source.get(key) for key in ('ID', 'Size', 'ModTime')}
+        if expected_hash is not None:
+            metadata[QUICKXOR_TYPE] = expected_hash
         changed = any(metadata[k] is not None and previous.get(k) is not None
-                      and metadata[k] != previous[k] for k in metadata)
-        if changed and old['version'] == lesson['version']:
+                      and metadata[k] != previous[k] for k in ('ID', 'Size', 'ModTime'))
+        changed |= previous_hash is not None and expected_hash != previous_hash
+        current_source = (registered['remote_path'], registered['size']) if (
+            registered is not None and registered['revision'] == str(lesson['version'])
+            and valid_source(registered['remote_path'], registered['size'])) else None
+        remapped = current_source is not None and current_source != (full, source['Size'])
+        # Existing derivatives were never proven against the new baseline, so they
+        # cannot inherit its identity, even if the listing's other fields agree.
+        migrated = current_source is not None and expected_hash is not None and previous_hash is None
+        if remapped or migrated or (changed and old is not None and old['version'] == lesson['version']):
             c.execute('UPDATE lessons SET version=version+1 WHERE lesson_id=?', (lid,))
             c.execute('INSERT INTO lesson_revisions(lesson_id,version,change_kind,title,video_url,duration_s,at) '
                       'VALUES(?,?,?,?,?,?,?)',
                       (lid, lesson['version'] + 1, 'media_changed', lesson['title'], lesson['video_url'],
                        lesson['duration_s'], time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())))
             lesson = store.get_lesson(lid)
-        metadata = {k: v if v is not None else previous.get(k) for k, v in metadata.items()}
+        metadata = {**previous, **{k: v if v is not None else previous.get(k) for k, v in metadata.items()}}
         c.execute('INSERT OR REPLACE INTO lesson_source_observations VALUES(?,?,?,?,?)',
                   (lid, full, json.dumps(metadata, sort_keys=True), lesson['version'], str(time.time())))
         c.execute("UPDATE transcription_jobs SET state='superseded' WHERE lesson_id=? AND version<? AND state='queued'",
@@ -160,7 +183,13 @@ def ingest(state,db_path,index_pdfs=True):
     inventory_path=state/'remote-videos.json'
     inventory_bytes=inventory_path.read_bytes() if inventory_path.exists() else b'[]'
     remote=json.loads(inventory_bytes)
-    inventory={x['Path']:x for x in remote}
+    inventory={}
+    for source in remote:
+        # Staged rebuilds may use the native rclone hash map instead of sync's
+        # normalized field. Preserve the hashless marker either way.
+        if QUICKXOR_TYPE not in source and 'Hashes' in source:
+            source={**source, QUICKXOR_TYPE:rclone_quickxor(source['Hashes'])}
+        inventory[source['Path']]=source
     try:
         proof=read_json(state/'onedrive-status.json',{})
     except (OSError,ValueError):
@@ -186,7 +215,8 @@ def ingest(state,db_path,index_pdfs=True):
             # Only a hash-bound listing START strictly after verification wins.
             if (started is None or type(checked) not in (int,float)
                     or not math.isfinite(checked) or checked<=0 or started<=checked):
-                return {'Size':verified['size']}
+                # An older listing's checksum cannot attest to the newer upload.
+                return {'Size':verified['size'], **({QUICKXOR_TYPE:None} if QUICKXOR_TYPE in observed else {})}
         return observed
     if (state/'remote-videos.json').exists():
         with c:
@@ -197,6 +227,7 @@ def ingest(state,db_path,index_pdfs=True):
     manifests=read_json(state/'catalog/video_upload_manifest.json',{}).get('items',[])
     by_url={canonical(x.get('video_stream_url')):x for x in manifests if x.get('video_stream_url')}
     used=set();visited=set();queued=0
+    legacy_pending = set()
     for row in rows:
         if row['media_type']!='video':continue
         lid=lesson_id_for(row['course_id'],row['media_id'],row['item_id'])
@@ -229,7 +260,7 @@ def ingest(state,db_path,index_pdfs=True):
                 c.execute('UPDATE lesson_video_sources SET available=0 WHERE lesson_id=?',(alias[0],))
                 c.execute('UPDATE lessons SET present=0 WHERE lesson_id=?',(alias[0],))
                 c.execute("UPDATE transcription_jobs SET state='superseded' WHERE lesson_id=? AND state='queued'",(alias[0],))
-        queued+=queue.enqueue(lid,lesson['version'])
+        legacy_pending.add((lid,lesson['version']))
     # Persisted classified aliases remain authoritative mappings even when a
     # partial portal traversal omits them. Observe each lesson only once; never
     # promote an old mapping to a lesson whose catalog media revision changed.
@@ -244,7 +275,7 @@ def ingest(state,db_path,index_pdfs=True):
         source=inventory_source(full,inventory.get(relative))
         if source is None:continue
         lesson=observe_video_source(store,existing['lesson_id'],full,source)
-        queued+=queue.enqueue(existing['lesson_id'],lesson['version'])
+        legacy_pending.add((existing['lesson_id'],lesson['version']))
     # Every verified remote original belongs in the queue, even if an old partial
     # portal traversal omitted it. Remote object identity is explicit, not guessed title identity.
     # Verified metadata recovery: protected fallback aliases keep canonical portal
@@ -273,7 +304,7 @@ def ingest(state,db_path,index_pdfs=True):
         store.sync_lessons([row],authoritative=False)
         lesson=observe_video_source(store,lid,'onedrive:Federal Online/'+relative,
                                     inventory_source('onedrive:Federal Online/'+relative,source))
-        queued+=queue.enqueue(lid,lesson['version'])
+        legacy_pending.add((lid,lesson['version']))
     # New catalog videos not uploaded yet are explicitly pending, never ASR-consumed.
     for row in rows:
         if row['media_type']!='video':continue
@@ -282,7 +313,10 @@ def ingest(state,db_path,index_pdfs=True):
         source=c.execute('SELECT revision FROM lesson_video_sources WHERE lesson_id=?',(lid,)).fetchone()
         if not source or str(source['revision'])!=str(lesson['version']):
             with c:c.execute('INSERT OR REPLACE INTO lesson_video_sources VALUES(?,?,?,?,0,?)',(lid,None,str(lesson['version']),None,str(time.time())))
-        queued+=queue.enqueue(lid,lesson['version'])
+        legacy_pending.add((lid,lesson['version']))
+    if not mvp_reset_applied(c):
+        queued += sum(queue.enqueue(lid, version) for lid, version in sorted(legacy_pending))
+    queued += queue.reconcile()
     page_count=0;pdf_errors=0
     manifest_paths=[state/'materials/manifest.json']+[
         p for p in (state/'materials').glob('*/manifest.json') if not p.parent.name.startswith('.build_')]

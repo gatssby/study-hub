@@ -10,6 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fo_hub.ingest import ingest, canonical
 from fo_hub.store import FOStore
+from fo_hub.transcription import LeaseLost, TranscriptionQueue
 
 
 @pytest.fixture
@@ -96,18 +97,23 @@ def test_baseline_missing_modtime_does_not_erase_known_identity(source):
     assert c.execute('SELECT version FROM lessons').fetchone()[0] == 2
 
 
-def test_catalog_revision_does_not_double_bump_and_preserves_active_lease(source):
+def test_catalog_revision_does_not_double_bump_and_supersedes_stale_lease(source):
     _, db, aula, remote, run = source
     run()
-    c = FOStore(db).conn
-    with c:
-        c.execute("UPDATE transcription_jobs SET state='leased',lease_owner='worker',lease_until=9999999999")
+    store = FOStore(db)
+    c = store.conn
+    queue = TranscriptionQueue(store)
+    job = queue.lease('worker')
+    assert job is not None and job['version'] == 1
     aula['duracao_segundos'] = 200
     remote['ModTime'] = 'changed'
     run()
     assert c.execute('SELECT version FROM lessons').fetchone()[0] == 2
-    assert tuple(c.execute('SELECT state,lease_owner,lease_until FROM transcription_jobs WHERE version=1').fetchone()) == ('leased', 'worker', 9999999999)
+    assert tuple(c.execute('SELECT state,lease_owner,lease_until FROM transcription_jobs WHERE version=1').fetchone()) == ('superseded', None, None)
     assert c.execute('SELECT state FROM transcription_jobs WHERE version=2').fetchone()[0] == 'queued'
+    with pytest.raises(LeaseLost):
+        queue.finish(job, 'worker', [{'start': 0, 'end': 1, 'text': 'stale'}], {'passed': True}, job)
+    assert store.get_transcript(job['lesson_id']) is None
 
 
 def test_verified_upload_does_not_regress_to_stale_inventory(source):
@@ -176,9 +182,9 @@ def test_persisted_catalog_aliases_are_observed_without_rediscovery(source, fiel
     for lesson in (original, alias):
         store.add_transcript(lesson['lesson_id'], 1, [{'start': 0, 'end': 1, 'text': 'approved'}],
                              model='fixture', corpus='generated_v2', validated=True)
-    with c:
-        c.execute("UPDATE transcription_jobs SET state='leased',lease_owner='worker',lease_until=9999999999 WHERE lesson_id=?",
-                  (alias['lesson_id'],))
+    queue = TranscriptionQueue(store)
+    job = queue.lease('worker', lesson_id=alias['lesson_id'])
+    assert job is not None and job['version'] == 1
     remote[field] = value
     (state / 'remote-videos.json').write_text(json.dumps([remote]))
     ingest(state, db, index_pdfs=False)
@@ -187,9 +193,14 @@ def test_persisted_catalog_aliases_are_observed_without_rediscovery(source, fiel
     assert c.execute('SELECT count(*) FROM lessons').fetchone()[0] == 2
     assert c.execute("SELECT count(*) FROM lesson_revisions WHERE change_kind='media_changed'").fetchone()[0] == 2
     assert tuple(c.execute('SELECT state,lease_owner,lease_until FROM transcription_jobs WHERE lesson_id=? AND version=1',
-                           (alias['lesson_id'],)).fetchone()) == ('leased', 'worker', 9999999999)
+                           (alias['lesson_id'],)).fetchone()) == ('superseded', None, None)
+    with pytest.raises(LeaseLost):
+        queue.finish(job, 'worker', [{'start': 0, 'end': 1, 'text': 'stale'}], {'passed': True}, job)
     assert c.execute("SELECT count(*) FROM transcription_jobs WHERE version=2 AND state='queued'").fetchone()[0] == 2
-    assert store.get_transcript(original['lesson_id']) is None
+    for lesson in (original, alias):
+        assert store.get_transcript(lesson['lesson_id']) is None
+    assert [tuple(row) for row in c.execute('SELECT revision,size,available FROM lesson_video_sources')] == [
+        ('2', remote['Size'], 1), ('2', remote['Size'], 1)]
 
 
 @pytest.mark.parametrize('blocked', [None, 'missing', 'old_revision', 'retired_fallback'])

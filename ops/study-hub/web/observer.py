@@ -158,7 +158,7 @@ PACE_KEYS = ('comparable_samples', 'median_processing_per_audio', 'remaining_act
              'unknown_duration_jobs', 'ignored_jobs', 'eta_seconds', 'eta_low_seconds',
              'eta_high_seconds', 'completed_24h', 'audio_24h_s')
 DOWNLOAD_KEYS = ('verified', 'error', 'unavailable', 'other', 'verified_bytes')
-SYNC = ('verified', 'failed', 'absent', 'not_generated')
+SYNC = ('verified', 'failed', 'absent')
 
 
 def finite(value):
@@ -242,9 +242,8 @@ def project(raw):
         'storage': storage_projection(raw),
         'onedrive': {'state': state(units.get('onedrive')),
                      'last_observed_at': finite(mapping(pipeline.get('onedrive')).get('updated_at')),
-                     **{key: (receipt.get(key) if receipt.get(key) in SYNC else 'unknown')
-                        for key in ('pdf_sync', 'transcript_sync')},
-                     **{key: count(receipt.get(key)) for key in ('transcript_files', 'remote_videos', 'remote_video_bytes')}},
+                     'pdf_sync': receipt.get('pdf_sync') if receipt.get('pdf_sync') in SYNC else 'unknown',
+                     **{key: count(receipt.get(key)) for key in ('remote_videos', 'remote_video_bytes')}},
         'pace': {key: finite(mapping(pipeline.get('transcription')).get(key)) for key in PACE_KEYS},
         'downloads': {key: count(mapping(pipeline.get('videos')).get(key)) for key in DOWNLOAD_KEYS},
         'reviews': [review_projection(item) for item in

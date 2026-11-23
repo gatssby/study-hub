@@ -54,12 +54,10 @@ def read_database(path):
             WHERE l.present=1 AND j.version=l.version AND j.state='leased' LIMIT 2''')]
         sources = db.execute('''SELECT COUNT(*) FROM lesson_video_sources s
             JOIN lessons l ON s.lesson_id=l.lesson_id WHERE s.available=1 AND l.present=1''').fetchone()[0]
-        last_validated_at = db.execute('''SELECT MAX(unixepoch(t.created_at)) FROM transcripts t
-            JOIN lessons l USING (lesson_id, version)
-            WHERE l.present=1 AND t.corpus='generated_v2'
-              AND CASE WHEN json_valid(t.qa_json) THEN json_type(t.qa_json,'$.passed')='true' ELSE 0 END
-              AND EXISTS (SELECT 1 FROM lesson_video_sources s WHERE s.lesson_id=l.lesson_id
-                  AND s.available=1 AND s.revision=CAST(l.version AS TEXT) AND s.remote_path IS NOT NULL)''').fetchone()[0]
+        current = library.transcript_current_join(db)
+        last_validated_at = db.execute(
+            "SELECT MAX(unixepoch(t.created_at)) FROM transcripts t " + current).fetchone()[0]
+
     return {'queue_scope': scopes, 'active': active, 'available_sources': sources,
             'current_jobs': jobs, 'last_validated_at': last_validated_at}
 

@@ -50,7 +50,7 @@ def assess(obs, *, previous=None):
         alerts.append('materials_failed')
     if obs.get('onedrive_age_s') is not None and obs['onedrive_age_s'] > ONEDRIVE_STALE_S:
         alerts.append('onedrive_stale')
-    if 'failed' in (obs.get('pdf_sync'), obs.get('transcript_sync')):
+    if 'failed' in (obs.get('pdf_sync'), obs.get('metadata_sync')):
         alerts.append('onedrive_sync_failed')
     free, reserve = obs.get('free_bytes'), obs.get('reserve_bytes')
     if free is not None and reserve is not None:
@@ -62,7 +62,7 @@ def assess(obs, *, previous=None):
     snapshot = {k: obs.get(k) for k in (
         'transcription_service', 'transcription_result', 'breaker_open', 'leased', 'phase_age_s',
         'last_finished_age_s', 'eligible_queued', 'materials_active', 'materials_result',
-        'onedrive_age_s', 'pdf_sync', 'transcript_sync', 'free_bytes', 'reserve_bytes',
+        'onedrive_age_s', 'pdf_sync', 'metadata_sync', 'free_bytes', 'reserve_bytes',
         'growth_bytes_per_day', 'active_deferrals', 'persistent_deferrals')}
     snapshot.update(observed_at=now, alerts=sorted(set(alerts)), materials_fail_streak=streak)
     return snapshot
@@ -162,8 +162,8 @@ def observe(state, *, now=None, runner=subprocess.run, available_bytes=None):
     onedrive = _receipt(state / 'onedrive-status.json')
     updated = onedrive.get('updated_at')
     obs['onedrive_age_s'] = max(0.0, now - updated) if type(updated) in (int, float) and updated >= 0 else None
-    obs['pdf_sync'] = onedrive.get('pdf_sync') if onedrive.get('pdf_sync') in ('verified', 'failed', 'absent', 'not_generated') else None
-    obs['transcript_sync'] = onedrive.get('transcript_sync') if onedrive.get('transcript_sync') in ('verified', 'failed', 'absent', 'not_generated') else None
+    for field in ('pdf_sync', 'metadata_sync'):
+        obs[field] = onedrive.get(field) if onedrive.get(field) in ('verified', 'failed', 'absent') else None
     storage = _receipt(state / 'telemetry/storage.json')
     obs['free_bytes'] = shutil.disk_usage(state).free if available_bytes is None else available_bytes
     obs['reserve_bytes'] = storage.get('whisper_reserve_bytes') if type(storage.get('whisper_reserve_bytes')) is int else None

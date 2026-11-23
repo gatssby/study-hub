@@ -11,6 +11,8 @@ import time
 from urllib.parse import urlsplit
 
 from fo_hub.disciplines import discipline_for
+from fo_hub.store import FOStore
+from types import SimpleNamespace
 from portal.fo_media_identity import canonical_media_url
 
 LESSON_ID = re.compile(r'fo_[0-9a-f]{16}')
@@ -28,14 +30,23 @@ _CATALOG = '''SELECT l.lesson_id, l.course_id, substr(l.subject,1,1025) AS subje
     substr(l.title,1,1025) AS title, l.media_type, l.duration_s, l.version,
     j.state AS job_state, j.lease_until, j.attempts, j.max_attempts,
     (s.available=1 AND s.revision=CAST(l.version AS TEXT) AND s.remote_path IS NOT NULL) AS has_source,
-    (t.corpus='generated_v2' AND CASE WHEN json_valid(t.qa_json)
-        THEN json_type(t.qa_json,'$.passed')='true' ELSE 0 END
-        AND EXISTS (SELECT 1 FROM transcript_segments seg
+    ({approval} AND EXISTS (SELECT 1 FROM transcript_segments seg
             WHERE seg.lesson_id=l.lesson_id AND seg.version=l.version)) AS approved
     FROM lessons l LEFT JOIN transcription_jobs j USING (lesson_id, version)
     LEFT JOIN lesson_video_sources s USING (lesson_id)
     LEFT JOIN transcripts t USING (lesson_id, version)
     WHERE l.present=1'''
+
+
+def transcript_current_join(db):
+    # Use the exact schema-aware serving gate, including rollout compatibility.
+    return FOStore._CURRENT.fget(SimpleNamespace(conn=db))
+
+
+def transcript_approval(db):
+    current = transcript_current_join(db).replace(' l ', ' current_l ').replace('l.', 'current_l.')
+    return ("EXISTS (SELECT 1 FROM transcripts t " + current +
+            " WHERE t.lesson_id=s.lesson_id AND t.version=CAST(s.revision AS INTEGER))")
 
 
 # Privacy guard. Source paths carry backslashes, a scheme/drive, a leading slash,
@@ -182,13 +193,14 @@ def read(state, lesson_id=None):
             raise ValueError('course limit exceeded')
         courses = _courses(state, course_ids, remote_to_portal)
         now = time.time()
+        catalog = _CATALOG.format(approval=transcript_approval(db))
         if lesson_id is not None:
-            row = db.execute(_CATALOG + ' AND l.lesson_id=?', (lesson_id,)).fetchone()
+            row = db.execute(catalog + ' AND l.lesson_id=?', (lesson_id,)).fetchone()
             if row is None:
                 return None
             lesson = _project(row, courses, excluded, now, recovered)
             return {'lesson': lesson, 'segments': _segments(db, row) if lesson['status'] == 'validated' else []}
-        rows = db.execute(_CATALOG + ' ORDER BY l.lesson_id LIMIT ?', (MAX_LESSONS + 1,)).fetchall()
+        rows = db.execute(catalog + ' ORDER BY l.lesson_id LIMIT ?', (MAX_LESSONS + 1,)).fetchall()
         if len(rows) > MAX_LESSONS:
             raise ValueError('lesson limit exceeded')
         return {'lessons': [_project(row, courses, excluded, now, recovered) for row in rows if LESSON_ID.fullmatch(row['lesson_id'])]}
