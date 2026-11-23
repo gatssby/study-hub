@@ -2,6 +2,8 @@
 Description=Study Hub Federal Online Whisper large-v3 worker
 Wants=network-online.target
 After=network-online.target
+StartLimitIntervalSec=900
+StartLimitBurst=3
 ConditionPathExists=/etc/study-hub/fo-transcription.authorized
 ConditionPathExists=/etc/study-hub/fo-vps.marker
 [Service]
@@ -12,8 +14,9 @@ EnvironmentFile=/home/ubuntu/.config/study-hub/transcription.env
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/home/ubuntu/study-hub-venv/bin/python -m fo_hub.worker --run --loop
 Restart=on-failure
-RestartPreventExitStatus=3
+RestartPreventExitStatus=3 4
 RestartSec=60
+TimeoutStopSec=90
 KillMode=control-group
 CPUQuota=300%
 MemoryMax=12G

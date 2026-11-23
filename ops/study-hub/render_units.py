@@ -70,7 +70,7 @@ RestartSec=10
 WantedBy=multi-user.target
 ''')
     (directory/'study-hub-fo-transcription.service').write_text(f'''[Unit]
-Description=Study Hub transcription - explicit manual authorization required
+Description=Study Hub Federal Online Whisper large-v3 worker
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=900
@@ -85,7 +85,7 @@ EnvironmentFile=/home/ubuntu/.config/study-hub/transcription.env
 Environment=PYTHONUNBUFFERED=1
 ExecStart={PY} -m fo_hub.worker --run --loop
 Restart=on-failure
-RestartPreventExitStatus=3 4 5
+RestartPreventExitStatus=3 4
 RestartSec=60
 TimeoutStopSec=90
 KillMode=control-group
@@ -97,7 +97,7 @@ PrivateTmp=true
 ProtectSystem=strict
 ReadWritePaths={STATE} /home/ubuntu/.config/rclone
 UMask=0077
-# No timer. Install target is optional, NEVER enable without new approval.
+# Persistent worker, enabled only after production activation.
 [Install]
 WantedBy=multi-user.target
 ''')

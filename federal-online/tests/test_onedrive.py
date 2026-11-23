@@ -47,6 +47,7 @@ def test_inventory_proof_binds_listing_start_to_exact_snapshot(tmp_path, monkeyp
     monkeypatch.setattr(onedrive.time, 'time', lambda: clock[0])
     def runner(command, **kwargs):
         if command[1] == 'lsjson':
+            assert '--onedrive-delta' in command
             clock[0] = 2000  # completion must not become the capture start
             return subprocess.CompletedProcess(command, 0, stdout=json.dumps([
                 {'Path': 'Course/Áula.mp4', 'Size': 42, 'ID': 'object', 'ModTime': 'now'},

@@ -25,7 +25,7 @@ def rclone_quickxor(hashes):
 
 def video_inventory(runner=subprocess.run):
     started = time.time()
-    result = runner(['rclone', 'lsjson', 'onedrive:Federal Online', '--recursive', '--files-only',
+    result = runner(['rclone', 'lsjson', 'onedrive:Federal Online', '--recursive', '--files-only', '--onedrive-delta',
                      '--hash', '--hash-type', QUICKXOR_TYPE, '--retries', '1', '--low-level-retries', '2'],
                     check=True, capture_output=True, text=True, timeout=300)
     finished = time.time()
