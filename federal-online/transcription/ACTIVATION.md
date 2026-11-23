@@ -57,3 +57,20 @@ Produção: recibo de reset às 01:26:11 UTC; 147 transcrições, 48.953 segment
 A remoção seletiva de artefatos de transcrição antigos, do piloto e da cópia temporária de recuperação liberou 1,77 GiB. Checkpoints atuais, originais e cópias de recuperação mistas com catálogo ou PDFs foram preservados.
 
 WER de palavras requer referência independente e protocolo de normalização; sem referência, registre WER como não medido, nunca zero. Smoke técnico, QA e concordância de modelos não substituem referência humana.
+
+
+## QA do MVP — calibração de 23/11/2026
+
+A revisão dos arquivos de Bioenergética, Biologia molecular e Bioquímica (e dos quatro conjuntos de checkpoints originais) mostrou falsos positivos. Em especial, a soma de pequenas lacunas sem texto ou silêncio medido ultrapassava o limiar antigo de 5%, apesar de as aulas apresentarem segmentos coerentes até o final; as repetições do professor eram com frequência didáticas. Não houve transcrição humana de referência nem WER medido.
+
+O commit `586b39c` mantém Whisper large-v3 como único ASR e adapta somente o QA:
+
+- Lacunas agregadas acima de 5%: **aviso**; bloqueio apenas quando ultrapassam 30% da duração (mínimo de 20 s). Um único trecho inexplicado superior a 60 s, ou dominante em gravações curtas, continua bloqueando.
+- Repetições curtas, duplicações de frases e pequenas sobreposições não são apagadas nem bloqueiam por si só. Loops extensos continuam bloqueados (pelo menos 30 palavras distribuídas por 12 s, ou 80 palavras em pelo menos 3 s).
+- Texto de até 5 s inteiramente em silêncio medido torna-se aviso; conflito com silêncio medido de pelo menos 5 s continua bloqueando.
+- Excesso de timestamp de até 50 ms no último segmento de um bloco só pode ser limitado ao fim medido com transcrição bruta conferida; não altera palavras.
+- Integridade da fonte, áudio truncado, blocos ausentes, saída vazia, timestamps materialmente inválidos e exposição de texto rejeitado continuam protegidos.
+
+Foram aprovados 86 testes focados. As quatro aulas que já estavam em review foram reavaliadas usando **16 checkpoints íntegros** vinculados a fontes e revisões atuais; não houve uma segunda inferência Whisper. Os quatro resultados tornaram-se `APPROVED_WITH_WARNING`, publicados em produção: Bioenergética (593 segmentos), Biologia molecular (580), Bioquímica (625) e Biotecnologia (629). A API FO confirmou HTTP 200, `qa.passed=true`, e o worker permanente foi religado (`active/enabled`), com um job ativo e nenhum lease obsoleto na verificação.
+
+**Limitação externa, separada da API FO:** a conexão externa do Plugin apresentou `401 not_authorized_invalid_project` porque o projeto associado ao túnel está arquivado; API FO local, serviço MCP e worker seguem operacionais. Requer corrigir a autorização/configuração do projeto do túnel; não é erro do QA nem justificativa para recriar o banco.
