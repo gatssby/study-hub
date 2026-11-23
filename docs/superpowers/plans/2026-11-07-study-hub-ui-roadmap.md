@@ -1,13 +1,13 @@
 # Study Hub — roadmap UI e observabilidade
-Atualização: 20/11/2026. Documento ativo; substitui apenas o planejamento de interface, sem apagar histórico técnico da reconstrução FO.
+Atualização: 23/11/2026 UTC. Documento ativo; preserva o histórico técnico da reconstrução FO.
 
-## Migração do MVP de transcrição — 22/11/2026
+## MVP de transcrição em produção — 23/11/2026 UTC
 
-Decisão vigente: substituir a revisão acústica pelo worker único Whisper large-v3 FP16, checkpoints de 600 s/2 s e corpus `whisper_mvp_v1` no SQLite existente; preservar API FO e MCP Anki reais, sem espelho OneDrive de derivados ou alteração dos originais. Os registros de transcrição abaixo são históricos, não instruções atuais. O runbook é `federal-online/transcription/ACTIVATION.md`.
+Um worker permanente, habilitado no boot, com Whisper large-v3 FP16, janelas de 600 s/2 s, checkpoints duráveis e QA determinístico. Somente o corpus `whisper_mvp_v1` da fila SQLite existente pode ser publicado pela API FO e pelo MCP Anki GPT vNext. Os registros de transcrição abaixo são históricos, não instruções atuais. Runbook: `federal-online/transcription/ACTIVATION.md`.
 
-O piloto real isolado e serial recebeu 2.828 jobs verificados em uma cópia do banco; **não houve reset no banco de produção**. O worker legado foi desabilitado e o revisor acústico foi retirado. Antes do corte: concluir QA do piloto, medir tempos ativos, obter referência de fala independente e verificar entrega automática (ou bloqueio) via API/MCP. O gate de QA não mede WER. Não instalar outro modelo, não reabilitar a fila anterior e não retomar as instruções históricas de Parakeet abaixo.
+Reset de produção às 01:26:11 UTC: 2.828 jobs elegíveis com vínculos verificados e sem duplicatas; catálogo, PDFs e originais OneDrive preservados. Serviço permanente ativo desde 01:28 UTC (release `787f6c9`); primeiro checkpoint de Bioenergética (rev. 2) verificado às 01:55 UTC, 600 s de áudio e 25,5% de progresso. API e MCP de produção mantiveram catálogo/PDFs e bloquearam consulta e busca do corpus anterior. A primeira publicação nova em produção ainda não foi observada no fechamento do corte. A limpeza seletiva recuperou 1,77 GiB sem remover checkpoints atuais nem backups mistos.
 
-Primeiro resultado (23/11/2026 UTC): Redação aprovada no piloto a 2,647 min ativos por min de áudio. O MCP Anki instalado recuperou os 29 segmentos e encontrou as citações via API isolada; nenhum resultado novo foi publicado na API de produção. Matemática, Química e a conferência independente da fala seguem pendentes neste registro.
+No piloto, Redação foi aprovada (29 segmentos, 2,647 s ativos/s de áudio), com busca e citações verificadas. Matemática ficou em revisão privada; Química não concluiu. QA técnico não mede precisão acadêmica; não houve medição independente de WER.
 
 ## Decisão
 
