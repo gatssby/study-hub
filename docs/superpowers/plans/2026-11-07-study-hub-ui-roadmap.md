@@ -7,6 +7,8 @@ Decisão vigente: substituir a revisão acústica pelo worker único Whisper lar
 
 O piloto real isolado e serial recebeu 2.828 jobs verificados em uma cópia do banco; **não houve reset no banco de produção**. O worker legado foi desabilitado e o revisor acústico foi retirado. Antes do corte: concluir QA do piloto, medir tempos ativos, obter referência de fala independente e verificar entrega automática (ou bloqueio) via API/MCP. O gate de QA não mede WER. Não instalar outro modelo, não reabilitar a fila anterior e não retomar as instruções históricas de Parakeet abaixo.
 
+Primeiro resultado (23/11/2026 UTC): Redação aprovada no piloto a 2,647 min ativos por min de áudio. O MCP Anki instalado recuperou os 29 segmentos e encontrou as citações via API isolada; nenhum resultado novo foi publicado na API de produção. Matemática, Química e a conferência independente da fala seguem pendentes neste registro.
+
 ## Decisão
 
 Começar pela **Visão geral operacional** (read-only) e, em seguida, criar Biblioteca → Aula → PDFs/Busca → integração Anki. Interface web responsiva, desktop-first, visual sóbrio, modos claro/escuro, busca e estados explícitos. A futura UI deve mostrar indisponibilidades como avisos, não como bloqueios globais. Não reproduzir o Cronograma FO legado.
